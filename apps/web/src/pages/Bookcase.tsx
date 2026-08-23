@@ -2,6 +2,15 @@ import { useEffect, useState } from 'react'
 import type { WorkDetail, WorkSummary } from '@agent4novel/contracts'
 import { getWork, listWorks } from '../api.js'
 
+const KIND_LABEL: Record<string, string> = {
+  hook: '卖点',
+  synopsis: '梗概',
+  outline: '大纲',
+  setting: '设定',
+  beat: '章纲',
+  prose: '正文',
+}
+
 export default function Bookcase() {
   const [works, setWorks] = useState<WorkSummary[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -76,7 +85,7 @@ function WorkDetailStub({ id, onBack }: { id: string; onBack: () => void }) {
             <ul>
               {work.artifacts.map((a) => (
                 <li key={a.id}>
-                  [{a.kind}] v{a.version} · {a.status}
+                  [{KIND_LABEL[a.kind] ?? a.kind}] v{a.version} · {a.humanStatus}
                 </li>
               ))}
             </ul>

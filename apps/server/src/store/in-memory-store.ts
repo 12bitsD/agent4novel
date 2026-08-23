@@ -1,4 +1,4 @@
-import { emptyAgentConfig, perChapterKinds } from '@agent4novel/contracts'
+import { emptyAgentConfig, perChapterKinds, perWorkKinds } from '@agent4novel/contracts'
 import type {
   Artifact,
   ArtifactKind,
@@ -19,6 +19,10 @@ export class InMemoryStore implements WorkStore {
   private nextId(prefix: string): string {
     this.seq += 1
     return `${prefix}-${this.seq}`
+  }
+
+  private findBucket(workId: string, kind: ArtifactKind, chapter?: number): Bucket | undefined {
+    return this.buckets.get(workId)?.find((b) => b.kind === kind && b.chapter === chapter)
   }
 
   createWork(input: { seed: string; title?: string }): Work {
@@ -63,19 +67,17 @@ export class InMemoryStore implements WorkStore {
     opts?: { chapter?: number },
   ): Artifact {
     if (!this.works.has(workId)) throw new Error(`work not found: ${workId}`)
-    const isPerChapter = perChapterKinds.includes(kind)
     const chapter = opts?.chapter
-    if (isPerChapter && chapter === undefined) {
+    if (perChapterKinds.includes(kind) && chapter === undefined) {
       throw new Error(`kind "${kind}" requires a chapter`)
     }
-    if (!isPerChapter && chapter !== undefined) {
+    if (perWorkKinds.includes(kind) && chapter !== undefined) {
       throw new Error(`kind "${kind}" must not have a chapter`)
     }
-    const list = this.buckets.get(workId)!
-    let bucket = list.find((b) => b.kind === kind && b.chapter === chapter)
+    let bucket = this.findBucket(workId, kind, chapter)
     if (!bucket) {
       bucket = { kind, chapter, versions: [] }
-      list.push(bucket)
+      this.buckets.get(workId)!.push(bucket)
     }
     const artifact: Artifact = {
       id: this.nextId('artifact'),
@@ -84,7 +86,7 @@ export class InMemoryStore implements WorkStore {
       chapter,
       version: bucket.versions.length + 1,
       content,
-      status: 'pending',
+      humanStatus: 'pending',
       createdAt: new Date().toISOString(),
     }
     bucket.versions.push(artifact)
@@ -97,13 +99,12 @@ export class InMemoryStore implements WorkStore {
     status: HumanStatus,
     opts?: { chapter?: number },
   ): void {
-    const list = this.buckets.get(workId)
-    if (!list) throw new Error(`work not found: ${workId}`)
-    const chapter = opts?.chapter
-    const bucket = list.find((b) => b.kind === kind && b.chapter === chapter)
+    const bucket = this.findBucket(workId, kind, opts?.chapter)
     if (!bucket || bucket.versions.length === 0) {
-      throw new Error(`artifact not found: ${workId}/${kind}${chapter !== undefined ? `#${chapter}` : ''}`)
+      throw new Error(
+        `artifact not found: ${workId}/${kind}${opts?.chapter !== undefined ? `#${opts.chapter}` : ''}`,
+      )
     }
-    bucket.versions[bucket.versions.length - 1].status = status
+    bucket.versions[bucket.versions.length - 1].humanStatus = status
   }
 }

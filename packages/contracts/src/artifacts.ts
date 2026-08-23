@@ -16,7 +16,7 @@ export type Artifact = {
   chapter?: number
   version: number
   content: string
-  status: HumanStatus
+  humanStatus: HumanStatus
   createdAt: string
 }
 

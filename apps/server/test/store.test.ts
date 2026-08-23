@@ -50,7 +50,7 @@ describe('InMemoryStore', () => {
     const detail = store.getWork(w.id)!
     const outline = detail.artifacts.find((a) => a.kind === 'outline')!
     expect(outline.version).toBe(2)
-    expect(outline.status).toBe('pending')
+    expect(outline.humanStatus).toBe('pending')
   })
 
   it('setStatus on missing artifact throws', () => {

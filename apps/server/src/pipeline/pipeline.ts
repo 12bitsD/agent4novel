@@ -64,7 +64,7 @@ export class Pipeline {
       if (!out) {
         if (entry.gateBefore) {
           const gate = latest.get(`${entry.gateBefore.kind}:`)
-          if (!gate || gate.status !== 'approved') {
+          if (!gate || gate.humanStatus !== 'approved') {
             return {
               workId,
               stage: 'blocked',
@@ -75,7 +75,7 @@ export class Pipeline {
         }
         return { workId, stage: 'ready', nextStepId: entry.stepId }
       }
-      if (out.status === 'pending') {
+      if (out.humanStatus === 'pending') {
         return {
           workId,
           stage: 'awaiting-approval',

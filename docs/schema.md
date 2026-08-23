@@ -38,7 +38,7 @@ Artifact = {
   chapter?: number      // 仅 beat / prose 有
   version: number       // 每次追加 +1，旧版本保留
   content: string
-  status: HumanStatus   // pending | approved
+  humanStatus: HumanStatus   // pending | approved；SQLite 列名 human_status
   createdAt: string
 }
 ```
@@ -51,5 +51,5 @@ Artifact = {
 ## 版本与关卡
 
 - `appendArtifact` 追加新版本（version+1），旧版本保留，可回退/对比
-- `status` 语义：`pending` = 待作者确认（关卡中）；`approved` = 已通过
+- `humanStatus` 语义：`pending` = 待作者确认（关卡中）；`approved` = 已通过
 - 关卡在步骤边界：`gateAfter` 的步骤产出后置 `pending` 等 approve；`gateBefore` 的步骤要求目标产物已 `approved`
