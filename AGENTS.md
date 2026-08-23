@@ -10,4 +10,4 @@ Five canonical triage roles map to the default label strings (`needs-triage`, `n
 
 ### Domain docs
 
-Single-context: one `CONTEXT.md` at the repo root plus `docs/adr/`. See `docs/agents/domain.md`.
+Single-context: one `CONTEXT.md` at the repo root plus `docs/adr/`; per-ticket tech plans live in `docs/wiki/`. See `docs/agents/domain.md`.
