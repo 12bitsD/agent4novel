@@ -1,0 +1,12 @@
+{
+  "name": "agent4novel",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --parallel -r --if-present run dev",
+    "test": "pnpm -r --if-present run test",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "build": "pnpm -r --if-present run build"
+  }
+}

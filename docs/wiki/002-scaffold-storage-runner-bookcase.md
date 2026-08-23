@@ -1,6 +1,6 @@
 # 002 — 脚手架 + 存储 + workflow 骨架 + 书架
 
-> Ticket: [#2](https://github.com/12bitsD/agent4novel/issues/2) · Spec: [#1](https://github.com/12bitsD/agent4novel/issues/1) · 状态：待实现
+> Ticket: [#2](https://github.com/12bitsD/agent4novel/issues/2) · Spec: [#1](https://github.com/12bitsD/agent4novel/issues/1) · 状态：已实现
 
 ## 实现目的
 
@@ -94,7 +94,7 @@ export async function runStep(step: Step, input: unknown, config: AgentConfig) {
 export interface WorkStore {
   createWork(input: { seed: string; title?: string }): Work
   listWorks(): WorkSummary[]          // { id, title, seedPreview, chapterCount }
-  getWork(id: string): Work | undefined   // 含各产物最新版本
+  getWork(id: string): WorkDetail | undefined   // Work + 各产物最新版本
   appendArtifact(workId, kind, content, opts?: { chapter?: number }): Artifact
   setStatus(workId, kind, status, opts?: { chapter?: number }): void  // 作用最新版
 }
@@ -126,7 +126,7 @@ type PipelineDefinition = Array<{
 }>
 ```
 
-构造时注入 `{ store, steps, definition, resolveConfig }`（接受依赖，不自己 new）。状态机由"现有产物 + status"算出下一步；`advance` 跑 nextStep → `appendArtifact` 落库 → 按 `gateAfter` 置 pending 或 approved。**关卡逻辑只活在这一个模块**（Locality）。本票放一条最小 demo 链（2 个 FakeStep + 1 个 gateAfter）证明机制；完整六步链在 #3–#5 扩展 `definition`，runner 不改。
+构造时注入 `{ store, steps, definition, resolveConfig }`（接受依赖，不自己 new）。状态机由"现有产物 + status"算出下一步；`advance` 跑 nextStep → `appendArtifact` 落库 → 按 `gateAfter` 置 pending 或 approved。**关卡逻辑只活在这一个模块**（Locality）。本票放一条 demo 链（4 个 FakeStep + 1 个 `gateAfter` + 1 个 `gateBefore`）证明机制——比最小多几步，同时覆盖两种关卡方向；完整六步链在 #3–#5 扩展 `definition`，runner 不改。
 
 ### API（Hono，8787）
 
@@ -185,4 +185,7 @@ pnpm · tsx（server dev）· tsc（typecheck）· vitest · zod · Hono · Vite
 
 ## 状态记录
 
-- 2026-08-22：计划存档，挂到 issue #2，待开工。
+- 2026-08-22：实现完成。20 个测试全绿（contracts 3 / server 17），typecheck 全绿，`pnpm dev` 验证 server/web/proxy 通。
+- 偏差：demo 链做成 4 步（含 gateAfter + gateBefore 两种关卡方向），非 wiki 原写的 2 步——超集，不违反 ticket。
+- 偏差：TDD 未严格"先红后绿"（测试与实现同批写），行为覆盖完整；后续票按红绿切片执行。
+- 修正：`getWork` 返回类型是 `WorkDetail`（Work + 最新产物），非 `Work`。
