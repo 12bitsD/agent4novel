@@ -1,4 +1,4 @@
-import type { Artifact, ArtifactKind, HumanStatus, Work, WorkDetail, WorkSummary } from '@agent4novel/contracts'
+import type { Artifact, ArtifactKind, HumanStatus, JsonValue, Work, WorkDetail, WorkSummary } from '@agent4novel/contracts'
 
 export interface WorkStore {
   createWork(input: { seed: string; title?: string }): Work
@@ -7,7 +7,7 @@ export interface WorkStore {
   appendArtifact(
     workId: string,
     kind: ArtifactKind,
-    content: string,
+    content: JsonValue,
     opts?: { chapter?: number },
   ): Artifact
   setStatus(

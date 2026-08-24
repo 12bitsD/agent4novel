@@ -3,6 +3,8 @@ import { createApp } from '../src/app.js'
 import { seed } from '../src/seed.js'
 import { InMemoryStore } from '../src/store/in-memory-store.js'
 
+const jsonHeaders = { 'Content-Type': 'application/json' }
+
 describe('works routes', () => {
   it('lists seeded works', async () => {
     const store = new InMemoryStore()
@@ -29,6 +31,74 @@ describe('works routes', () => {
   it('returns 404 for an unknown work', async () => {
     const store = new InMemoryStore()
     const res = await createApp(store).request('/api/works/nope')
+    expect(res.status).toBe(404)
+  })
+
+  it('creates a work via POST', async () => {
+    const store = new InMemoryStore()
+    const res = await createApp(store).request('/api/works', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ seed: '一个脑洞' }),
+    })
+    expect(res.status).toBe(201)
+    const body = (await res.json()) as { id: string; seed: string; title: string }
+    expect(body.seed).toBe('一个脑洞')
+    expect(body.title).toBe('一个脑洞')
+  })
+
+  it('rejects POST with empty seed', async () => {
+    const store = new InMemoryStore()
+    const res = await createApp(store).request('/api/works', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ seed: '' }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('saves preprocess content, versions it, and marks approved', async () => {
+    const store = new InMemoryStore()
+    const w = store.createWork({ seed: 'x' })
+    const app = createApp(store)
+    const content = { hook: 'h', synopsis: 's', setting: 'st', outline: 'o' }
+    const res1 = await app.request(`/api/works/${w.id}/artifacts/preprocess`, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({ content }),
+    })
+    expect(res1.status).toBe(200)
+    const a1 = (await res1.json()) as { version: number; humanStatus: string }
+    expect(a1.version).toBe(1)
+    expect(a1.humanStatus).toBe('approved')
+
+    const res2 = await app.request(`/api/works/${w.id}/artifacts/preprocess`, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({ content: { ...content, hook: 'h2' } }),
+    })
+    const a2 = (await res2.json()) as { version: number }
+    expect(a2.version).toBe(2)
+  })
+
+  it('rejects invalid preprocess content', async () => {
+    const store = new InMemoryStore()
+    const w = store.createWork({ seed: 'x' })
+    const res = await createApp(store).request(`/api/works/${w.id}/artifacts/preprocess`, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({ content: { hook: 'only-hook' } }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('PUT on unknown work returns 404', async () => {
+    const store = new InMemoryStore()
+    const res = await createApp(store).request('/api/works/nope/artifacts/preprocess', {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({ content: { hook: 'h', synopsis: 's', setting: 'st', outline: 'o' } }),
+    })
     expect(res.status).toBe(404)
   })
 })

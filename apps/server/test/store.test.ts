@@ -17,16 +17,16 @@ describe('InMemoryStore', () => {
     expect(store.getWork('nope')).toBeUndefined()
   })
 
-  it('appends versioned artifacts and getWork returns the latest', () => {
+  it('appends versioned artifacts (JsonValue content) and getWork returns the latest', () => {
     const store = new InMemoryStore()
     const w = store.createWork({ seed: 'x' })
-    store.appendArtifact(w.id, 'hook', 'v1')
-    store.appendArtifact(w.id, 'hook', 'v2')
+    store.appendArtifact(w.id, 'preprocess', { hook: 'v1', synopsis: '', setting: '', outline: '' })
+    store.appendArtifact(w.id, 'preprocess', { hook: 'v2', synopsis: '', setting: '', outline: '' })
     const detail = store.getWork(w.id)!
-    const hooks = detail.artifacts.filter((a) => a.kind === 'hook')
-    expect(hooks).toHaveLength(1)
-    expect(hooks[0].version).toBe(2)
-    expect(hooks[0].content).toBe('v2')
+    const pps = detail.artifacts.filter((a) => a.kind === 'preprocess')
+    expect(pps).toHaveLength(1)
+    expect(pps[0].version).toBe(2)
+    expect((pps[0].content as { hook: string }).hook).toBe('v2')
   })
 
   it('per-chapter kind requires a chapter', () => {
@@ -38,7 +38,9 @@ describe('InMemoryStore', () => {
   it('per-work kind rejects a chapter', () => {
     const store = new InMemoryStore()
     const w = store.createWork({ seed: 'x' })
-    expect(() => store.appendArtifact(w.id, 'hook', 'x', { chapter: 1 })).toThrow(/must not have a chapter/)
+    expect(() => store.appendArtifact(w.id, 'preprocess', 'x', { chapter: 1 })).toThrow(
+      /must not have a chapter/,
+    )
   })
 
   it('setStatus affects the latest version only', () => {

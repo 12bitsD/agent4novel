@@ -1,9 +1,9 @@
 import { runStep } from '@agent4novel/contracts'
-import type { AgentConfig, Artifact, ArtifactKind, Step } from '@agent4novel/contracts'
+import type { AgentConfig, Artifact, ArtifactKind, JsonValue, Step } from '@agent4novel/contracts'
 import type { WorkStore } from '../store/work-store.js'
 
 export type PipelineInput = { workId: string }
-export type PipelineOutput = { content: string }
+export type PipelineOutput = { content: JsonValue }
 export type ArtifactStep = Step<PipelineInput, PipelineOutput>
 
 export type GateRef = { kind: ArtifactKind; chapter?: number }

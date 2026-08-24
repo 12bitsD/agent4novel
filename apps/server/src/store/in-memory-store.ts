@@ -3,6 +3,7 @@ import type {
   Artifact,
   ArtifactKind,
   HumanStatus,
+  JsonValue,
   Work,
   WorkDetail,
   WorkSummary,
@@ -63,7 +64,7 @@ export class InMemoryStore implements WorkStore {
   appendArtifact(
     workId: string,
     kind: ArtifactKind,
-    content: string,
+    content: JsonValue,
     opts?: { chapter?: number },
   ): Artifact {
     if (!this.works.has(workId)) throw new Error(`work not found: ${workId}`)
