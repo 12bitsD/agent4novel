@@ -189,3 +189,4 @@ pnpm · tsx（server dev）· tsc（typecheck）· vitest · zod · Hono · Vite
 - 偏差：demo 链做成 4 步（含 gateAfter + gateBefore 两种关卡方向），非 wiki 原写的 2 步——超集，不违反 ticket。
 - 偏差：TDD 未严格"先红后绿"（测试与实现同批写），行为覆盖完整；后续票按红绿切片执行。
 - 修正：`getWork` 返回类型是 `WorkDetail`（Work + 最新产物），非 `Work`。
+- 2026-08-24（#3a 改造）：`ArtifactKind` 6→5（preprocess/outline/setting/beat/prose），demo 链重排为 3 步（preprocess → outline(gateAfter) → setting(gateBefore)）。

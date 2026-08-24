@@ -1,6 +1,6 @@
 # 003 — 统一入口 + 创作界面 idea 状态（#3a，纯人工链路）
 
-> Ticket: [#3](https://github.com/12bitsD/agent4novel/issues/3) · Spec: [#1](https://github.com/12bitsD/agent4novel/issues/1) · 状态：待实现
+> Ticket: [#3](https://github.com/12bitsD/agent4novel/issues/3) · Spec: [#1](https://github.com/12bitsD/agent4novel/issues/1) · 状态：已实现
 
 ## 实现目的
 
@@ -96,4 +96,8 @@ pnpm · tsx · tsc · vitest · zod · Hono · Vite+React（useState 导航）·
 
 ## 状态记录
 
-- 2026-08-24：对齐完成（三界面模型 / 5 节点 kind / JsonValue / 人工保存=approved），计划存档，待开工。
+- 2026-08-24：实现完成。33 测试全绿（contracts 6 / server 22 / web 5），typecheck 全绿；HTTP 验证 POST → PUT v1 → v2 → GET 全链路。
+- 偏差：新增 `jsonValueSchema`（contracts），pipeline 步骤输出 schema 用它校验 JsonValue——wiki 未列，属必要补充。
+- 偏差：TDD 未严格"先红后绿"（测试与实现同批写），行为覆盖完整；后续票按红绿执行。
+- 偏差：pdfjs-dist v6 类型无 `PDFDocumentProxy.destroy()`，移除该清理调用（一次性提取，无碍）。
+- demo 链随 5 节点改造重排为 3 步（见 wiki 002 状态记录）。
