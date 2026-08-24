@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { createWork } from '../api.js'
-import { parseFile } from '../file-parser.js'
+import { ACCEPTED_FILE_TYPES, parseFile } from '../file-parser.js'
 
 export default function Entry({
   onBack,
@@ -68,7 +68,7 @@ export default function Entry({
         <input
           ref={fileRef}
           type="file"
-          accept=".txt,.md,.docx,.pdf,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          accept={ACCEPTED_FILE_TYPES}
           style={{ display: 'none' }}
           onChange={(e) => onFiles(e.target.files)}
         />

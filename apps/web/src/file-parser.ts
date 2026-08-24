@@ -9,6 +9,18 @@ export type ParseResult = { ok: true; text: string } | { ok: false; error: strin
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
 
+/** 与 parseFile 的分发逻辑保持一致的 file input accept 串（单一来源）。 */
+export const ACCEPTED_FILE_TYPES = [
+  '.txt',
+  '.md',
+  '.docx',
+  '.pdf',
+  'text/plain',
+  'text/markdown',
+  'application/pdf',
+  DOCX_MIME,
+].join(',')
+
 /**
  * 把用户上传的文件解析成文本。
  * 格式分发（txt/md 直读、docx、pdf）与错误归一化全部藏在这里；

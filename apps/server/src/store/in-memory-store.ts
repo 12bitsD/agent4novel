@@ -27,9 +27,10 @@ export class InMemoryStore implements WorkStore {
   }
 
   createWork(input: { seed: string; title?: string }): Work {
+    const title = input.title?.trim() || undefined
     const work: Work = {
       id: this.nextId('work'),
-      title: input.title ?? input.seed.slice(0, 20),
+      title: title ?? input.seed.slice(0, 20),
       seed: input.seed,
       config: { ...emptyAgentConfig },
       createdAt: new Date().toISOString(),

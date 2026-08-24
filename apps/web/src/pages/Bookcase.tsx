@@ -22,7 +22,7 @@ export default function Bookcase({
     <main style={{ padding: 24, fontFamily: 'system-ui, sans-serif' }}>
       <h1>书架</h1>
       <button onClick={onNew} style={{ marginBottom: 16, padding: '8px 16px' }}>
-        ＋ 新建
+        ＋ 开始创作
       </button>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>

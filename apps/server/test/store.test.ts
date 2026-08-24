@@ -12,6 +12,14 @@ describe('InMemoryStore', () => {
     expect(list[0].chapterCount).toBe(0)
   })
 
+  it('empty or whitespace title falls back to the seed prefix', () => {
+    const store = new InMemoryStore()
+    expect(store.createWork({ seed: '一二三四五六七八九十甲乙丙丁戊己庚辛', title: '' }).title).toBe(
+      '一二三四五六七八九十甲乙丙丁戊己庚辛',
+    )
+    expect(store.createWork({ seed: '一个脑洞', title: '   ' }).title).toBe('一个脑洞')
+  })
+
   it('getWork returns undefined for unknown id', () => {
     const store = new InMemoryStore()
     expect(store.getWork('nope')).toBeUndefined()

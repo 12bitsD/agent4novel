@@ -1,9 +1,16 @@
 import { useEffect, useState } from 'react'
 import type { PreprocessContent, WorkDetail } from '@agent4novel/contracts'
+import { preprocessContentSchema } from '@agent4novel/contracts'
 import { getWork, savePreprocess } from '../api.js'
 
 const STATUSES = ['idea', 'beat', 'prose'] as const
 type Status = (typeof STATUSES)[number]
+
+const STATUS_LABELS: Record<Status, string> = {
+  idea: 'idea',
+  beat: '章纲',
+  prose: '正文',
+}
 
 const FIELDS: Array<{ key: keyof PreprocessContent; label: string; rows: number }> = [
   { key: 'hook', label: '卖点', rows: 2 },
@@ -37,7 +44,8 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
         setWork(w)
         const pp = w.artifacts.find((a) => a.kind === 'preprocess')
         if (pp) {
-          setForm(pp.content as PreprocessContent)
+          const parsed = preprocessContentSchema.safeParse(pp.content)
+          if (parsed.success) setForm(parsed.data)
           setVersion(pp.version)
         }
       })
@@ -66,14 +74,14 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         {STATUSES.map((s) => (
           <button key={s} onClick={() => setStatus(s)} style={tabStyle(status === s)}>
-            {s}
+            {STATUS_LABELS[s]}
           </button>
         ))}
       </div>
       {error && <p style={{ color: 'crimson' }}>{error}</p>}
 
       {status !== 'idea' ? (
-        <p style={{ color: '#999' }}>「{status}」状态将在后续版本实现</p>
+        <p style={{ color: '#999' }}>「{STATUS_LABELS[status]}」状态将在后续版本实现</p>
       ) : (
         <>
           {work && (

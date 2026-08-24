@@ -101,3 +101,5 @@ pnpm · tsx · tsc · vitest · zod · Hono · Vite+React（useState 导航）·
 - 偏差：TDD 未严格"先红后绿"（测试与实现同批写），行为覆盖完整；后续票按红绿执行。
 - 偏差：pdfjs-dist v6 类型无 `PDFDocumentProxy.destroy()`，移除该清理调用（一次性提取，无碍）。
 - demo 链随 5 节点改造重排为 3 步（见 wiki 002 状态记录）。
+- code-review 修复：CONTEXT.md 词条漂移（统一入口/书架改指启动界面/创作界面，新增两词条；卖点去掉过时 code id）；书架按钮"新建"→"开始创作"；创作界面 status tab 加领域词标签（idea/章纲/正文）；works.ts 抽 readJsonBody、api.ts 抽 request、file-parser 导出 ACCEPTED_FILE_TYPES 单一来源；createWork 空 title 回退 seed 前缀（修 Spec 轴发现的 `??` 漏洞）；读侧 content 用 safeParse 替代盲 cast。
+- 已知缺口（记录在案）：Entry 的解析失败 UI 分支未被组件测试覆盖（测试基建留待统一）；旧版本仅内部保留、暂无读取端点（#3a 范围内，review UI 时补）。
