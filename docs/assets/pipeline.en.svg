@@ -24,7 +24,7 @@
   <text x="365" y="181" text-anchor="middle" font-size="8.5" fill="#777777">hooks·synopsis·setting·outline</text>
 
   <polygon points="488,146 510,168 488,190 466,168" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
-  <text x="488" y="173" text-anchor="middle" font-size="13" fill="#8a2d2d">审</text>
+  <text x="488" y="173" text-anchor="middle" font-size="13" fill="#8a2d2d">H</text>
   <text x="488" y="216" text-anchor="middle" font-size="9" fill="#8a2d2d">preprocess gate</text>
 
   <rect x="526" y="140" width="96" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
@@ -39,7 +39,7 @@
   <text x="708" y="181" text-anchor="middle" font-size="8.5" fill="#777777">goal·conflict·hook</text>
 
   <polygon points="786,146 804,168 786,190 768,168" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
-  <text x="786" y="173" text-anchor="middle" font-size="13" fill="#8a2d2d">审</text>
+  <text x="786" y="173" text-anchor="middle" font-size="13" fill="#8a2d2d">H</text>
   <text x="786" y="216" text-anchor="middle" font-size="9" fill="#8a2d2d">beat gate</text>
 
   <rect x="820" y="140" width="96" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
@@ -47,7 +47,7 @@
   <text x="868" y="181" text-anchor="middle" font-size="10" fill="#777777">2–4k chars</text>
 
   <polygon points="950,146 968,168 950,190 932,168" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
-  <text x="950" y="173" text-anchor="middle" font-size="13" fill="#8a2d2d">审</text>
+  <text x="950" y="173" text-anchor="middle" font-size="13" fill="#8a2d2d">H</text>
   <text x="950" y="216" text-anchor="middle" font-size="9" fill="#8a2d2d">prose gate</text>
 
   <rect x="1004" y="140" width="64" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
@@ -71,7 +71,7 @@
   <rect x="122" y="300" width="18" height="13" fill="#f3f3f3" stroke="#222222" stroke-width="1.1"/>
   <text x="146" y="311" font-size="11" fill="#555555">artifact (versioned)</text>
   <polygon points="286,299 295,306.5 286,314 277,306.5" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.2"/>
-  <text x="303" y="311" font-size="11" fill="#555555">human gate（审）</text>
+  <text x="303" y="311" font-size="11" fill="#555555">human gate</text>
   <line x1="420" y1="306.5" x2="450" y2="306.5" stroke="#888888" stroke-width="1" stroke-dasharray="4 4"/>
   <text x="456" y="311" font-size="11" fill="#555555">per-chapter loop</text>
 </svg>
