@@ -3,17 +3,11 @@ import type { InterviewAnswer } from '@agent4novel/contracts'
 import { advance, answerInterview, createWork, getConfig } from '../api.js'
 import type { AppConfig } from '../api.js'
 import { ACCEPTED_FILE_TYPES, parseFile } from '../file-parser.js'
+import { fieldStyle, replaceAt } from '../ui.js'
 
 type Phase = 'input' | 'interview'
 
-const fieldStyle: React.CSSProperties = {
-  width: '100%',
-  padding: 12,
-  fontSize: 15,
-  borderRadius: 8,
-  border: '1px solid #ddd',
-  boxSizing: 'border-box',
-}
+const mainFieldStyle: React.CSSProperties = { ...fieldStyle, padding: 12, fontSize: 15 }
 
 export default function Entry({
   onBack,
@@ -129,10 +123,8 @@ export default function Entry({
               <textarea
                 rows={2}
                 value={answers[i] ?? ''}
-                onChange={(e) =>
-                  setAnswers((prev) => prev.map((a, j) => (j === i ? e.target.value : a)))
-                }
-                style={{ ...fieldStyle, marginTop: 6, fontSize: 14 }}
+                onChange={(e) => setAnswers((prev) => replaceAt(prev, i, e.target.value))}
+                style={{ ...fieldStyle, marginTop: 6 }}
               />
             </label>
           ))}
@@ -161,7 +153,7 @@ export default function Entry({
             onChange={(e) => setText(e.target.value)}
             placeholder="一句话脑洞，或整段设定 / 主线 / 模板文本……"
             rows={10}
-            style={fieldStyle}
+            style={mainFieldStyle}
           />
           <div style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
             <button onClick={() => fileRef.current?.click()}>上传文档</button>
@@ -178,7 +170,7 @@ export default function Entry({
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="标题（可选，留空取开头）"
-            style={{ ...fieldStyle, marginTop: 16, padding: 10 }}
+            style={{ ...mainFieldStyle, marginTop: 16, padding: 10 }}
           />
           {error && <p style={{ color: 'crimson' }}>{error}</p>}
           <button

@@ -1,6 +1,6 @@
 # 010 — 预处理 RealStep + interview + outline/setting 形态对齐（#3b）
 
-> Ticket: [#10](https://github.com/12bitsD/agent4novel/issues/10) · Spec: [#1](https://github.com/12bitsD/agent4novel/issues/1) · 状态：待实现
+> Ticket: [#10](https://github.com/12bitsD/agent4novel/issues/10) · Spec: [#1](https://github.com/12bitsD/agent4novel/issues/1) · 状态：已实现（演示模式端到端验证通过；真 key 实测待有 key 后做）
 
 ## 实现目的
 
@@ -28,7 +28,7 @@
       → POST answer-interview → 归一化阶段 → 整份 JSON 落库（pending）
   → interview=false：advance 直接归一化 → 落库（pending）
   → 跳创作界面（idea 状态：列表式编辑已填充的要点）
-  → 编辑/直接确认 → approved（过 preprocess 关卡，为 #4 就绪）
+  → 编辑/直接通过 → approved（过 preprocess 关卡，为 #4 就绪）
 ```
 
 ### 契约变更（packages/contracts）
@@ -107,7 +107,7 @@ settingContentSchema = z.object({
 ### 创作界面（web）
 
 - idea 状态编辑改**列表式**：每字段（卖点/梗概/设定/大纲）展示 N 条要点，增、删、改；「保存」整份 JSON 新版本
-- pending 状态可见；「确认」按钮调 approve API
+- pending 状态可见；「通过」按钮调 approve API
 - tab 文案保持英文 `idea`（2026-08-25 拍板）
 
 ### 定义真链第一阶段
@@ -158,3 +158,4 @@ definition = [{ stepId: 'preprocess', outputKind: 'preprocess', gateAfter: { kin
   - 端到端验证通过（无 key 演示模式）：config → 创建 → advance（awaiting-interview + 3 问）→ advance 无副作用 → answer-interview（pending 落库）→ approve（complete）；answer-interview 重放 400、approve 带 chapter 400、advance 未知作品 404；web 5173 + /api 代理正常。
   - 未决：真 key 下模型名实测（research 标 unverified）；pendingInterview 重启丢失待 #9 持久化。
 - 2026-08-26（3 轮自校准完成）：R1 需求对账（AC1–6 全对得上，含路由/状态机/key 零感知逐条 grep 验证）；R2 规范（禁区词零命中、granularity 零残留、SKILL.md 落文件；**修掉 store.test.ts 旧四字段 fixture**——store 本不感知形状，改中性 `{note}`）；R3 测试/边界（81 测试 + typecheck 绿、测试策略覆盖点全有、明确不做零越界）。**已知限制（不修，挂后续票）**：advance/answer-interview 失败后作品已落库但创作界面没有「重新预处理」入口（→ #6 续写/详情页时代再议）；「演示模式」是 UI 词非领域词，暂不进 CONTEXT.md。
+- 2026-08-26（/code-review 两轴，基点 f57f2da）：**Spec 轴零必修**（AC1–6 全对上；Entry 跳过按钮、/api/config、状态徽标属授权补充；观察项 interview 硬编码 true 已授权并经 /api/config 透出）。**Standards 轴修 5 项**：① 「确认」违反 CONTEXT.md 关卡 Avoid 词 → UI「通过」/「待把关」，wiki/schema.md/CONTEXT.md 自身（「确认方向」→「把关方向」）/SKILL.md/routes 注释全收编；② buildPrompt 文案协议入 SKILL.md「输入（user prompt）格式」节，代码只做数据插值（ADR-0002）；③ `Pair`→`Hint`（对齐 schema.md「要点 hint」）；④ 共享 `apps/web/src/ui.ts`（样式 + replaceAt/removeAt）；⑤ `routeError` 字符串前缀匹配 → `KnownError` code 映射（store/pipeline 抛出）。**驳回**：fake/real step 两阶段分支同源化——seam 两实现各自分支是本质，抽了反而耦合。状态：待实现 → **已实现（演示模式端到端验证通过）**。

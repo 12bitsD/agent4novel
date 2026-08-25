@@ -55,6 +55,6 @@ Artifact = {
 ## 版本与关卡
 
 - `appendArtifact` 追加新版本（version+1），旧版本保留，可回退/对比
-- `humanStatus` 语义：`pending` = 待作者确认（关卡中）；`approved` = 已通过
-- 人工保存（编辑产物）= 追加新版本 + `approved`（#3a 无关卡；#3b 引入 agent 后重新审视此语义）
+- `humanStatus` 语义：`pending` = 待作者把关（关卡中）；`approved` = 已通过
+- 人工保存（编辑产物）= 追加新版本 + `approved`（#3a 无关卡；#3b 起人工保存即通过，agent 产出才是 pending）
 - 关卡在步骤边界：`gateAfter` 的步骤产出后置 `pending` 等 approve；`gateBefore` 的步骤要求目标产物已 `approved`

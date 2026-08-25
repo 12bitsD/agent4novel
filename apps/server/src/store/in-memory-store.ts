@@ -8,6 +8,7 @@ import type {
   WorkDetail,
   WorkSummary,
 } from '@agent4novel/contracts'
+import { KnownError } from '../errors.js'
 import type { WorkStore } from './work-store.js'
 
 type Bucket = { kind: ArtifactKind; chapter?: number; versions: Artifact[] }
@@ -68,7 +69,7 @@ export class InMemoryStore implements WorkStore {
     content: JsonValue,
     opts?: { chapter?: number },
   ): Artifact {
-    if (!this.works.has(workId)) throw new Error(`work not found: ${workId}`)
+    if (!this.works.has(workId)) throw new KnownError('work-not-found', `work not found: ${workId}`)
     const chapter = opts?.chapter
     if (perChapterKinds.includes(kind) && chapter === undefined) {
       throw new Error(`kind "${kind}" requires a chapter`)
@@ -103,7 +104,8 @@ export class InMemoryStore implements WorkStore {
   ): void {
     const bucket = this.findBucket(workId, kind, opts?.chapter)
     if (!bucket || bucket.versions.length === 0) {
-      throw new Error(
+      throw new KnownError(
+        'artifact-not-found',
         `artifact not found: ${workId}/${kind}${opts?.chapter !== undefined ? `#${opts.chapter}` : ''}`,
       )
     }

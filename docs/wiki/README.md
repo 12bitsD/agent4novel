@@ -43,4 +43,4 @@
 
 - [002 脚手架 + 存储 + workflow 骨架 + 书架](./002-scaffold-storage-runner-bookcase.md) — issue [#2](https://github.com/12bitsD/agent4novel/issues/2) ✅
 - [003 统一入口 + 创作界面 idea 状态（#3a）](./003-unified-entry-idea-workspace.md) — issue [#3](https://github.com/12bitsD/agent4novel/issues/3)
-- [010 预处理 RealStep + interview + outline/setting 形态对齐（#3b）](./010-preprocess-realstep-interview.md) — issue [#10](https://github.com/12bitsD/agent4novel/issues/10)
+- [010 预处理 RealStep + interview + outline/setting 形态对齐（#3b）](./010-preprocess-realstep-interview.md) — issue [#10](https://github.com/12bitsD/agent4novel/issues/10) ✅

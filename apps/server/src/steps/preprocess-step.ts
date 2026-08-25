@@ -15,6 +15,7 @@ function loadSkill(): string {
   return skillCache
 }
 
+// 文案协议以 skills/preprocess/SKILL.md「输入（user prompt）格式」节为准（ADR-0002），此处只做数据插值
 function buildPrompt(input: {
   seed: string
   phase?: 'questions' | 'normalize' // 缺省 = normalize（inputSchema default 的运行时兜底）

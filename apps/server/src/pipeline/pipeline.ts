@@ -7,6 +7,7 @@ import type {
   JsonValue,
   Step,
 } from '@agent4novel/contracts'
+import { KnownError } from '../errors.js'
 import type { WorkStore } from '../store/work-store.js'
 
 // 步骤输入（#3b 拓宽）：pipeline 组装上下文 { workId, seed, phase?, answers? }。
@@ -78,7 +79,7 @@ export class Pipeline {
 
   getState(workId: string): PipelineState {
     const work = this.store.getWork(workId)
-    if (!work) throw new Error(`work not found: ${workId}`)
+    if (!work) throw new KnownError('work-not-found', `work not found: ${workId}`)
 
     const pendingInterview = this.pendingInterviews.get(workId)
     if (pendingInterview) {
@@ -149,11 +150,11 @@ export class Pipeline {
 
   async answerInterview(workId: string, answers: InterviewAnswer[]): Promise<StepResult> {
     const pending = this.pendingInterviews.get(workId)
-    if (!pending) throw new Error(`no pending interview: ${workId}`)
+    if (!pending) throw new KnownError('no-pending-interview', `no pending interview: ${workId}`)
     const entry = this.definition.find((d) => d.stepId === pending.stepId)!
     const step = this.steps.get(entry.stepId)!
     const work = this.store.getWork(workId)
-    if (!work) throw new Error(`work not found: ${workId}`)
+    if (!work) throw new KnownError('work-not-found', `work not found: ${workId}`)
     const config = this.resolveConfig(workId, entry.stepId)
 
     const output = await runStep(

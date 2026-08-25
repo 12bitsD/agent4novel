@@ -9,6 +9,7 @@ import {
   preprocessContentSchema,
 } from '@agent4novel/contracts'
 import type { Pipeline } from '../pipeline/pipeline.js'
+import { KnownError } from '../errors.js'
 import type { WorkStore } from '../store/work-store.js'
 
 const workCreateSchema = z.object({
@@ -51,12 +52,13 @@ async function readJsonBody(
   }
 }
 
-// pipeline/store 已知错误 → 4xx；其余（含 agent 输出不稳）→ 500 兜底
+// 已知业务错误按 code 映射 4xx；其余（含 agent 输出不稳）→ 500 兜底
 function routeError(c: Context, err: unknown): Response {
   const msg = err instanceof Error ? err.message : String(err)
-  if (msg.startsWith('work not found')) return c.json({ error: msg }, 404)
-  if (msg.startsWith('no pending interview')) return c.json({ error: msg }, 400)
-  if (msg.startsWith('artifact not found')) return c.json({ error: msg }, 400)
+  if (err instanceof KnownError) {
+    if (err.code === 'work-not-found') return c.json({ error: msg }, 404)
+    return c.json({ error: msg }, 400)
+  }
   return c.json({ error: msg }, 500)
 }
 
@@ -97,7 +99,7 @@ export function worksRoutes({ store, pipeline }: WorksRoutesDeps): Hono {
       return c.json({ error: 'invalid content', issues: parsed.error.issues }, 400)
     }
     const artifact = store.appendArtifact(workId, 'preprocess', parsed.data.content)
-    store.setStatus(workId, 'preprocess', 'approved') // 人工保存即确认
+    store.setStatus(workId, 'preprocess', 'approved') // 人工保存即通过
     return c.json(artifact)
   })
 

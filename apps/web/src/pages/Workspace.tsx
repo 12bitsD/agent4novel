@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { PreprocessContent, WorkDetail } from '@agent4novel/contracts'
 import { inputStages, preprocessContentSchema } from '@agent4novel/contracts'
-import { getWork, savePreprocess, approve } from '../api.js'
+import { approve, getWork, savePreprocess } from '../api.js'
+import { fieldStyle, removeAt, replaceAt, smallBtnStyle, tabStyle } from '../ui.js'
 
 const STATUSES = ['idea', 'beat', 'prose'] as const
 type Status = (typeof STATUSES)[number]
@@ -20,31 +21,8 @@ const EMPTY: PreprocessContent = {
   outline: [],
 }
 
-type Pair = { title: string; content: string }
-
-const tabStyle = (active: boolean): React.CSSProperties => ({
-  padding: '8px 16px',
-  borderRadius: 8,
-  border: active ? '1px solid #333' : '1px solid #ddd',
-  background: active ? '#333' : '#fff',
-  color: active ? '#fff' : '#333',
-  cursor: 'pointer',
-})
-
-const fieldStyle: React.CSSProperties = {
-  width: '100%',
-  padding: 8,
-  borderRadius: 8,
-  border: '1px solid #ddd',
-  fontSize: 14,
-  boxSizing: 'border-box',
-}
-
-const smallBtnStyle: React.CSSProperties = {
-  padding: '4px 10px',
-  fontSize: 13,
-  cursor: 'pointer',
-}
+// 要点 hint（设定/大纲，对齐 schema.md「hint（粗）」）：标题 + 内容
+type Hint = { title: string; content: string }
 
 // 字符串要点列表编辑（卖点 / 梗概）：增、删、改
 function StringListEditor({
@@ -64,10 +42,10 @@ function StringListEditor({
           <textarea
             rows={2}
             value={item}
-            onChange={(e) => onChange(items.map((it, j) => (j === i ? e.target.value : it)))}
+            onChange={(e) => onChange(replaceAt(items, i, e.target.value))}
             style={fieldStyle}
           />
-          <button onClick={() => onChange(items.filter((_, j) => j !== i))} style={smallBtnStyle}>
+          <button onClick={() => onChange(removeAt(items, i))} style={smallBtnStyle}>
             删除
           </button>
         </div>
@@ -79,15 +57,15 @@ function StringListEditor({
   )
 }
 
-// 标题+内容要点列表编辑（设定 / 大纲 hint）：增、删、改
-function PairListEditor({
+// 要点 hint 列表编辑（设定 / 大纲）：增、删、改
+function HintListEditor({
   label,
   items,
   onChange,
 }: {
   label: string
-  items: Pair[]
-  onChange: (items: Pair[]) => void
+  items: Hint[]
+  onChange: (items: Hint[]) => void
 }) {
   return (
     <section style={{ marginBottom: 16 }}>
@@ -100,22 +78,18 @@ function PairListEditor({
           <input
             value={item.title}
             placeholder="标题"
-            onChange={(e) =>
-              onChange(items.map((it, j) => (j === i ? { ...it, title: e.target.value } : it)))
-            }
+            onChange={(e) => onChange(replaceAt(items, i, { ...item, title: e.target.value }))}
             style={{ ...fieldStyle, marginBottom: 6 }}
           />
           <textarea
             rows={3}
             value={item.content}
             placeholder="内容"
-            onChange={(e) =>
-              onChange(items.map((it, j) => (j === i ? { ...it, content: e.target.value } : it)))
-            }
+            onChange={(e) => onChange(replaceAt(items, i, { ...item, content: e.target.value }))}
             style={fieldStyle}
           />
           <button
-            onClick={() => onChange(items.filter((_, j) => j !== i))}
+            onClick={() => onChange(removeAt(items, i))}
             style={{ ...smallBtnStyle, marginTop: 6 }}
           >
             删除
@@ -169,7 +143,7 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
     }
   }
 
-  // 不编辑直接确认：过 preprocess 关卡
+  // 不编辑直接通过：过 preprocess 关卡
   const approvePreprocess = async () => {
     setError(null)
     setNotice(null)
@@ -239,12 +213,12 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
             items={form.synopsis}
             onChange={(synopsis) => setForm((p) => ({ ...p, synopsis }))}
           />
-          <PairListEditor
+          <HintListEditor
             label="设定"
             items={form.setting}
             onChange={(setting) => setForm((p) => ({ ...p, setting }))}
           />
-          <PairListEditor
+          <HintListEditor
             label="大纲"
             items={form.outline}
             onChange={(outline) => setForm((p) => ({ ...p, outline }))}
@@ -257,13 +231,13 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
               onClick={approvePreprocess}
               style={{ marginLeft: 12, padding: '10px 24px', fontSize: 15 }}
             >
-              确认通过
+              通过
             </button>
           )}
           {version !== null && (
             <span style={{ marginLeft: 12, color: '#666' }}>
               当前版本：{version}
-              {humanStatus !== null && `（${humanStatus === 'pending' ? '待确认' : '已通过'}）`}
+              {humanStatus !== null && `（${humanStatus === 'pending' ? '待把关' : '已通过'}）`}
             </span>
           )}
           {notice && <span style={{ marginLeft: 12, color: '#2a7' }}>{notice}</span>}
