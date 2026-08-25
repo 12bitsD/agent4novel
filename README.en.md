@@ -12,17 +12,10 @@ You have the idea but not the craft: can't flesh out worldbuilding, can't struct
 
 ## Pipeline
 
-```
-Unified entry (one-line idea / uploaded setting doc)
-  → Preprocess (classify input stage + reverse-interview to fill gaps
-      → JSON of hooks / synopsis / setting / outline points)
-  → Outline (whole-book chapter skeleton, one line per chapter)
-  → ┌────────────── per chapter ──────────────┐
-    Beat (goal / scenes / conflict / end hook) ── Beat gate: you review direction
-    Prose (~2000–4000 chars) ─────────────────── Prose gate: you review the text
-    └────────────────────────────────────────────┘
-  → Finished book
-```
+<p align="center">
+  <img src="./docs/assets/pipeline.svg" alt="Pipeline: unified entry → preprocess (reverse interview) → points JSON → (preprocess gate) → outline → (beat → beat gate → prose → prose gate) × N → finished book" width="960">
+</p>
+<p align="center"><sub>Fig. 1 · Pipeline and gates: boxes are agent steps / artifacts, red diamonds are human gates, dashes mark the per-chapter loop</sub></p>
 
 Gates are hard constraints: nothing advances until the artifact passes. No approved beat, no prose.
 
