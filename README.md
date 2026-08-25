@@ -1,23 +1,14 @@
 # agent4novel
 
-> 本地优先、单用户、开源的网文写作 agent：你把方向，它填 gap——把一个模糊脑洞，经层层关卡把关，写成一部约 50 万字的长篇。
-
 [English](./README.en.md) · [MIT License](./LICENSE) · [文档导航](#文档)
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
-## 它在解决什么
+agent4novel 是一个跑在本地的网文写作助手，帮「有脑洞、没功底」的作者把想法写成书：你决定故事往哪走、把关每个关键环节，补设定、排大纲、写正文这些专业活交给 AI。从一句话脑洞开始，目标是一部约 50 万字的完本长篇。
 
-有脑洞，没功底。不会补设定、不会编排大纲、文笔一般——所以脑洞永远停留在脑洞。agent4novel 把「写书」拆成一条固定流水线：预处理 → 卖点+梗概 → 大纲 →（章纲 → 正文）× N。作者只做两件事：**把握故事方向**、**在每个关卡把关**；补全、生成、组织都交给 agent。
+## 为什么做这个
 
-## 流水线
-
-<p align="center">
-  <img src="./docs/assets/pipeline.svg" alt="流水线：统一入口 → 预处理（反向 interview）→ 要点 JSON →（预处理关卡）→ 大纲 →（章纲 → 章纲关卡 → 正文 → 正文关卡）× N → 完本" width="960">
-</p>
-<p align="center"><sub>图 1 · 流水线与关卡：方框为 agent 步骤 / 产物，菱形「审」为人工关卡，虚线为按章循环</sub></p>
-
-关卡是硬约束：产物不通过，流程不前进。章纲不通过，正文不会写。
+写网文卡人的地方往往不是灵感，而是灵感到成书之间的那段距离：世界观要补全，大纲要编排，每一章正文都得写得像样。agent4novel 把这段距离拆成一条流水线——专业环节由 AI 生成，方向判断永远留给人。
 
 ## 快速开始
 
@@ -26,51 +17,64 @@ pnpm install
 pnpm dev        # server :8787 + web :5173
 ```
 
-打开 <http://localhost:5173>。**不配 key 也能跑**：自动进入演示模式（内置 fake 生成示例内容，不调真模型）。
+打开 <http://localhost:5173>。不配 API key 也能跑：此时是演示模式，由内置 fake 生成示例内容，不会调用真实模型。
 
-接真模型：
+接真实模型（目前支持 DeepSeek）：
 
 ```bash
-export DEEPSEEK_API_KEY=sk-...   # registry 按约定读取，代码零感知 key
+export DEEPSEEK_API_KEY=sk-...
 pnpm dev
 ```
 
-## 架构
+## 它是怎么工作的
 
-一句话：**workflow 骨架 + 步骤内 agent**。骨架是固定流水线（顺序、关卡、产物确定）；每个步骤内部是 agent 能力（LLM + prompt/skill 文件）。两者靠一条契约衔接：workflow 明确规定每个步骤的输入与输出（zod 校验），步骤只负责在该步骤内生成。
+写一本书，就是一条流水线加上若干道关卡：
 
-- **Step 零感知**：步骤不知道自己在流水线里的位置，输出 `{content}` 装整个 JSON；解析、组装、持久化全归 pipeline。
-- **两个 seam**：存储（`InMemoryStore` ↔ #9 的 `SQLiteStore`）与步骤（`FakeStep` ↔ `RealStep`）——测试永远跑 fake，不联网。
-- **Pipeline 是深模块**：关卡逻辑（`gateAfter` 产出 pending 等 approve / `gateBefore` 要求上游 approved）只活在这一个模块。
-- **数据模型五节点**：`preprocess`（预处理要点 JSON）→ `outline`（大纲）→ `setting`（设定）→ `beat`（章纲）→ `prose`（正文）；前三者每作品一份，后两者每作品 × 每章。产物全量版本化（`appendArtifact`），人工保存即通过，agent 产出待把关。
-- **interview**：预处理先反向问作者一批问题再归一化；问答态是瞬态内存（重启丢失已接受，#9 持久化）。
+<p align="center">
+  <img src="./docs/assets/pipeline.svg" alt="流水线：统一入口 → 预处理（反向 interview）→ 要点 JSON →（预处理关卡）→ 大纲 →（章纲 → 章纲关卡 → 正文 → 正文关卡）× N → 完本" width="960">
+</p>
+<p align="center"><sub>图 1 · 流水线与关卡：方框为 agent 步骤 / 产物，菱形「审」为人工关卡，虚线为按章循环</sub></p>
+
+流水线按固定顺序产出四类内容：预处理要点（卖点、梗概、设定与大纲方向）、全书大纲、每章的章纲、每章的正文。每个产物生成后都会停在关卡上等你：可以直接通过，也可以改完再通过。产物没通过，流水线绝不继续。
+
+## 流水线由什么组成
+
+<p align="center">
+  <img src="./docs/assets/workflow.svg" alt="组成：Pipeline 编排器驱动步骤链（预处理→大纲→章纲→正文），产物落入版本化 Store，作者在关卡把关；右侧放大单个步骤的内部：输入契约 → Agent（LLM + SKILL.md）→ 输出 JSON" width="960">
+</p>
+<p align="center"><sub>图 2 · workflow 的四个组成部分：编排器、步骤、产物库，以及守在关卡上的人；右侧是单个步骤的内部结构</sub></p>
+
+- **编排器（Pipeline）**：让流水线按固定顺序运转，并强制执行关卡规则——AI 产出一律先标「待把关」，你通过之后才解锁下一步。顺序、关卡、持久化的逻辑全部收在这一个模块里。
+- **步骤（Step）**：每个环节就是一次 AI 生成。步骤不知道自己处在流水线的哪个位置，只认一份输入输出契约（输入输出都过 zod 校验）；提示词维护在 SKILL.md 文件里，调 prompt 不用改代码。
+- **产物（Artifact）**：每一步的产出按「作品 + 类型 + 章节」归档，全量版本化，随时可以回到历史版本。你在界面上手动编辑保存，即视为通过。
+- **两个可替换点**：存储和模型都可以换。存储默认内存版（开箱即用），正式持久化走 SQLite（#9）；模型经 AI SDK registry 接入，换厂商只是换一个字符串前缀。测试永远用 fake 步骤，不联网。
 
 ## 技术栈
 
-pnpm workspaces · TypeScript 全链 · Vite + React（web）· Hono（server）· zod · Vitest · Vercel AI SDK v7 + `@ai-sdk/deepseek`（`createProviderRegistry`：换 provider = 换字符串前缀，上游零感知）。
+TypeScript 全链 · pnpm workspaces · Vite + React（web，:5173）· Hono（server，:8787）· zod · Vitest · Vercel AI SDK v7（`@ai-sdk/deepseek`）
 
 ```bash
-pnpm test        # 全部单测（永远 fake，不联网）
+pnpm test        # 单元测试（全 fake，不联网）
 pnpm typecheck
 pnpm build
 ```
 
 ## 文档
 
-这套仓库的文档是 agent 可消费的一等公民：
+这个仓库的文档是写给 agent 读的一等公民，人读也够用：
 
 | 文档 | 管什么 |
 |---|---|
 | [CONTEXT.md](./CONTEXT.md) | 领域词汇表（先读它） |
-| [docs/schema.md](./docs/schema.md) | 数据模型单源 |
+| [docs/schema.md](./docs/schema.md) | 数据模型的唯一来源 |
 | [docs/adr/](./docs/adr/) | 不可逆决策（编排、存储、skill 文件） |
-| [docs/wiki/](./docs/wiki/) | 每票技术方案 + 状态记录（HOW 的唯一来源） |
+| [docs/wiki/](./docs/wiki/) | 每张票的技术方案与状态记录（怎么做只看这里） |
 | [docs/research/](./docs/research/) | 选型调研（技术栈、LLM provider 策略） |
-| [docs/handoff.md](./docs/handoff.md) | 会话接力快照（当前状态与下一步） |
+| [docs/handoff.md](./docs/handoff.md) | 会话接力快照（当前进展与下一步） |
 
 ## 开发流程
 
-每张 ticket 走固定 loop：grill 对齐 → wiki 技术方案 → TDD 红绿切片 → 3 轮自校准 → 双轴 code-review。规则见 [docs/wiki/README.md](./docs/wiki/README.md)。
+每张 ticket 走同一个 loop：grill 对齐 → wiki 技术方案 → TDD 红绿切片 → 三轮自校准 → 双轴 code review。详见 [docs/wiki/README.md](./docs/wiki/README.md)。
 
 ## 路线图
 
