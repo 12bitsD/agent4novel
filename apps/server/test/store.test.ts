@@ -28,13 +28,14 @@ describe('InMemoryStore', () => {
   it('appends versioned artifacts (JsonValue content) and getWork returns the latest', () => {
     const store = new InMemoryStore()
     const w = store.createWork({ seed: 'x' })
-    store.appendArtifact(w.id, 'preprocess', { hook: 'v1', synopsis: '', setting: '', outline: '' })
-    store.appendArtifact(w.id, 'preprocess', { hook: 'v2', synopsis: '', setting: '', outline: '' })
+    // store 不感知内容形状（JsonValue 透传），用中性 fixture，不绑定具体节点形态
+    store.appendArtifact(w.id, 'preprocess', { note: 'v1' })
+    store.appendArtifact(w.id, 'preprocess', { note: 'v2' })
     const detail = store.getWork(w.id)!
     const pps = detail.artifacts.filter((a) => a.kind === 'preprocess')
     expect(pps).toHaveLength(1)
     expect(pps[0].version).toBe(2)
-    expect((pps[0].content as { hook: string }).hook).toBe('v2')
+    expect((pps[0].content as { note: string }).note).toBe('v2')
   })
 
   it('per-chapter kind requires a chapter', () => {

@@ -157,3 +157,4 @@ definition = [{ stepId: 'preprocess', outputKind: 'preprocess', gateAfter: { kin
   - Entry 增加「跳过，直接生成」次按钮（对应 buildPrompt 的无作答路径，wiki 流程未明写，小补充）。
   - 端到端验证通过（无 key 演示模式）：config → 创建 → advance（awaiting-interview + 3 问）→ advance 无副作用 → answer-interview（pending 落库）→ approve（complete）；answer-interview 重放 400、approve 带 chapter 400、advance 未知作品 404；web 5173 + /api 代理正常。
   - 未决：真 key 下模型名实测（research 标 unverified）；pendingInterview 重启丢失待 #9 持久化。
+- 2026-08-26（3 轮自校准完成）：R1 需求对账（AC1–6 全对得上，含路由/状态机/key 零感知逐条 grep 验证）；R2 规范（禁区词零命中、granularity 零残留、SKILL.md 落文件；**修掉 store.test.ts 旧四字段 fixture**——store 本不感知形状，改中性 `{note}`）；R3 测试/边界（81 测试 + typecheck 绿、测试策略覆盖点全有、明确不做零越界）。**已知限制（不修，挂后续票）**：advance/answer-interview 失败后作品已落库但创作界面没有「重新预处理」入口（→ #6 续写/详情页时代再议）；「演示模式」是 UI 词非领域词，暂不进 CONTEXT.md。
