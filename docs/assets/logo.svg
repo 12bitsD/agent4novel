@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="72" viewBox="0 0 260 72" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', serif">
+  <defs>
+    <marker id="logoArrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#999999"/>
+    </marker>
+  </defs>
+  <!-- 白底圆角卡片：明暗主题下都成立 -->
+  <rect x="1" y="1" width="258" height="70" rx="16" fill="#ffffff" stroke="#eeeeee"/>
+
+  <!-- 灵感的火花 -->
+  <path d="M36 20 L40.6 31.4 L52 36 L40.6 40.6 L36 52 L31.4 40.6 L20 36 L31.4 31.4 Z" fill="#1a1a1a"/>
+
+  <!-- 虚线进程 -->
+  <line x1="58" y1="36" x2="98" y2="36" stroke="#999999" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#logoArrow)"/>
+
+  <!-- 关卡（审） -->
+  <polygon points="120,20 136,36 120,52 104,36" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.8"/>
+  <text x="120" y="41" text-anchor="middle" font-size="14" fill="#8a2d2d">审</text>
+
+  <line x1="142" y1="36" x2="182" y2="36" stroke="#999999" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#logoArrow)"/>
+
+  <!-- 成书 -->
+  <path d="M196 24 Q206 19 216 24 Q226 19 236 24 L236 50 Q226 45 216 50 Q206 45 196 50 Z" fill="#ffffff" stroke="#1a1a1a" stroke-width="1.6" stroke-linejoin="round"/>
+  <line x1="216" y1="24" x2="216" y2="50" stroke="#1a1a1a" stroke-width="1.2"/>
+</svg>

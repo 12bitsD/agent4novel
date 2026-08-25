@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', serif">
+  <rect x="1" y="1" width="118" height="118" rx="24" fill="#ffffff" stroke="#eeeeee"/>
+
+  <!-- 灵感的火花 -->
+  <path d="M60 8 L63.3 16.7 L72 20 L63.3 23.3 L60 32 L56.7 23.3 L48 20 L56.7 16.7 Z" fill="#1a1a1a"/>
+
+  <line x1="60" y1="36" x2="60" y2="42" stroke="#999999" stroke-width="1.2" stroke-dasharray="3 3"/>
+
+  <!-- 关卡（审） -->
+  <polygon points="60,45 73,58 60,71 47,58" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.8"/>
+  <text x="60" y="62" text-anchor="middle" font-size="11" fill="#8a2d2d">审</text>
+
+  <line x1="60" y1="75" x2="60" y2="80" stroke="#999999" stroke-width="1.2" stroke-dasharray="3 3"/>
+
+  <!-- 成书 -->
+  <path d="M42 84 Q51 80 60 84 Q69 80 78 84 L78 102 Q69 98 60 102 Q51 98 42 102 Z" fill="#ffffff" stroke="#1a1a1a" stroke-width="1.6" stroke-linejoin="round"/>
+  <line x1="60" y1="84" x2="60" y2="102" stroke="#1a1a1a" stroke-width="1.2"/>
+</svg>

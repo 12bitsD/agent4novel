@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./docs/assets/logo.svg" alt="agent4novel: spark → gate → book" width="300">
+</p>
+
 <h1 align="center">agent4novel</h1>
 
 <p align="center">
@@ -118,6 +122,6 @@ Every ticket runs the same loop: grill-to-align → wiki tech plan → TDD red/g
 ---
 
 <p align="center">
-  <sub>Runs locally · single user · your data never leaves your machine · <a href="./LICENSE">MIT License</a></sub><br>
+  <sub><a href="./LICENSE">MIT License</a></sub><br>
   <sub>If this project speaks to you, a star or an issue is always welcome.</sub>
 </p>

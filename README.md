@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./docs/assets/logo.svg" alt="agent4novel：灵感 → 关卡 → 成书" width="300">
+</p>
+
 <h1 align="center">agent4novel</h1>
 
 <p align="center">
