@@ -61,7 +61,13 @@ describe('works routes', () => {
     const store = new InMemoryStore()
     const w = store.createWork({ seed: 'x' })
     const app = createApp(store)
-    const content = { hook: 'h', synopsis: 's', setting: 'st', outline: 'o' }
+    const content = {
+      inputStage: '脑洞',
+      hooks: ['h'],
+      synopsis: ['s'],
+      setting: [{ title: 'st', content: 'c' }],
+      outline: [{ title: 'o', content: 'c' }],
+    }
     const res1 = await app.request(`/api/works/${w.id}/artifacts/preprocess`, {
       method: 'PUT',
       headers: jsonHeaders,
@@ -75,7 +81,7 @@ describe('works routes', () => {
     const res2 = await app.request(`/api/works/${w.id}/artifacts/preprocess`, {
       method: 'PUT',
       headers: jsonHeaders,
-      body: JSON.stringify({ content: { ...content, hook: 'h2' } }),
+      body: JSON.stringify({ content: { ...content, hooks: ['h2'] } }),
     })
     const a2 = (await res2.json()) as { version: number }
     expect(a2.version).toBe(2)
@@ -87,7 +93,7 @@ describe('works routes', () => {
     const res = await createApp(store).request(`/api/works/${w.id}/artifacts/preprocess`, {
       method: 'PUT',
       headers: jsonHeaders,
-      body: JSON.stringify({ content: { hook: 'only-hook' } }),
+      body: JSON.stringify({ content: { hooks: 'not-an-array' } }),
     })
     expect(res.status).toBe(400)
   })
@@ -97,7 +103,15 @@ describe('works routes', () => {
     const res = await createApp(store).request('/api/works/nope/artifacts/preprocess', {
       method: 'PUT',
       headers: jsonHeaders,
-      body: JSON.stringify({ content: { hook: 'h', synopsis: 's', setting: 'st', outline: 'o' } }),
+      body: JSON.stringify({
+        content: {
+          inputStage: '脑洞',
+          hooks: ['h'],
+          synopsis: ['s'],
+          setting: [{ title: 'st', content: 'c' }],
+          outline: [{ title: 'o', content: 'c' }],
+        },
+      }),
     })
     expect(res.status).toBe(404)
   })

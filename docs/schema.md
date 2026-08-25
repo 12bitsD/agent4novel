@@ -8,15 +8,13 @@ agent4novel 的领域数据模型。代码英文 id ↔ 领域中文词（见 [C
 
 | 节点（kind） | 产物内容 | 形状 |
 |---|---|---|
-| `preprocess` | 预处理 JSON：卖点(`hook`) + 梗概(`synopsis`) + 设定 hint(`setting`) + 大纲/场景 hint(`outline`) | 每作品一份 |
-| `outline` | 大纲完整版 | 每作品一份 |
-| `setting` | 设定完整版 | 每作品一份 |
+| `preprocess` | 预处理 JSON：`inputStage`（脑洞/设定/主线/模板）+ `hooks[]`（卖点）+ `synopsis[]`（梗概）+ `setting[]`（{title,content} 设定 hint）+ `outline[]`（{title,content} 大纲 hint）；四类要点多实例并存 | 每作品一份 |
+| `outline` | 大纲完整版：`{chapters:[{number,title,summary}]}`（分章无卷；场景/冲突/钩子归 beat 层） | 每作品一份 |
+| `setting` | 设定完整版：`{worldview, powerSystem, factions:[{name,description}], characters:[{name,role,motivation,profile}], extra?}` | 每作品一份 |
 | `beat` | 章纲 | 每作品 × 每章一份 |
 | `prose` | 正文 | 每作品 × 每章一份 |
 
-**卖点 / 梗概 不是独立产物**，是 `preprocess` 产物 JSON 里的字段。preprocess 里的设定/大纲是 **hint（粗）**；`outline` / `setting` 节点产出的**完整版（细）**是独立产物。
-
-> preprocess 的 JSON 形状当前为 provisional（`{hook, synopsis, setting, outline}` 四字符串，见 packages/contracts/src/preprocess.ts）；#3b 对齐后可能变（多实例候选 / 新字段），届时只改那一处。
+**卖点 / 梗概 不是独立产物**，是 `preprocess` 产物 JSON 里的数组字段（`hooks` / `synopsis`）。preprocess 里的设定/大纲是 **hint（粗）**；`outline` / `setting` 节点产出的**完整版（细）**是独立产物。三者的 zod schema 见 packages/contracts（preprocess.ts / outline.ts / setting.ts）。
 
 ## 实体
 
@@ -41,7 +39,7 @@ Artifact = {
   kind: ArtifactKind    // preprocess | outline | setting | beat | prose
   chapter?: number      // 仅 beat / prose 有
   version: number       // 每次追加 +1，旧版本保留
-  content: JsonValue    // 任意 JSON；preprocess 的当前形状见 preprocessContentSchema
+  content: JsonValue    // 任意 JSON；各 kind 的形状见上表与 packages/contracts
   humanStatus: HumanStatus   // pending | approved；SQLite 列名 human_status
   createdAt: string
 }

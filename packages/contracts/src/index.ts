@@ -1,3 +1,5 @@
 export * from './artifacts.js'
 export * from './preprocess.js'
+export * from './outline.js'
+export * from './setting.js'
 export * from './step.js'
