@@ -14,8 +14,12 @@
 - skill/prompt 为文件（[ADR-0002](../adr/0002-storage-sqlite-skills-as-files.md)）
 - interview = 批量问答（一轮一批问题），definition 字段开关；多实例要点并存（非单选定稿）
 - 人工保存 = approved（沿用 #3a）；agent 产出 = pending，等 preprocess 关卡
+- 大纲分章**无卷**（#3b 决策，已同步 CONTEXT.md 大纲定义与 spec #1 故事 7）；场景/冲突/钩子归 beat（章纲）层
+- 输入所处阶段字段名 = `inputStage`（CONTEXT.md 用词「阶段」；弃用 `granularity`——schema.md 已用「粗/细」占住粒度语义，`phase` 已被步骤两阶段占用）
 
-## 流程（启动界面转对话式）
+## 技术方案
+
+### 流程（启动界面转对话式）
 
 ```
 启动界面：输入（可补充编辑）+ 上传 → 「开始创作」
@@ -27,15 +31,13 @@
   → 编辑/直接确认 → approved（过 preprocess 关卡，为 #4 就绪）
 ```
 
-## 技术方案
-
 ### 契约变更（packages/contracts）
 
 **preprocess 最终形态**（provisional 转正）：
 
 ```ts
 preprocessContentSchema = z.object({
-  granularity: z.enum(['脑洞', '设定', '主线', '模板']),
+  inputStage: z.enum(['脑洞', '设定', '主线', '模板']),
   hooks: z.array(z.string()),
   synopsis: z.array(z.string()),
   setting: z.array(z.object({ title: z.string(), content: z.string() })),
@@ -64,17 +66,21 @@ settingContentSchema = z.object({
 })
 ```
 
-三个 schema 落 contracts（server 校验 + web `z.infer` 类型，单点不漂移）。
+**落库与同步**（单源不漂移）：
+
+- 三个 schema 落 contracts：server 校验 + web `z.infer` 类型。
+- **schema.md 同 commit 同步**：preprocess 行改新形态（`hook`→`hooks`、加 `inputStage`、多实例并存语义）、删 provisional 注记；outline/setting 行补完整版形状引用。
+- 受影响文件清单：packages/contracts（preprocess 转正 + outline/setting schema）、docs/schema.md、apps/server（pipeline `PipelineInput` 拓宽、routes 三新 API）、apps/web（Entry 对话式、Workspace 列表式）。
 
 ### Pipeline 变更（server/src/pipeline）
 
 - 状态机新增 **`awaiting-interview`** 态；definition 节点加 `interview?: boolean`
-- Step 输入组装：pipeline 给步骤传 `{ workId, seed, phase, answers? }`（seed 从 store 取；**这是"上下文组装"的第一版**）
+- **`PipelineInput` 类型拓宽**：`{ workId }` → `{ workId, seed, phase, answers? }`（seed 从 store 取；**这是"上下文组装"的第一版**）
 - preprocess 步骤两阶段（同一 step，`phase` 输入区分）：
   - `phase: 'questions'` → 输出 `{ content: { questions: string[] } }` → 不进产物，进 pendingInterview 状态
   - `phase: 'normalize'` → 输出 `{ content: PreprocessContent }` → `appendArtifact(kind='preprocess', pending)`
 - 新方法 `answerInterview(workId, answers)`：喂回答 → 跑 normalize → 落库 → 状态前进
-- pendingInterview 存 pipeline 内存（重启丢失，本票接受，记进状态记录）
+- pendingInterview 存 pipeline 内存（重启丢失，本票接受——见「边界与错误」）
 - 步骤输入/输出都过 zod 校验（沿用 runStep）
 
 ### RealStep（server/src/steps/）
@@ -89,7 +95,7 @@ settingContentSchema = z.object({
 - `POST /api/works/:id/advance` → pipeline.advance → 返回 PipelineState（含 pendingGate / pendingInterview）
 - `POST /api/works/:id/answer-interview` `{ answers: [{question, answer}] }` → 归一化 → 落库
 - `POST /api/works/:id/approve` `{ kind, chapter? }` → pipeline.approve
-- 现有 GET / POST works / PUT preprocess 不变
+- 现有 GET / POST works / PUT preprocess 不变（PUT 的 validate-on-write 随 contracts schema 升级自动传导）
 
 ### 启动界面转对话式（web）
 
@@ -100,6 +106,7 @@ settingContentSchema = z.object({
 
 - idea 状态编辑改**列表式**：每字段（卖点/梗概/设定/大纲）展示 N 条要点，增、删、改；「保存」整份 JSON 新版本
 - pending 状态可见；「确认」按钮调 approve API
+- tab 文案保持英文 `idea`（2026-08-25 拍板）
 
 ### 定义真链第一阶段
 
@@ -115,8 +122,8 @@ definition = [{ stepId: 'preprocess', outputKind: 'preprocess', gateAfter: { kin
 
 ## 实施顺序（红绿切片）
 
-1. contracts 三 schema + jsonValueSchema 复用 + 测试
-2. Pipeline：awaiting-interview 态 + answerInterview + 两阶段 + interview 开关 + 测试（fake）
+1. contracts 三 schema + jsonValueSchema 复用 + **schema.md 同步**（同 commit）+ 测试
+2. Pipeline：awaiting-interview 态 + answerInterview + 两阶段 + `PipelineInput` 拓宽 + interview 开关 + 测试（fake）
 3. server：RealStep + llm registry + fake fallback + advance/answer-interview/approve API + 测试
 4. web：启动界面转对话式（问题/作答）+ 创作界面列表式编辑 + approve 按钮
 5. 全量测试 + typecheck + `pnpm dev` 验证（无 key 走 fake 演示模式）
@@ -128,7 +135,7 @@ definition = [{ stepId: 'preprocess', outputKind: 'preprocess', gateAfter: { kin
 - advance 在 awaiting-interview 时拒绝（无副作用）
 - answerInterview 无 pendingInterview → 400
 - 归一化输出过 schema 校验失败 → 500 并提示（agent 输出不稳时的兜底）
-- 服务器重启丢失 pendingInterview → 记录于状态记录，后续 SQLite 再持久化
+- 服务器重启丢失 pendingInterview → **对 ADR-0001 持久化方向的临时偏离，显式标注**：interview 问答态是瞬态非产物，本票接受丢失，#9 随 SQLite 落地时一并持久化
 
 ## 明确不做
 
@@ -140,3 +147,4 @@ definition = [{ stepId: 'preprocess', outputKind: 'preprocess', gateAfter: { kin
 ## 状态记录
 
 - 2026-08-24：对齐完成（多实例并存 / outline=chapters 无卷、scene 归 beat / setting 四维度 + extra / 先落库再问答 / key 零感知），计划存档，待开工。
+- 2026-08-25：/code-review（Standards + Spec 两轴并行 subagent）+ 自校准 5 点。修：① schema.md 同步列入「契约变更」+ slice 1（AC1 原要求 contracts + schema.md 双落库）；② `granularity`→`inputStage`（粒度语义被 schema.md「粗/细」占用、`phase` 被两阶段占用）；③ `PipelineInput` 拓宽点名；④「流程」节并入「技术方案」（回归 8 段模板）；⑤ pendingInterview 显式标 ADR-0001 临时偏离；⑥ README 索引 003b→010。拍板：大纲无卷同步 CONTEXT.md + spec #1 故事 7；idea tab 保持英文。驳回：Speculative Generality / Divergent Change（outline/setting 定形、双主题均为 ticket #10 授权范围）。复核通过项：PUT 已 validate-on-write（schema 升级自动传导）、测试不联网已明示。
