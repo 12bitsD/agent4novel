@@ -10,7 +10,9 @@
   },
   "dependencies": {
     "@agent4novel/contracts": "workspace:*",
+    "@ai-sdk/deepseek": "^3.0.32",
     "@hono/node-server": "^1.13.0",
+    "ai": "^7.0.79",
     "hono": "^4.6.0"
   },
   "devDependencies": {
