@@ -1,12 +1,29 @@
-# agent4novel
+<h1 align="center">agent4novel</h1>
 
-[中文](./README.md) · [MIT License](./LICENSE) · [Docs](#docs)
+<p align="center">
+  <strong>From a one-line idea to a finished web-novel serial.</strong>
+</p>
 
-![License: MIT](https://img.shields.io/badge/license-MIT-blue)
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#how-it-works">Pipeline</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#docs">Docs</a> ·
+  <a href="#roadmap">Roadmap</a> ·
+  <a href="./README.md">中文</a>
+</p>
 
-agent4novel turns a web-novel idea into a finished serial. Give it a one-line idea (or an uploaded setting doc); it asks you a few key questions back, then generates ring by ring: hooks and synopsis, the book outline, each chapter's beat sheet, each chapter's prose.
+<p align="center">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/demo_mode-no_API_key_needed-brightgreen" alt="Demo mode: no API key needed">
+  <img src="https://img.shields.io/badge/AI_SDK-v7-000000" alt="AI SDK v7">
+</p>
 
-It is built for authors who have ideas but no writing training: the AI does all the professional drafting, and you only make calls at the gates — approve, edit, or send back. Everything runs locally, single-user, open source; your data never leaves your machine.
+---
+
+Novel writing has long been a cottage craft: one author, one pen, hundreds of thousands of characters ground out word by word. agent4novel moves it onto a modern assembly line — the AI works like an on-call editorial team, filling out worldbuilding, structuring the outline, writing chapters; you are the editor-in-chief: the direction is yours, and every gate needs your sign-off. Raw inspiration goes in; a finished book comes out.
+
+It is built for authors who have ideas but no writing training. Give it a one-line idea (or an uploaded setting doc); it asks a few key questions back, then generates ring by ring: hooks and synopsis, the book outline, each chapter's beat sheet, each chapter's prose. Everything runs locally — single-user, open source, and your data never leaves your machine.
 
 ## Quick start
 
@@ -49,7 +66,17 @@ The whole architecture is built around one idea: **human-in-the-loop** — machi
 
 ## Stack
 
-TypeScript end-to-end · pnpm workspaces · Vite + React (web, :5173) · Hono (server, :8787) · zod · Vitest · Vercel AI SDK v7 (`@ai-sdk/deepseek`)
+<p align="center">
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/React-61DAFB?logo=react&logoColor=black" alt="React">
+  <img src="https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white" alt="Vite">
+  <img src="https://img.shields.io/badge/Hono-E36002?logo=hono&logoColor=white" alt="Hono">
+  <img src="https://img.shields.io/badge/pnpm-F69220?logo=pnpm&logoColor=white" alt="pnpm">
+  <img src="https://img.shields.io/badge/zod-3E67B1?logo=zod&logoColor=white" alt="zod">
+  <img src="https://img.shields.io/badge/Vitest-6E9F18?logo=vitest&logoColor=white" alt="Vitest">
+</p>
+
+<p align="center">Vercel AI SDK v7 (<code>@ai-sdk/deepseek</code>) · pnpm workspaces · TypeScript end-to-end</p>
 
 ```bash
 pnpm test        # unit tests (all faked, never networked)
@@ -76,16 +103,21 @@ Every ticket runs the same loop: grill-to-align → wiki tech plan → TDD red/g
 
 ## Roadmap
 
-- [x] [#2](https://github.com/12bitsD/agent4novel/issues/2) Scaffold + storage + pipeline skeleton + bookcase
-- [x] [#3](https://github.com/12bitsD/agent4novel/issues/3) Unified entry + workspace idea state (manual chain)
-- [x] [#10](https://github.com/12bitsD/agent4novel/issues/10) Preprocess RealStep + interview + outline/setting shapes
-- [ ] [#4](https://github.com/12bitsD/agent4novel/issues/4) Outline generation
-- [ ] [#5](https://github.com/12bitsD/agent4novel/issues/5) Beat/prose gates
-- [ ] [#6](https://github.com/12bitsD/agent4novel/issues/6) Continue writing + work detail + router
-- [ ] [#7](https://github.com/12bitsD/agent4novel/issues/7) Agent configuration (style / genre / payoffs)
-- [ ] [#8](https://github.com/12bitsD/agent4novel/issues/8) Bad-example collection
-- [ ] [#9](https://github.com/12bitsD/agent4novel/issues/9) SQLite persistence
+| Ticket | What | Status |
+|---|---|---|
+| [#2](https://github.com/12bitsD/agent4novel/issues/2) | Scaffold + storage + pipeline skeleton + bookcase | ✅ |
+| [#3](https://github.com/12bitsD/agent4novel/issues/3) | Unified entry + workspace idea state (manual chain) | ✅ |
+| [#10](https://github.com/12bitsD/agent4novel/issues/10) | Preprocess RealStep + interview + outline/setting shapes | ✅ |
+| [#4](https://github.com/12bitsD/agent4novel/issues/4) | Outline generation | ◀ next |
+| [#5](https://github.com/12bitsD/agent4novel/issues/5) | Beat/prose gates | |
+| [#6](https://github.com/12bitsD/agent4novel/issues/6) | Continue writing + work detail + router | |
+| [#7](https://github.com/12bitsD/agent4novel/issues/7) | Agent configuration (style / genre / payoffs) | |
+| [#8](https://github.com/12bitsD/agent4novel/issues/8) | Bad-example collection | |
+| [#9](https://github.com/12bitsD/agent4novel/issues/9) | SQLite persistence | |
 
-## License
+---
 
-[MIT](./LICENSE)
+<p align="center">
+  <sub>Runs locally · single user · your data never leaves your machine · <a href="./LICENSE">MIT License</a></sub><br>
+  <sub>If this project speaks to you, a star or an issue is always welcome.</sub>
+</p>
