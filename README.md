@@ -122,6 +122,6 @@ pnpm build
 ---
 
 <p align="center">
-  <sub>本地运行 · 单用户 · 数据不出你的电脑 · <a href="./LICENSE">MIT License</a></sub><br>
+  <sub><a href="./LICENSE">MIT License</a></sub><br>
   <sub>如果这个项目对你有意思，欢迎 star，或来 issue 聊聊。</sub>
 </p>
