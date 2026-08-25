@@ -151,3 +151,9 @@ definition = [{ stepId: 'preprocess', outputKind: 'preprocess', gateAfter: { kin
 - 2026-08-24：对齐完成（多实例并存 / outline=chapters 无卷、scene 归 beat / setting 四维度 + extra / 先落库再问答 / key 零感知），计划存档，待开工。
 - 2026-08-25：/code-review（Standards + Spec 两轴并行 subagent）+ 自校准 5 点。修：① schema.md 同步列入「契约变更」+ slice 1（AC1 原要求 contracts + schema.md 双落库）；② `granularity`→`inputStage`（粒度语义被 schema.md「粗/细」占用、`phase` 被两阶段占用）；③ `PipelineInput` 拓宽点名；④「流程」节并入「技术方案」（回归 8 段模板）；⑤ pendingInterview 显式标 ADR-0001 临时偏离；⑥ README 索引 003b→010。拍板：大纲无卷同步 CONTEXT.md + spec #1 故事 7；idea tab 保持英文。驳回：Speculative Generality / Divergent Change（outline/setting 定形、双主题均为 ticket #10 授权范围）。复核通过项：PUT 已 validate-on-write（schema 升级自动传导）、测试不联网已明示。
 - 2026-08-25（执行计划评审通过，开工）：定切片顺序（创作界面列表式提前为 slice 2——contracts 改形即破 web 编译，且它只依赖现有 PUT；保持每 commit 双绿）；补 `GET /api/config`（Entry 渲染前需 demo/interview 标记）；`phase` 缺省 normalize（pipeline 尽量零感知）；interview 类型落 contracts/preprocess.ts（web 问答表单复用）；interview 开关 v1 硬编码 true。
+- 2026-08-26（实现完成，slice 1–5）：偏差与踩坑——
+  - 步骤输入/输出 schema 提取为 `steps/preprocess-io.ts`（RealStep / FakeStep / 测试 fake 三方同源，避免三处重复定义）。
+  - 踩坑：slice 4 提交时 typecheck 被管道里的 `grep` 吞掉退出码，三个类型错误漏检、带错提交后 amend 补修（`PreprocessStepOutput` 标注、registry `deepseek:${string}` 模板类型收窄、buildPrompt 的 phase 形参改可选）。**教训：门禁命令不许用 grep 截断 exit code，必须看原始退出码。**
+  - Entry 增加「跳过，直接生成」次按钮（对应 buildPrompt 的无作答路径，wiki 流程未明写，小补充）。
+  - 端到端验证通过（无 key 演示模式）：config → 创建 → advance（awaiting-interview + 3 问）→ advance 无副作用 → answer-interview（pending 落库）→ approve（complete）；answer-interview 重放 400、approve 带 chapter 400、advance 未知作品 404；web 5173 + /api 代理正常。
+  - 未决：真 key 下模型名实测（research 标 unverified）；pendingInterview 重启丢失待 #9 持久化。
