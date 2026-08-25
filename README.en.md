@@ -4,11 +4,9 @@
 
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
-agent4novel is a local-first writing assistant for Chinese web novels, built for authors who have the idea but not the craft. You decide where the story goes and review every key artifact; the AI does the professional heavy lifting — filling out worldbuilding, structuring the outline, writing chapters. The goal: turn a one-line idea into a finished ~500k-character serial.
+agent4novel turns a web-novel idea into a finished serial. Give it a one-line idea (or an uploaded setting doc); it asks you a few key questions back, then generates ring by ring: hooks and synopsis, the book outline, each chapter's beat sheet, each chapter's prose.
 
-## Why
-
-The hard part of web novels usually isn't inspiration — it's the distance between inspiration and a finished book. Worldbuilding needs filling, the outline needs structure, and every chapter has to read well. agent4novel breaks that distance into a pipeline: AI generates, humans judge.
+It is built for authors who have ideas but no writing training: the AI does all the professional drafting, and you only make calls at the gates — approve, edit, or send back. Everything runs locally, single-user, open source; your data never leaves your machine.
 
 ## Quick start
 
@@ -28,26 +26,24 @@ pnpm dev
 
 ## How it works
 
-Writing a book here means one pipeline plus a handful of gates:
-
 <p align="center">
   <img src="./docs/assets/pipeline.svg" alt="Pipeline: unified entry → preprocess (reverse interview) → points JSON → (preprocess gate) → outline → (beat → beat gate → prose → prose gate) × N → finished book" width="960">
 </p>
 <p align="center"><sub>Fig. 1 · Pipeline and gates: boxes are agent steps / artifacts, red diamonds are human gates, dashes mark the per-chapter loop</sub></p>
 
-The pipeline produces four kinds of content in a fixed order: preprocess points (hooks, synopsis, setting and outline directions), the book outline, a per-chapter beat sheet, and the chapter prose itself. Every artifact pauses at a gate for you: approve it as-is, or edit first. Nothing advances past a gate you haven't passed.
+Preprocessing confirms the story direction with you first; after that, every chapter gets a beat sheet before prose, and you review both. Nothing advances past a gate you haven't passed.
 
-## What the pipeline is made of
+## Architecture
 
 <p align="center">
   <img src="./docs/assets/workflow.svg" alt="Composition: a Pipeline orchestrator drives the step chain (preprocess → outline → beat → prose), artifacts land in a versioned store, the author reviews at gates; on the right, a zoomed single step: input contract → Agent (LLM + SKILL.md) → output JSON" width="960">
 </p>
 <p align="center"><sub>Fig. 2 · The four parts of the workflow — orchestrator, steps, artifact store, and the human at the gates; on the right, the inside of a single step</sub></p>
 
-- **The orchestrator (Pipeline)** keeps the pipeline moving in a fixed order and enforces the gates: AI output is always marked "pending review" first, and the next step unlocks only after you approve. Ordering, gating and persistence logic live in this one module.
-- **Steps** are single AI generations. A step doesn't know where it sits in the pipeline; it only honors an input/output contract (zod-validated both ways). Prompts live in SKILL.md files, so prompt iteration never touches code.
-- **Artifacts** — every step's output is filed by "work + kind + chapter" and fully versioned, so you can return to any previous version. A manual edit-and-save in the UI counts as approval.
-- **Two swappable points**: storage and model. Storage defaults to in-memory (zero setup), with SQLite planned for real persistence (#9); models go through the AI SDK registry, so switching providers is just a string prefix. Tests always run fake steps and never touch the network.
+- **The orchestrator (Pipeline)** drives the step chain in a fixed order and enforces gates with a state machine (ready → awaiting-interview / awaiting-approval → complete, derived from artifact status). AI output always lands as pending; the next step unlocks only after you approve or edit-and-save. Ordering, gating and persistence logic live in this one module.
+- **Steps** are contract-bound AI generations: `runStep` zod-validates both input and output, and prompts live in SKILL.md files so prompt iteration never touches code. A step doesn't know where it sits in the pipeline, which makes it independently testable and replaceable.
+- **Artifacts** are filed by "work + kind + chapter" as an append-only version chain (`{kind, chapter?, version, content, humanStatus}`); any historical version is readable. A manual edit-and-save counts as approval; agent output awaits review.
+- **Swappable points**: storage (in-memory out of the box ↔ SQLite persistence in #9) and model (AI SDK `createProviderRegistry` — switching providers is a string prefix, code never touches the key) are the two injection points. Tests run the whole chain on FakeStep and never touch the network.
 
 ## Stack
 
