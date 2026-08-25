@@ -35,10 +35,12 @@ Preprocessing confirms the story direction with you first; after that, every cha
 
 ## Architecture
 
+The whole architecture is built around one idea: **human-in-the-loop** — machines generate, humans judge, and the only channel between the two layers is a gate. Nothing the AI writes counts until it passes one.
+
 <p align="center">
   <img src="./docs/assets/workflow.svg" alt="Composition: a Pipeline orchestrator drives the step chain (preprocess → outline → beat → prose), artifacts land in a versioned store, the author reviews at gates; on the right, a zoomed single step: input contract → Agent (LLM + SKILL.md) → output JSON" width="960">
 </p>
-<p align="center"><sub>Fig. 2 · The four parts of the workflow — orchestrator, steps, artifact store, and the human at the gates; on the right, the inside of a single step</sub></p>
+<p align="center"><sub>Fig. 2 · Human-in-the-loop: a judgment layer (human) and a generation layer (machine), with gates as the only channel between them; on the right, the inside of a single step</sub></p>
 
 - **The orchestrator (Pipeline)** drives the step chain in a fixed order and enforces gates with a state machine (ready → awaiting-interview / awaiting-approval → complete, derived from artifact status). AI output always lands as pending; the next step unlocks only after you approve or edit-and-save. Ordering, gating and persistence logic live in this one module.
 - **Steps** are contract-bound AI generations: `runStep` zod-validates both input and output, and prompts live in SKILL.md files so prompt iteration never touches code. A step doesn't know where it sits in the pipeline, which makes it independently testable and replaceable.
