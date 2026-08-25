@@ -38,9 +38,9 @@ Preprocessing confirms the story direction with you first; after that, every cha
 The whole architecture is built around one idea: **human-in-the-loop** — machines generate, humans judge, and the only channel between the two layers is a gate. Nothing the AI writes counts until it passes one.
 
 <p align="center">
-  <img src="./docs/assets/workflow.svg" alt="Composition: a Pipeline orchestrator drives the step chain (preprocess → outline → beat → prose), artifacts land in a versioned store, the author reviews at gates; on the right, a zoomed single step: input contract → Agent (LLM + SKILL.md) → output JSON" width="960">
+  <img src="./docs/assets/workflow.svg" alt="Layered architecture: the judgment layer (user input, author review) on top, the generation layer (machine) below: the Pipeline orchestrator owns all flow control, with the step chain preprocess → outline → beat → prose inside it; gates between steps hand AI output (pending) to the author for approval (approved); two swappable seams at the bottom of the container (storage: InMemoryStore│SQLiteStore, step: FakeStep│RealStep); artifacts land in a versioned store" width="760">
 </p>
-<p align="center"><sub>Fig. 2 · Human-in-the-loop: a judgment layer (human) and a generation layer (machine), with gates as the only channel between them; on the right, the inside of a single step</sub></p>
+<p align="center"><sub>Fig. 2 · Human-in-the-loop, layered: judgment (human) on top, generation (machine) below; the Pipeline owns all flow control, and gates are the only channel between the layers</sub></p>
 
 - **The orchestrator (Pipeline)** drives the step chain in a fixed order and enforces gates with a state machine (ready → awaiting-interview / awaiting-approval → complete, derived from artifact status). AI output always lands as pending; the next step unlocks only after you approve or edit-and-save. Ordering, gating and persistence logic live in this one module.
 - **Steps** are contract-bound AI generations: `runStep` zod-validates both input and output, and prompts live in SKILL.md files so prompt iteration never touches code. A step doesn't know where it sits in the pipeline, which makes it independently testable and replaceable.

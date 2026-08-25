@@ -38,9 +38,9 @@ pnpm dev
 整条架构只围绕一个理念：**human-in-the-loop**——机器负责生成，人负责判断，两层之间唯一的通道是关卡：AI 写出的东西，不过关卡就不算数。
 
 <p align="center">
-  <img src="./docs/assets/workflow.svg" alt="组成：Pipeline 编排器驱动步骤链（预处理→大纲→章纲→正文），产物落入版本化 Store，作者在关卡把关；右侧放大单个步骤的内部：输入契约 → Agent（LLM + SKILL.md）→ 输出 JSON" width="960">
+  <img src="./docs/assets/workflow.svg" alt="分层架构：上层是判断层（用户输入、作者把关），下层是生成层（机器）：Pipeline 编排器拥有全部流程控制权，内部是预处理→大纲→章纲→正文步骤链，步骤间的关卡把 AI 产出（pending）交给作者把关（approved）；容器底部是两个可替换接缝（存储 InMemoryStore│SQLiteStore、步骤 FakeStep│RealStep）；产物落入版本化 Store" width="760">
 </p>
-<p align="center"><sub>图 2 · human-in-the-loop：判断层（人）与生成层（机器）分治，关卡是两层之间唯一的通道；右侧为单个步骤的内部结构</sub></p>
+<p align="center"><sub>图 2 · human-in-the-loop 分层架构：判断层（人）在上，生成层（机器）在下；Pipeline 拥有全部流程控制权，关卡是两层唯一的通道</sub></p>
 
 - **编排器（Pipeline）**：按固定顺序驱动步骤链，用状态机（ready → awaiting-interview / awaiting-approval → complete，由产物状态推导）强制关卡——AI 产出一律 pending，作者通过或编辑保存后才解锁下一步。顺序、关卡、持久化逻辑全部收在这一个模块。
 - **步骤（Step）**：每个环节是一次受契约约束的 AI 生成：`runStep` 对输入输出做双向 zod 校验；提示词维护在 SKILL.md 文件里，调 prompt 不改代码。步骤不感知自己在流水线中的位置，因此可独立测试、独立替换。
