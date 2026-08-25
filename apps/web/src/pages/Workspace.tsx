@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { PreprocessContent, WorkDetail } from '@agent4novel/contracts'
 import { inputStages, preprocessContentSchema } from '@agent4novel/contracts'
-import { getWork, savePreprocess } from '../api.js'
+import { getWork, savePreprocess, approve } from '../api.js'
 
 const STATUSES = ['idea', 'beat', 'prose'] as const
 type Status = (typeof STATUSES)[number]
@@ -169,6 +169,19 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
     }
   }
 
+  // 不编辑直接确认：过 preprocess 关卡
+  const approvePreprocess = async () => {
+    setError(null)
+    setNotice(null)
+    try {
+      await approve(workId, 'preprocess')
+      setHumanStatus('approved')
+      setNotice('已通过 preprocess 关卡')
+    } catch (err) {
+      setError(String(err))
+    }
+  }
+
   return (
     <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 760 }}>
       <button onClick={onBack} style={{ marginBottom: 16 }}>
@@ -239,6 +252,14 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
           <button onClick={save} style={{ padding: '10px 24px', fontSize: 15 }}>
             保存
           </button>
+          {humanStatus === 'pending' && (
+            <button
+              onClick={approvePreprocess}
+              style={{ marginLeft: 12, padding: '10px 24px', fontSize: 15 }}
+            >
+              确认通过
+            </button>
+          )}
           {version !== null && (
             <span style={{ marginLeft: 12, color: '#666' }}>
               当前版本：{version}
