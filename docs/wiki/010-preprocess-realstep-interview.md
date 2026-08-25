@@ -69,6 +69,7 @@ settingContentSchema = z.object({
 **落库与同步**（单源不漂移）：
 
 - 三个 schema 落 contracts：server 校验 + web `z.infer` 类型。
+- interview 类型同落 contracts/preprocess.ts：`interviewQuestionsSchema`（`{questions: string[]}`）、`interviewAnswerSchema`（`{question, answer}`）——web 问答表单复用。
 - **schema.md 同 commit 同步**：preprocess 行改新形态（`hook`→`hooks`、加 `inputStage`、多实例并存语义）、删 provisional 注记；outline/setting 行补完整版形状引用。
 - 受影响文件清单：packages/contracts（preprocess 转正 + outline/setting schema）、docs/schema.md、apps/server（pipeline `PipelineInput` 拓宽、routes 三新 API）、apps/web（Entry 对话式、Workspace 列表式）。
 
@@ -76,7 +77,7 @@ settingContentSchema = z.object({
 
 - 状态机新增 **`awaiting-interview`** 态；definition 节点加 `interview?: boolean`
 - **`PipelineInput` 类型拓宽**：`{ workId }` → `{ workId, seed, phase, answers? }`（seed 从 store 取；**这是"上下文组装"的第一版**）
-- preprocess 步骤两阶段（同一 step，`phase` 输入区分）：
+- preprocess 步骤两阶段（同一 step，`phase` 输入区分；`phase` 缺省 = `'normalize'`，pipeline 只在 interview 流程显式传，普通 advance 不传）：
   - `phase: 'questions'` → 输出 `{ content: { questions: string[] } }` → 不进产物，进 pendingInterview 状态
   - `phase: 'normalize'` → 输出 `{ content: PreprocessContent }` → `appendArtifact(kind='preprocess', pending)`
 - 新方法 `answerInterview(workId, answers)`：喂回答 → 跑 normalize → 落库 → 状态前进
@@ -95,6 +96,7 @@ settingContentSchema = z.object({
 - `POST /api/works/:id/advance` → pipeline.advance → 返回 PipelineState（含 pendingGate / pendingInterview）
 - `POST /api/works/:id/answer-interview` `{ answers: [{question, answer}] }` → 归一化 → 落库
 - `POST /api/works/:id/approve` `{ kind, chapter? }` → pipeline.approve
+- `GET /api/config` → `{ demo: boolean, interview: boolean }`（启动界面渲染前就要知道演示模式 / interview 开关）
 - 现有 GET / POST works / PUT preprocess 不变（PUT 的 validate-on-write 随 contracts schema 升级自动传导）
 
 ### 启动界面转对话式（web）
@@ -111,7 +113,7 @@ settingContentSchema = z.object({
 ### 定义真链第一阶段
 
 ```ts
-definition = [{ stepId: 'preprocess', outputKind: 'preprocess', gateAfter: { kind: 'preprocess' }, interview: <开关> }]
+definition = [{ stepId: 'preprocess', outputKind: 'preprocess', gateAfter: { kind: 'preprocess' }, interview: true }]   // v1 硬编码开
 ```
 
 ## 测试策略
@@ -123,11 +125,11 @@ definition = [{ stepId: 'preprocess', outputKind: 'preprocess', gateAfter: { kin
 ## 实施顺序（红绿切片）
 
 1. contracts 三 schema + jsonValueSchema 复用 + **schema.md 同步**（同 commit）+ 测试
-2. Pipeline：awaiting-interview 态 + answerInterview + 两阶段 + `PipelineInput` 拓宽 + interview 开关 + 测试（fake）
-3. server：RealStep + llm registry + fake fallback + advance/answer-interview/approve API + 测试
-4. web：启动界面转对话式（问题/作答）+ 创作界面列表式编辑 + approve 按钮
-5. 全量测试 + typecheck + `pnpm dev` 验证（无 key 走 fake 演示模式）
-6. commit → 3 轮校准 → /code-review
+2. web 创作界面列表式编辑（**提前**：contracts 改形即破 web 编译，且只依赖现有 PUT API；保持每个 commit 双绿）
+3. Pipeline：awaiting-interview 态 + answerInterview + 两阶段 + `PipelineInput` 拓宽 + interview 开关 + 测试（fake）
+4. server：RealStep + llm registry + fake fallback + advance/answer-interview/approve API + `GET /api/config` + 装配 + 测试
+5. web：启动界面转对话式（问题/作答 + 演示模式提示）+ 创作界面 approve 按钮 + pending 徽标
+6. 全量测试 + typecheck + `pnpm dev` 验证（无 key 走 fake 演示模式）→ commit → 3 轮校准 → /code-review
 
 ## 边界与错误
 
@@ -148,3 +150,4 @@ definition = [{ stepId: 'preprocess', outputKind: 'preprocess', gateAfter: { kin
 
 - 2026-08-24：对齐完成（多实例并存 / outline=chapters 无卷、scene 归 beat / setting 四维度 + extra / 先落库再问答 / key 零感知），计划存档，待开工。
 - 2026-08-25：/code-review（Standards + Spec 两轴并行 subagent）+ 自校准 5 点。修：① schema.md 同步列入「契约变更」+ slice 1（AC1 原要求 contracts + schema.md 双落库）；② `granularity`→`inputStage`（粒度语义被 schema.md「粗/细」占用、`phase` 被两阶段占用）；③ `PipelineInput` 拓宽点名；④「流程」节并入「技术方案」（回归 8 段模板）；⑤ pendingInterview 显式标 ADR-0001 临时偏离；⑥ README 索引 003b→010。拍板：大纲无卷同步 CONTEXT.md + spec #1 故事 7；idea tab 保持英文。驳回：Speculative Generality / Divergent Change（outline/setting 定形、双主题均为 ticket #10 授权范围）。复核通过项：PUT 已 validate-on-write（schema 升级自动传导）、测试不联网已明示。
+- 2026-08-25（执行计划评审通过，开工）：定切片顺序（创作界面列表式提前为 slice 2——contracts 改形即破 web 编译，且它只依赖现有 PUT；保持每 commit 双绿）；补 `GET /api/config`（Entry 渲染前需 demo/interview 标记）；`phase` 缺省 normalize（pipeline 尽量零感知）；interview 类型落 contracts/preprocess.ts（web 问答表单复用）；interview 开关 v1 硬编码 true。
