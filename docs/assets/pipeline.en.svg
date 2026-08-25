@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="340" viewBox="0 0 1080 340" font-family="Georgia, 'Times New Roman', serif">
+  <defs>
+    <marker id="arrowE" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#444"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="1080" height="340" fill="#ffffff"/>
+
+  <text x="75" y="124" text-anchor="middle" font-size="12" fill="#999999">①</text>
+  <text x="205" y="124" text-anchor="middle" font-size="12" fill="#999999">②</text>
+  <text x="365" y="124" text-anchor="middle" font-size="12" fill="#999999">③</text>
+  <text x="574" y="124" text-anchor="middle" font-size="12" fill="#999999">④</text>
+
+  <rect x="20" y="140" width="110" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
+  <text x="75" y="162" text-anchor="middle" font-size="13" fill="#111111">Unified Entry</text>
+  <text x="75" y="181" text-anchor="middle" font-size="10" fill="#777777">idea / doc upload</text>
+
+  <rect x="146" y="140" width="118" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
+  <text x="205" y="162" text-anchor="middle" font-size="13" fill="#111111">Preprocess</text>
+  <text x="205" y="181" text-anchor="middle" font-size="9.5" fill="#777777">classify · interview</text>
+
+  <rect x="280" y="140" width="170" height="56" rx="3" fill="#f3f3f3" stroke="#222222" stroke-width="1.2"/>
+  <text x="365" y="162" text-anchor="middle" font-size="13" fill="#111111">Points JSON</text>
+  <text x="365" y="181" text-anchor="middle" font-size="8.5" fill="#777777">hooks·synopsis·setting·outline</text>
+
+  <polygon points="488,146 510,168 488,190 466,168" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
+  <text x="488" y="173" text-anchor="middle" font-size="13" fill="#8a2d2d">审</text>
+  <text x="488" y="216" text-anchor="middle" font-size="9" fill="#8a2d2d">preprocess gate</text>
+
+  <rect x="526" y="140" width="96" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
+  <text x="574" y="162" text-anchor="middle" font-size="13" fill="#111111">Outline</text>
+  <text x="574" y="181" text-anchor="middle" font-size="9.5" fill="#777777">chapter skeleton</text>
+
+  <rect x="648" y="80" width="338" height="170" rx="10" fill="none" stroke="#999999" stroke-width="1" stroke-dasharray="5 4"/>
+  <text x="664" y="103" font-size="11" font-style="italic" fill="#888888">⑤ per chapter × N</text>
+
+  <rect x="664" y="140" width="88" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
+  <text x="708" y="162" text-anchor="middle" font-size="13" fill="#111111">Beat</text>
+  <text x="708" y="181" text-anchor="middle" font-size="8.5" fill="#777777">goal·conflict·hook</text>
+
+  <polygon points="786,146 804,168 786,190 768,168" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
+  <text x="786" y="173" text-anchor="middle" font-size="13" fill="#8a2d2d">审</text>
+  <text x="786" y="216" text-anchor="middle" font-size="9" fill="#8a2d2d">beat gate</text>
+
+  <rect x="820" y="140" width="96" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
+  <text x="868" y="162" text-anchor="middle" font-size="13" fill="#111111">Prose</text>
+  <text x="868" y="181" text-anchor="middle" font-size="10" fill="#777777">2–4k chars</text>
+
+  <polygon points="950,146 968,168 950,190 932,168" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
+  <text x="950" y="173" text-anchor="middle" font-size="13" fill="#8a2d2d">审</text>
+  <text x="950" y="216" text-anchor="middle" font-size="9" fill="#8a2d2d">prose gate</text>
+
+  <rect x="1004" y="140" width="64" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
+  <text x="1036" y="172" text-anchor="middle" font-size="11" fill="#111111">Finished</text>
+
+  <line x1="130" y1="168" x2="142" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
+  <line x1="264" y1="168" x2="276" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
+  <line x1="450" y1="168" x2="462" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
+  <line x1="510" y1="168" x2="522" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
+  <line x1="622" y1="168" x2="644" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
+  <line x1="752" y1="168" x2="764" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
+  <line x1="804" y1="168" x2="816" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
+  <line x1="916" y1="168" x2="928" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
+  <line x1="968" y1="168" x2="1000" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
+
+  <path d="M 950 190 V 278 H 708 V 202" fill="none" stroke="#888888" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrowE)"/>
+  <text x="829" y="272" text-anchor="middle" font-size="11" fill="#888888">next chapter</text>
+
+  <rect x="20" y="300" width="18" height="13" fill="#ffffff" stroke="#222222" stroke-width="1.1"/>
+  <text x="44" y="311" font-size="11" fill="#555555">agent step</text>
+  <rect x="122" y="300" width="18" height="13" fill="#f3f3f3" stroke="#222222" stroke-width="1.1"/>
+  <text x="146" y="311" font-size="11" fill="#555555">artifact (versioned)</text>
+  <polygon points="286,299 295,306.5 286,314 277,306.5" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.2"/>
+  <text x="303" y="311" font-size="11" fill="#555555">human gate（审）</text>
+  <line x1="420" y1="306.5" x2="450" y2="306.5" stroke="#888888" stroke-width="1" stroke-dasharray="4 4"/>
+  <text x="456" y="311" font-size="11" fill="#555555">per-chapter loop</text>
+</svg>
