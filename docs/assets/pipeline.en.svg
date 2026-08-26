@@ -17,15 +17,15 @@
 
   <rect x="146" y="140" width="118" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
   <text x="205" y="162" text-anchor="middle" font-size="13" fill="#111111">Preprocess</text>
-  <text x="205" y="181" text-anchor="middle" font-size="9.5" fill="#777777">classify · interview</text>
+  <text x="205" y="181" text-anchor="middle" font-size="9.5" fill="#777777">caption → creative ×N</text>
 
   <rect x="280" y="140" width="170" height="56" rx="3" fill="#f3f3f3" stroke="#222222" stroke-width="1.2"/>
-  <text x="365" y="162" text-anchor="middle" font-size="13" fill="#111111">Points JSON</text>
-  <text x="365" y="181" text-anchor="middle" font-size="8.5" fill="#777777">hooks·synopsis·setting·outline</text>
+  <text x="365" y="162" text-anchor="middle" font-size="13" fill="#111111">Creative packs</text>
+  <text x="365" y="181" text-anchor="middle" font-size="8.5" fill="#777777">direction packs · caption auto-ok</text>
 
   <polygon points="488,146 510,168 488,190 466,168" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
   <text x="488" y="173" text-anchor="middle" font-size="13" fill="#8a2d2d">H</text>
-  <text x="488" y="216" text-anchor="middle" font-size="9" fill="#8a2d2d">preprocess gate</text>
+  <text x="488" y="216" text-anchor="middle" font-size="9" fill="#8a2d2d">creative pick gate</text>
 
   <rect x="526" y="140" width="96" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
   <text x="574" y="162" text-anchor="middle" font-size="13" fill="#111111">Outline</text>

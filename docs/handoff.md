@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。每个里程碑收尾时刷新本文件（最后更新：2026-08-27，#3c 技术方案 V1 评审定稿，待执行计划）。
+> 用途：context compaction / 新会话接力。每个里程碑收尾时刷新本文件（最后更新：2026-08-27，#3c 已落地，下一票 #4）。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票 HOW 看 docs/wiki/NNNN-*.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。
 
 ## Primary Request and Intent
@@ -16,46 +16,49 @@
 
 - **#2** 脚手架 + 存储 + pipeline 骨架 + 书架（wiki 002 ✅）
 - **#3a** 统一入口（启动界面：输入+上传 txt/md/docx/pdf）+ 创作界面 idea 状态（wiki 003）
-- **#3b / issue #10** 预处理 RealStep + interview + outline/setting 形态对齐（wiki 010 ✅，AC 全勾，端到端演示模式验证通过）
+- **#3b / issue #10** 预处理 RealStep + outline/setting 形态对齐（wiki 010 ✅；其 interview 机制已被 #3c 移除）
+- **#3c / issue #11** 预处理重构（wiki 011 ✅）：caption（提炼稿，落库即 approved）→ creative（单次 generateObject 直出 N 个创意稿，gateAfter = 创意海报比较视图）；保存/选定两命令；interview 机制整体移除；全应用多巴胺设计系统（亮暗双主题）
 
 ## 关键架构与契约（不能丢）
 
 - **workflow 骨架 + 步骤内 agent**；Step 零感知 kind，输出 `{content}` 装整个 JSON；kind = 节点名；pipeline 管解析/组装/持久化，是深模块不是 swap seam。
 - **两个真 seam**：store（InMemoryStore / #9 做 SQLiteStore）、step（FakeStep / RealStep）。
-- **5 节点 kind**：preprocess/outline/setting 每作品一份；beat/prose 每作品×每章。Artifact.content: JsonValue；humanStatus: pending（待把关）| approved；appendArtifact 版本 +1；人工保存即通过，agent 产出 pending。
-- **preprocess 最终形态**：`{inputStage: '脑洞'|'设定'|'主线'|'模板', hooks: string[], synopsis: string[], setting: {title,content}[], outline: {title,content}[]}`——多实例并存。outline 定案 `{chapters:[{number,title,summary}]}`（**无卷**）；setting 定案 `{worldview, powerSystem, factions[], characters[](含 profile), extra?}`。
-- **interview 状态机**：definition 节点 `interview?: boolean`；advance 遇 interview → questions 阶段 → `awaiting-interview`（pendingInterview 存内存，**重启丢失已接受，#9 持久化**）→ answerInterview(answers) → normalize → 落库 pending。`PipelineInput = {workId, seed, phase?, answers?}`，phase 缺省 normalize（step inputSchema default），pipeline 只在 interview 流程显式传。
-- **RealStep**：`server/src/steps/llm.ts` 唯一感知 provider（createProviderRegistry + @ai-sdk/deepseek，registry 读 env DEEPSEEK_API_KEY，代码零感知）；无 key → index.ts 装配 FakeStep（演示模式）；prompt 协议以 `steps/skills/preprocess/SKILL.md` 文件为准（ADR-0002），buildPrompt 只做数据插值；输出 JSON.parse + zod 按 phase 校验。
-- **错误**：`server/src/errors.ts` KnownError（code: work-not-found→404 / 其余→400 / 未知→500 兜底），store/pipeline 抛出，routes 按 code 映射。
-- **API**：GET/POST /api/works、GET /api/works/:id、PUT .../artifacts/preprocess（validate-on-write）、POST advance / answer-interview / approve、GET /api/config（{demo, interview}）。
-- **web**：三界面（书架 Bookcase / 启动界面 Entry / 创作界面 Workspace）useState 导航无 router；Entry 提交后 interview 开则原地转问答（可跳过）；Workspace idea 视图列表式编辑（卖点/梗概 string 列表 + 设定/大纲 Hint{title,content} 列表，增删改整份保存）+ pending 时「通过」按钮；共享 `web/src/ui.ts`（样式 + replaceAt/removeAt）。
-- 栈：pnpm workspaces + TS E2E、Vite+React(5173 /api proxy)、Hono(8787)、zod、Vitest、tsx、AI SDK v7 + @ai-sdk/deepseek。测试 81 绿（contracts 21 / server 55 / web 5）。
+- **6 节点 kind**：caption/creative/outline/setting 每作品一份；beat/prose 每作品×每章。Artifact.content: JsonValue；humanStatus: pending | approved；appendArtifact 版本 +1。
+- **creative 保存语义**（#3c 起，取代「人工保存即通过」）：`PUT /artifacts/creative` = saveCreativeDraft，存全部方向、永远 pending、带 `expectedHeadVersion` 乐观锁；`POST /artifacts/creative/select` = selectCreativeDirection，落**单方向**新版本 + approved。`directionId` 由 server 注入（`${workId}-dir-N`），web 永不生成、编辑不可改。
+- **pipeline（#3c）**：definition 加 `consumes`（只指前序 outputKind，启动校验唯一/禁环）；`PipelineInput = {workId, seed, upstream}`，upstream 读**最新版且必须 approved**；`advance()` 链式推进到下一个关卡（上限 = definition 长度），per-work 互斥锁（finally 释放，冲突 → 409 `advance-in-progress`），返回可穷举 outcome `advanced | awaiting-approval | complete | failed(stepId, code, retryable, attemptId)`；interview 机制零残留。
+- **读模型**：`GET /works/:id` 同快照附带 `workflowState`（ready-to-generate | generating | awaiting-selection | selected | failed）+ `allowedActions`，web 只渲染不重建状态机。
+- **LLM 调用**：`steps/llm-call.ts` 统一 generateObject + zod + maxTokens + AbortSignal 超时 + 类型化错误（llm-invalid-output→502 / llm-unavailable→503 / llm-timeout→504）；素材 >100K 字符截断收在这一处；`steps/llm.ts` 唯一感知 provider。
+- **错误**：HTTP 统一 `{code, retryable, attemptId, message}`；409 = advance-in-progress / version-conflict / direction-not-selected，422 内容非法。
+- **web 设计系统**（#3c）：`apps/web/src/styles.css` 唯一全局面，亮暗双主题 CSS 变量（prefers-color-scheme + data-theme 预留）；多巴胺在点缀层（主 CTA 珊瑚 accent，方向 tab 珊瑚/紫/青轮转，chip 用强调色），底色纸白/墨黑极简；**内联样式只许 var(--*)，禁硬编码色值**。创意海报风险面抽纯函数 `web/src/creative-compare.ts`（tab↔directionId、保存全部、选定、409 保 dirty），vitest 覆盖，无浏览器 E2E。
+- 栈：pnpm workspaces + TS E2E、Vite+React(5173 /api proxy)、Hono(8787)、zod、Vitest、tsx、AI SDK v7 + @ai-sdk/deepseek。测试 96 绿（contracts 29 / server 53 / web 14）。
 
 ## 词汇红线（CONTEXT.md 单源）
 
-- 关卡 Avoid「审核、**确认**」→ UI 用「通过」「待把关」（#3b review 收编过一轮，含 CONTEXT.md 自身「把关方向」）。
-- 大纲 = 分章**无卷**（#3b 拍板，CONTEXT.md 与 spec #1 故事 7 已同步去卷）；场景/冲突/钩子归 beat（章纲）层。
-- 字段名 `inputStage`（不是 granularity——「粗/细」粒度语义被 schema.md 占用；phase 被两阶段占用）。
-- idea tab 文案保持英文「idea」（拍板过）。
+- 关卡 Avoid「审核、**确认**」→ UI 用「通过」「待把关」。
+- 大纲 = 分章**无卷**；场景/冲突/钩子归 beat（章纲）层。
+- 预处理 = caption（提炼稿）→ creative（创意稿）两步；提炼稿 Avoid「摘要、解析结果」，创意稿 Avoid「brief、方案」。
+- 创意稿的「一句话钩子」字段叫 `hook`；爽点清单叫 `payoffs`；「卖点」作领域词时对应这两者，不再是独立数组。
 
 ## 踩坑记录
 
 - **门禁命令不许用 grep 截断 exit code**（slice 4 曾因此带错提交，amend 补修）。
-- zod 联合类型推断会带 `?: undefined` 成员，`undefined` 不是 JsonValue → run 返回标注显式类型（PreprocessStepOutput）。
-- `registry.languageModel()` 只收 `deepseek:${string}` 模板字面量 → 开放字符串收窄在 preprocess-step 一处（as cast）。
+- zod 联合类型推断会带 `?: undefined` 成员，`undefined` 不是 JsonValue → run 返回标注显式类型。
+- `registry.languageModel()` 只收 `deepseek:${string}` 模板字面量 → 开放字符串收窄在 llm-call 一处（as cast）。
 - vi.mock 提升：mock 引用必须经 `vi.hoisted` 定义。
-- edit 工具报 "file changed since it was read" → 重读再改。
+- contracts `export *` 双文件同名导出会被静默排除（inputStages 迁入 caption.ts 时踩过）→ 迁移期用显式 re-export。
+- AI SDK 错误按 `err.name` 分类：NoObjectGeneratedError → 模型输出非法；TimeoutError/AbortError → 超时。
 
 ## 遗留 / 已知限制
 
 - 真 key 下 `deepseek-chat` 模型名未实测（research 标 unverified；有 key 后先验证）。
-- advance/answer-interview 失败后，创作界面缺「重新预处理」入口（建议挂 #6）。
+- caption/creative 的 SKILL.md 提示词只过了演示模式，真模型效果未验（调 prompt 不改代码，随时迭代）。
+- 版本回看 UI（后悔药）没有入口，留 #6；重新生成（带补充想法）/渐进展示/分段提炼留 #12。
 - 「演示模式」是 UI 词非领域词，未进 CONTEXT.md。
 
 ## 下一步
 
-**#3c / issue #11 预处理重构**（wiki 011，技术方案 V1 已评审定稿：grill 两轮收敛 + 26 条评审裁决——采用 24 含 7 轻量化、驳回 2 迁移项，留痕在 wiki）：preprocess 拆为 caption（提炼稿，自动通过）→ creative（单次 generateObject 直出 N 个创意稿，比较视图「创意海报」保存/选定两命令 + directionId + expectedHeadVersion）两步；interview 机制整体移除；pipeline 加 consumes + 链式 advance + per-work 互斥锁；读模型 workflowState/allowedActions 并入 GET /works/:id。下一步直接进执行计划（plan mode）。
-后续队列：#4 大纲 → **#13 设定完整版**（#3c grill 发现的 gap，block #5）→ #9 SQLite（提前到 #5 前）→ #5 章纲/正文关卡 → #6 → #7 → #8。#12 = 优化项（失败重试/重新生成/渐进展示/分段提炼/版本回看），低优。
+**#4 梗概 → 大纲（生成 + review）**（wiki 待建；issue #4，blocked by #11 已解除）：consumes:['creative']（组装校验恰好 1 方向），产 outline 完整版 `{chapters:[{number,title,summary}]}`（无卷），gateAfter 关卡。
+后续队列：#4 → **#13 设定完整版**（block #5）→ #9 SQLite（提前到 #5 前）→ #5 章纲/正文关卡 → #6 → #7 → #8。#12 = 优化项（失败重试已随 #3c 进主干，剩重新生成/渐进展示/分段提炼/版本回看），低优。
 
 ## 环境
 

@@ -48,11 +48,11 @@ pnpm dev
 ## How it works
 
 <p align="center">
-  <img src="./docs/assets/pipeline.en.svg" alt="Pipeline: unified entry → preprocess (reverse interview) → points JSON → (preprocess gate) → outline → (beat → beat gate → prose → prose gate) × N → finished book" width="960">
+  <img src="./docs/assets/pipeline.en.svg" alt="Pipeline: unified entry → caption (auto-approved) → creative direction packs ×N → (compare-and-pick gate) → outline → (beat → beat gate → prose → prose gate) × N → finished book" width="960">
 </p>
 <p align="center"><sub>Fig. 1 · Pipeline and gates: boxes are agent steps / artifacts, red diamonds are human gates, dashes mark the per-chapter loop</sub></p>
 
-Preprocessing confirms the story direction with you first; after that, every chapter gets a beat sheet before prose, and you review both. Nothing advances past a gate you haven't passed.
+Preprocessing produces several creative direction packs and you pick one in the compare view; after that, every chapter gets a beat sheet before prose, and you review both. Nothing advances past a gate you haven't passed.
 
 ## Architecture
 
@@ -63,9 +63,9 @@ The whole architecture is built around one idea: **human-in-the-loop** — machi
 </p>
 <p align="center"><sub>Fig. 2 · Human-in-the-loop, layered: judgment (human) on top, generation (machine) below; the Pipeline owns all flow control, and gates are the only channel between the layers</sub></p>
 
-- **The orchestrator (Pipeline)** drives the step chain in a fixed order and enforces gates with a state machine (ready → awaiting-interview / awaiting-approval → complete, derived from artifact status). AI output always lands as pending; the next step unlocks only after you approve or edit-and-save. Ordering, gating and persistence logic live in this one module.
+- **The orchestrator (Pipeline)** drives the step chain in a fixed order and enforces gates with a state machine (ready → awaiting-approval → complete, derived from artifact status). AI output always lands as pending; the next step unlocks only after you explicitly approve (e.g. picking a creative direction). Ordering, gating and persistence logic live in this one module.
 - **Steps** are contract-bound AI generations: `runStep` zod-validates both input and output, and prompts live in SKILL.md files so prompt iteration never touches code. A step doesn't know where it sits in the pipeline, which makes it independently testable and replaceable.
-- **Artifacts** are filed by "work + kind + chapter" as an append-only version chain (`{kind, chapter?, version, content, humanStatus}`); any historical version is readable. A manual edit-and-save counts as approval; agent output awaits review.
+- **Artifacts** are filed by "work + kind + chapter" as an append-only version chain (`{kind, chapter?, version, content, humanStatus}`); any historical version is readable. Saving a creative draft stays pending and only an explicit pick approves; agent output always awaits review.
 - **Swappable points**: storage (in-memory out of the box ↔ SQLite persistence in #9) and model (AI SDK `createProviderRegistry` — switching providers is a string prefix, code never touches the key) are the two injection points. Tests run the whole chain on FakeStep and never touch the network.
 
 ## Stack
@@ -112,8 +112,8 @@ Every ticket runs the same loop: grill-to-align → wiki tech plan → TDD red/g
 | [#2](https://github.com/12bitsD/agent4novel/issues/2) | Scaffold + storage + pipeline skeleton + bookcase | ✅ |
 | [#3](https://github.com/12bitsD/agent4novel/issues/3) | Unified entry + workspace idea state (manual chain) | ✅ |
 | [#10](https://github.com/12bitsD/agent4novel/issues/10) | Preprocess RealStep + interview + outline/setting shapes | ✅ |
-| [#11](https://github.com/12bitsD/agent4novel/issues/11) | Preprocess rework: caption + creative direction packs + compare view | ◀ next |
-| [#4](https://github.com/12bitsD/agent4novel/issues/4) | Outline generation | |
+| [#11](https://github.com/12bitsD/agent4novel/issues/11) | Preprocess rework: caption + creative direction packs + compare view | ✅ |
+| [#4](https://github.com/12bitsD/agent4novel/issues/4) | Outline generation | ◀ next |
 | [#13](https://github.com/12bitsD/agent4novel/issues/13) | Setting generation (full version) | |
 | [#9](https://github.com/12bitsD/agent4novel/issues/9) | SQLite persistence (before #5: prose must survive restarts) | |
 | [#5](https://github.com/12bitsD/agent4novel/issues/5) | Beat/prose gates | |

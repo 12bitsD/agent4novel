@@ -22,17 +22,17 @@ pnpm monorepo: `packages/contracts` (zod schemas + types, the shared contract), 
 
 The system is a **human-in-the-loop pipeline**: machines generate, the author gates everything. Three core pieces:
 
-- **Pipeline** (`apps/server/src/pipeline/pipeline.ts`) — the orchestrator and the only owner of flow control. Steps run in a fixed `PipelineDefinitionEntry[]` order; each entry declares `outputKind` and optional `gateAfter` (output lands as `pending`, next step blocked until approved) / `gateBefore` / `interview`. Stage (`ready | blocked | awaiting-approval | awaiting-interview | complete`) is **derived from artifact status**, not stored. Interview Q&A state is in-memory/transient by design (persists with SQLite in #9).
-- **Steps** (`apps/server/src/steps/`) — contract-bound AI generations executed via `runStep`, which zod-validates both input and output. Steps don't know their position in the pipeline. Prompts live in `steps/skills/<step>/SKILL.md` files (ADR-0002) — prompt iteration never touches code. The preprocess step runs in two phases: `questions` (reverse interview, transient) then `normalize` (produces the artifact).
-- **Artifacts** (`store/`) — append-only version chains keyed by `{kind, chapter?}`; `appendArtifact` bumps `version`, old versions stay. Manual edit-and-save = new version + `approved`; agent output = `pending`.
+- **Pipeline** (`apps/server/src/pipeline/pipeline.ts`) — the orchestrator and the only owner of flow control. Steps run in a fixed `PipelineDefinitionEntry[]` order; each entry declares `outputKind` and optional `consumes` (explicit upstream deps — latest version must be `approved`) / `gateAfter` (output lands as `pending`, next step blocked until approved) / `gateBefore`. Stage (`ready | blocked | awaiting-approval | complete`) is **derived from artifact status**, not stored. `advance()` is chained (runs auto-approved steps until the next gate) under a per-work mutex, and returns an exhaustive outcome (`advanced | awaiting-approval | complete | failed`).
+- **Steps** (`apps/server/src/steps/`) — contract-bound AI generations executed via `runStep`, which zod-validates both input and output. Steps don't know their position in the pipeline. Prompts live in `steps/skills/<step>/SKILL.md` files (ADR-0002) — prompt iteration never touches code. Real steps call the model via `steps/llm-call.ts` (`generateObject` + timeout + typed LLM errors); oversized seeds are truncated there, in one place.
+- **Artifacts** (`store/`) — append-only version chains keyed by `{kind, chapter?}`; `appendArtifact` bumps `version`, old versions stay. For `creative`: saving a draft = new version + `pending`; explicitly selecting a direction = single-direction new version + `approved`.
 
 Two deliberate seams: **storage** (`WorkStore` interface — `InMemoryStore` now, `SQLiteStore` planned in issue #9) and **model** (AI SDK `createProviderRegistry` in `steps/llm.ts` — switching providers is a string prefix). Tests run the whole chain on FakeStep.
 
-Currently only the `preprocess` step is wired into the pipeline definition (see `apps/server/src/index.ts`); outline/setting/beat/prose contracts exist but their steps are not yet registered.
+Currently the pipeline definition wires `caption` (提炼稿, auto-approved) → `creative` (创意稿 direction packs, `gateAfter` = compare view) (see `apps/server/src/index.ts`); outline/setting/beat/prose contracts exist but their steps are not yet registered.
 
 ## Data model
 
-`docs/schema.md` is the single source of truth. Artifact kinds map 1:1 to pipeline nodes: `preprocess` (JSON holding 卖点 hooks[] + 梗概 synopsis[] + setting/outline hints), `outline`, `setting` (per-work), `beat`, `prose` (per-chapter). Invariants: per-work kinds never have `chapter`; per-chapter kinds always do. 卖点/梗概 are **not** standalone artifacts — they're fields inside the `preprocess` artifact's JSON.
+`docs/schema.md` is the single source of truth. Artifact kinds map 1:1 to pipeline nodes: `caption` (提炼稿: inputStage + summary + elements + gaps), `creative` (创意稿: `directions[]` of hint-level packs with server-injected `directionId`), `outline`, `setting` (per-work), `beat`, `prose` (per-chapter). Invariants: per-work kinds never have `chapter`; per-chapter kinds always do. 卖点/梗概 are **not** standalone artifacts — they live inside a creative pack (`hook`/`payoffs`/`synopsis`).
 
 ## Documentation conventions (this repo is docs-for-agents)
 

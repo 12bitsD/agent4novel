@@ -1,6 +1,6 @@
 # 011 预处理重构:Caption + Creative 方向包 + 比较界面(#3c)
 
-> Ticket: [#11](https://github.com/12bitsD/agent4novel/issues/11) · Spec: [#1](https://github.com/12bitsD/agent4novel/issues/1) · 状态:技术方案 V1 已评审,待执行计划
+> Ticket: [#11](https://github.com/12bitsD/agent4novel/issues/11) · Spec: [#1](https://github.com/12bitsD/agent4novel/issues/1) · 状态:✅ 已落地(2026-08-27)
 
 ## 实现目的
 
@@ -154,3 +154,4 @@ definition:
 - 2026-08-27(grill 第一轮):方向包化方案对齐,issue #11 建立,#4 改挂 blocked by #11,#12 装优化项。
 - 2026-08-27(grill 第二轮):推翻 fan-out 改单次直出;interview 整体移除;consumes + 链式 advance;创意海报 v2;新立 #13 设定完整版(block #5);#9 提前至 #5 前。队列:#3c → #4 → #13 → #9 → #5。
 - 2026-08-27(技术方案 V0 → 评审 → V1):26 条评审裁决落地(见「评审留痕」),方案定稿,待执行计划。
+- 2026-08-27(**已落地**):4 切片执行完毕——切片 0 全应用多巴胺设计系统(styles.css 亮暗双主题 token,用户追加需求);切片 1 contracts 增量;切片 2 server 切换(consumes/链式 advance/互斥锁/两命令/读模型/类型化错误)+ web 最小迁移;切片 3 创意海报 + creative-compare 纯映射;切片 4 删 preprocess + 文档同步。96 测试三端绿,演示模式 E2E 冒烟通过(创建→advance 链式→保存→选定→刷新→stale 409)。真模型 SKILL.md 效果未验,待有 key 后迭代。commits: ff2f06d / d68ae12 / 收尾。

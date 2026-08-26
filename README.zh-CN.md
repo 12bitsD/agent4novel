@@ -48,11 +48,11 @@ pnpm dev
 ## 它是怎么工作的
 
 <p align="center">
-  <img src="./docs/assets/pipeline.svg" alt="流水线：统一入口 → 预处理（反向 interview）→ 要点 JSON →（预处理关卡）→ 大纲 →（章纲 → 章纲关卡 → 正文 → 正文关卡）× N → 完本" width="960">
+  <img src="./docs/assets/pipeline.svg" alt="流水线：统一入口 → 提炼（caption，自动通过）→ 创意稿方向包 ×N →（比较选定关卡）→ 大纲 →（章纲 → 章纲关卡 → 正文 → 正文关卡）× N → 完本" width="960">
 </p>
 <p align="center"><sub>图 1 · 流水线与关卡：方框为 agent 步骤 / 产物，菱形「审」为人工关卡，虚线为按章循环</sub></p>
 
-预处理先和你确认故事方向；之后每一章都先出章纲、你点头、再写正文、你再过目。产物没通过，流水线绝不继续。
+预处理先产出若干创意方向、你在比较视图里选定一个；之后每一章都先出章纲、你点头、再写正文、你再过目。产物没通过，流水线绝不继续。
 
 ## 架构
 
@@ -63,9 +63,9 @@ pnpm dev
 </p>
 <p align="center"><sub>图 2 · human-in-the-loop 分层架构：判断层（人）在上，生成层（机器）在下；Pipeline 拥有全部流程控制权，关卡是两层唯一的通道</sub></p>
 
-- **编排器（Pipeline）**：按固定顺序驱动步骤链，用状态机（ready → awaiting-interview / awaiting-approval → complete，由产物状态推导）强制关卡——AI 产出一律 pending，作者通过或编辑保存后才解锁下一步。顺序、关卡、持久化逻辑全部收在这一个模块。
+- **编排器（Pipeline）**：按固定顺序驱动步骤链，用状态机（ready → awaiting-approval → complete，由产物状态推导）强制关卡——AI 产出一律 pending，作者显式通过（如创意稿的选定）后才解锁下一步。顺序、关卡、持久化逻辑全部收在这一个模块。
 - **步骤（Step）**：每个环节是一次受契约约束的 AI 生成：`runStep` 对输入输出做双向 zod 校验；提示词维护在 SKILL.md 文件里，调 prompt 不用改代码。步骤不感知自己在流水线中的位置，因此可独立测试、独立替换。
-- **产物（Artifact）**：产出按「作品 + 类型 + 章节」归档为 append-only 版本链（`{kind, chapter?, version, content, humanStatus}`），任何历史版本可回读；人工编辑保存即通过，AI 产出待把关。
+- **产物（Artifact）**：产出按「作品 + 类型 + 章节」归档为 append-only 版本链（`{kind, chapter?, version, content, humanStatus}`），任何历史版本可回读；创意稿保存草稿保持待把关、显式选定才通过；AI 产出一律待把关。
 - **可替换点**：存储（内存版开箱即用 ↔ SQLite 持久化，#9）与模型（AI SDK `createProviderRegistry`，换厂商 = 换字符串前缀，代码不感知 key）是两个注入点；测试用 FakeStep 跑全链路，从不触网。
 
 ## 技术栈
@@ -112,8 +112,8 @@ pnpm build
 | [#2](https://github.com/12bitsD/agent4novel/issues/2) | 脚手架 + 存储 + pipeline 骨架 + 书架 | ✅ |
 | [#3](https://github.com/12bitsD/agent4novel/issues/3) | 统一入口 + 创作界面 idea 状态（人工链路） | ✅ |
 | [#10](https://github.com/12bitsD/agent4novel/issues/10) | 预处理 RealStep + interview + outline/setting 形态定案 | ✅ |
-| [#11](https://github.com/12bitsD/agent4novel/issues/11) | 预处理重构：提炼稿 + 创意稿方向包 + 比较视图 | ◀ 下一个 |
-| [#4](https://github.com/12bitsD/agent4novel/issues/4) | 大纲生成 | |
+| [#11](https://github.com/12bitsD/agent4novel/issues/11) | 预处理重构：提炼稿 + 创意稿方向包 + 比较视图 | ✅ |
+| [#4](https://github.com/12bitsD/agent4novel/issues/4) | 大纲生成 | ◀ 下一个 |
 | [#13](https://github.com/12bitsD/agent4novel/issues/13) | 设定完整版生成 | |
 | [#9](https://github.com/12bitsD/agent4novel/issues/9) | SQLite 持久化（提前到 #5 前：正文产出必须扛得住重启） | |
 | [#5](https://github.com/12bitsD/agent4novel/issues/5) | 章纲/正文关卡 | |
