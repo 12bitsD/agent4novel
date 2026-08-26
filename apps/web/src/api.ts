@@ -20,7 +20,9 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     // 统一错误形 { code, retryable, attemptId, message };读不到就退化为状态码
     const body = (await res.json().catch(() => null)) as { code?: string; message?: string } | null
-    throw new Error(body?.message ?? `${init?.method ?? 'GET'} ${url} failed: ${res.status}`)
+    const err = new Error(body?.message ?? `${init?.method ?? 'GET'} ${url} failed: ${res.status}`)
+    if (body?.code) (err as Error & { code: string }).code = body.code
+    throw err
   }
   return res.json()
 }
