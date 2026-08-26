@@ -1,30 +1,40 @@
 import { describe, it, expect } from 'vitest'
-import { preprocessContentSchema, runStep } from '@agent4novel/contracts'
-import { createFakePreprocessStep } from '../src/steps/fake-step.js'
+import { captionContentSchema, creativeContentSchema, runStep } from '@agent4novel/contracts'
+import { createFakeCaptionStep, createFakeCreativeStep } from '../src/steps/fake-step.js'
 
-describe('fake preprocess step（演示模式）', () => {
-  it('questions phase returns fixed questions', async () => {
+const caption = {
+  inputStage: '脑洞' as const,
+  summary: '提炼。',
+  elements: [],
+  gaps: [],
+}
+
+describe('fake caption step(演示模式)', () => {
+  it('returns schema-valid caption derived from the seed', async () => {
     const out = await runStep(
-      createFakePreprocessStep(),
-      { workId: 'w', seed: 's', phase: 'questions' },
+      createFakeCaptionStep(),
+      { workId: 'w', seed: '一个悬疑小镇故事', upstream: {} },
       {},
     )
-    const content = out.content as { questions: string[] }
-    expect(content.questions.length).toBeGreaterThan(0)
+    const parsed = captionContentSchema.parse(out.content)
+    expect(parsed.summary).toContain('悬疑小镇')
+  })
+})
+
+describe('fake creative step(演示模式)', () => {
+  const input = { workId: 'w-1', seed: '一个悬疑小镇故事', upstream: { caption } }
+
+  it('默认出 2 个方向,带 directionId,schema 有效', async () => {
+    const out = await runStep(createFakeCreativeStep(), input, {})
+    const parsed = creativeContentSchema.parse(out.content)
+    expect(parsed.directions).toHaveLength(2)
+    expect(parsed.directions.map((d) => d.directionId)).toEqual(['w-1-dir-1', 'w-1-dir-2'])
   })
 
-  it('normalize phase returns schema-valid content derived from the seed', async () => {
-    const out = await runStep(
-      createFakePreprocessStep(),
-      { workId: 'w', seed: '一个悬疑小镇故事', phase: 'normalize' },
-      {},
-    )
-    const parsed = preprocessContentSchema.parse(out.content)
-    expect(parsed.hooks[0]).toContain('悬疑小镇')
-  })
-
-  it('normalize phase without answers still works（interview=false 直出）', async () => {
-    const out = await runStep(createFakePreprocessStep(), { workId: 'w', seed: 'x' }, {})
-    expect(() => preprocessContentSchema.parse(out.content)).not.toThrow()
+  it('按 config.directionCount 出 N 包(1/3)', async () => {
+    const one = await runStep(createFakeCreativeStep(), input, { directionCount: 1 })
+    expect(creativeContentSchema.parse(one.content).directions).toHaveLength(1)
+    const three = await runStep(createFakeCreativeStep(), input, { directionCount: 3 })
+    expect(creativeContentSchema.parse(three.content).directions).toHaveLength(3)
   })
 })

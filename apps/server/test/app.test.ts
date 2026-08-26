@@ -1,44 +1,63 @@
 import { describe, it, expect } from 'vitest'
-import { z } from 'zod'
-import { jsonValueSchema } from '@agent4novel/contracts'
 import { createApp } from '../src/app.js'
 import { seed } from '../src/seed.js'
 import { InMemoryStore } from '../src/store/in-memory-store.js'
 import { Pipeline } from '../src/pipeline/pipeline.js'
 import type { ArtifactStep, PipelineDefinitionEntry } from '../src/pipeline/pipeline.js'
-import { fakePreprocessStep, preprocessStepInputSchema } from './fakes.js'
+import type { AgentConfig } from '@agent4novel/contracts'
+import { fakeArtifactStep } from './fakes.js'
 
 const jsonHeaders = { 'Content-Type': 'application/json' }
 
-const validPreprocess = {
+const validCaption = {
   inputStage: '脑洞',
-  hooks: ['h'],
-  synopsis: ['s'],
-  setting: [{ title: 'st', content: 'c' }],
-  outline: [{ title: 'o', content: 'c' }],
+  summary: '素材提炼(测试)',
+  elements: [{ kind: '冲突', content: '核心矛盾' }],
+  gaps: [],
 }
 
-// 与生产装配同形：store + pipeline（fake step）+ meta（demo/interview 开关）
-function makeApp(opts?: { demo?: boolean; interview?: boolean; step?: ArtifactStep }) {
+function pack(directionId: string, title = '方向A') {
+  return {
+    directionId,
+    title,
+    hook: '一句话钩子',
+    tags: ['都市'],
+    synopsis: '故事概要。',
+    characters: [],
+    setting: [],
+    payoffs: [],
+    outline: [],
+  }
+}
+
+const validCreative = { directions: [pack('work-1-dir-1'), pack('work-1-dir-2', '方向B')] }
+
+// 与生产装配同形:store + pipeline(caption 无关卡 → creative gateAfter)+ meta
+function makeApp(opts?: { demo?: boolean; config?: AgentConfig }) {
   const store = new InMemoryStore()
+  const caption = fakeArtifactStep('caption', validCaption)
+  const creative = fakeArtifactStep('creative', validCreative)
   const steps = new Map<string, ArtifactStep>([
-    ['preprocess', opts?.step ?? fakePreprocessStep().step],
+    ['caption', caption.step],
+    ['creative', creative.step],
   ])
   const definition: PipelineDefinitionEntry[] = [
-    {
-      stepId: 'preprocess',
-      outputKind: 'preprocess',
-      gateAfter: { kind: 'preprocess' },
-      interview: opts?.interview ?? true,
-    },
+    { stepId: 'caption', outputKind: 'caption' },
+    { stepId: 'creative', outputKind: 'creative', consumes: ['caption'], gateAfter: { kind: 'creative' } },
   ]
-  const pipeline = new Pipeline({ store, steps, definition, resolveConfig: () => ({}) })
-  const app = createApp({
+  const pipeline = new Pipeline({
     store,
-    pipeline,
-    meta: { demo: opts?.demo ?? true, interview: opts?.interview ?? true },
+    steps,
+    definition,
+    resolveConfig: () => opts?.config ?? {},
   })
-  return { store, app }
+  const app = createApp({ store, pipeline, meta: { demo: opts?.demo ?? true } })
+  return { store, app, seen: { caption: caption.seen, creative: creative.seen } }
+}
+
+async function advance(app: ReturnType<typeof createApp>, workId: string) {
+  const res = await app.request(`/api/works/${workId}/advance`, { method: 'POST' })
+  return { res, outcome: (await res.json()) as { kind: string; state: { stage: string } } }
 }
 
 describe('works routes', () => {
@@ -48,43 +67,51 @@ describe('works routes', () => {
     const res = await app.request('/api/works')
     expect(res.status).toBe(200)
     const body = (await res.json()) as Array<{ title: string; chapterCount: number }>
-    expect(Array.isArray(body)).toBe(true)
     expect(body.length).toBe(3)
-    expect(body[0]).toHaveProperty('title')
-    expect(body[0]).toHaveProperty('chapterCount')
   })
 
-  it('returns a work detail by id', async () => {
+  it('GET /api/config returns { demo } only(interview 开关已移除)', async () => {
+    const { app } = makeApp({ demo: true })
+    const res = await app.request('/api/config')
+    expect(await res.json()).toEqual({ demo: true })
+  })
+
+  it('GET /works/:id returns the read model(workflowState + allowedActions,同一快照)', async () => {
     const { store, app } = makeApp()
-    const w = store.createWork({ seed: 'x', title: 't' })
+    const w = store.createWork({ seed: 'x' })
     const res = await app.request(`/api/works/${w.id}`)
     expect(res.status).toBe(200)
-    const body = (await res.json()) as { id: string; artifacts: unknown[] }
-    expect(body.id).toBe(w.id)
+    const body = (await res.json()) as {
+      workflowState: string
+      allowedActions: string[]
+      artifacts: unknown[]
+    }
+    expect(body.workflowState).toBe('ready-to-generate')
+    expect(body.allowedActions).toEqual(['generate'])
     expect(body.artifacts).toEqual([])
   })
 
   it('returns 404 for an unknown work', async () => {
-    const { app } = makeApp()
+    const { store, app } = makeApp()
     const res = await app.request('/api/works/nope')
     expect(res.status).toBe(404)
+    expect(((await res.json()) as { code: string }).code).toBe('work-not-found')
   })
 
-  it('creates a work via POST', async () => {
-    const { app } = makeApp()
+  it('creates a work via POST(只创建,不触发 advance)', async () => {
+    const { store, app } = makeApp()
     const res = await app.request('/api/works', {
       method: 'POST',
       headers: jsonHeaders,
       body: JSON.stringify({ seed: '一个脑洞' }),
     })
     expect(res.status).toBe(201)
-    const body = (await res.json()) as { id: string; seed: string; title: string }
+    const body = (await res.json()) as { id: string; seed: string }
     expect(body.seed).toBe('一个脑洞')
-    expect(body.title).toBe('一个脑洞')
   })
 
   it('rejects POST with empty seed', async () => {
-    const { app } = makeApp()
+    const { store, app } = makeApp()
     const res = await app.request('/api/works', {
       method: 'POST',
       headers: jsonHeaders,
@@ -92,188 +119,189 @@ describe('works routes', () => {
     })
     expect(res.status).toBe(400)
   })
-
-  it('saves preprocess content, versions it, and marks approved', async () => {
-    const { store, app } = makeApp()
-    const w = store.createWork({ seed: 'x' })
-    const res1 = await app.request(`/api/works/${w.id}/artifacts/preprocess`, {
-      method: 'PUT',
-      headers: jsonHeaders,
-      body: JSON.stringify({ content: validPreprocess }),
-    })
-    expect(res1.status).toBe(200)
-    const a1 = (await res1.json()) as { version: number; humanStatus: string }
-    expect(a1.version).toBe(1)
-    expect(a1.humanStatus).toBe('approved')
-
-    const res2 = await app.request(`/api/works/${w.id}/artifacts/preprocess`, {
-      method: 'PUT',
-      headers: jsonHeaders,
-      body: JSON.stringify({ content: { ...validPreprocess, hooks: ['h2'] } }),
-    })
-    const a2 = (await res2.json()) as { version: number }
-    expect(a2.version).toBe(2)
-  })
-
-  it('rejects invalid preprocess content', async () => {
-    const { store, app } = makeApp()
-    const w = store.createWork({ seed: 'x' })
-    const res = await app.request(`/api/works/${w.id}/artifacts/preprocess`, {
-      method: 'PUT',
-      headers: jsonHeaders,
-      body: JSON.stringify({ content: { hooks: 'not-an-array' } }),
-    })
-    expect(res.status).toBe(400)
-  })
-
-  it('PUT on unknown work returns 404', async () => {
-    const { app } = makeApp()
-    const res = await app.request('/api/works/nope/artifacts/preprocess', {
-      method: 'PUT',
-      headers: jsonHeaders,
-      body: JSON.stringify({ content: validPreprocess }),
-    })
-    expect(res.status).toBe(404)
-  })
 })
 
-describe('pipeline routes', () => {
-  it('GET /api/config returns demo and interview flags', async () => {
-    const { app } = makeApp({ demo: true, interview: true })
-    const res = await app.request('/api/config')
-    expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ demo: true, interview: true })
-  })
-
-  it('advance starts an interview: awaiting-interview with questions, no artifact', async () => {
-    const { store, app } = makeApp({ interview: true })
+describe('creative flow(#3c 全链路)', () => {
+  it('advance chains caption → creative and lands awaiting-selection', async () => {
+    const { store, app } = makeApp()
     const w = store.createWork({ seed: '一个脑洞' })
-    const res = await app.request(`/api/works/${w.id}/advance`, { method: 'POST' })
+    const { res, outcome } = await advance(app, w.id)
     expect(res.status).toBe(200)
-    const state = (await res.json()) as {
-      stage: string
-      pendingInterview?: { questions: string[] }
+    expect(outcome.kind).toBe('advanced')
+    expect(outcome.state.stage).toBe('awaiting-approval')
+
+    const detail = store.getWork(w.id)!
+    expect(detail.artifacts.find((a) => a.kind === 'caption')?.humanStatus).toBe('approved')
+    expect(detail.artifacts.find((a) => a.kind === 'creative')?.humanStatus).toBe('pending')
+
+    const view = (await (await app.request(`/api/works/${w.id}`)).json()) as {
+      workflowState: string
+      allowedActions: string[]
     }
-    expect(state.stage).toBe('awaiting-interview')
-    expect(state.pendingInterview!.questions.length).toBeGreaterThan(0)
-    expect(store.getWork(w.id)!.artifacts).toHaveLength(0)
+    expect(view.workflowState).toBe('awaiting-selection')
+    expect(view.allowedActions).toContain('select')
   })
 
-  it('advance is a no-op while awaiting interview', async () => {
-    const { store, app } = makeApp({ interview: true })
-    const w = store.createWork({ seed: 'x' })
-    await app.request(`/api/works/${w.id}/advance`, { method: 'POST' })
-    const res = await app.request(`/api/works/${w.id}/advance`, { method: 'POST' })
-    const state = (await res.json()) as { stage: string }
-    expect(state.stage).toBe('awaiting-interview')
-    expect(store.getWork(w.id)!.artifacts).toHaveLength(0)
+  it('creative step receives seed + caption via consumes', async () => {
+    const { app, seen } = makeApp()
+    const w = (await (
+      await app.request('/api/works', {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({ seed: '种子文本' }),
+      })
+    ).json()) as { id: string }
+    await advance(app, w.id)
+    expect(seen.creative[0]).toMatchObject({ seed: '种子文本', upstream: { caption: validCaption } })
   })
 
-  it('answer-interview normalizes and persists a pending artifact', async () => {
-    const { store, app } = makeApp({ interview: true })
-    const w = store.createWork({ seed: 'x' })
-    await app.request(`/api/works/${w.id}/advance`, { method: 'POST' })
-    const res = await app.request(`/api/works/${w.id}/answer-interview`, {
-      method: 'POST',
-      headers: jsonHeaders,
-      body: JSON.stringify({ answers: [{ question: '主角是谁？', answer: '林澈' }] }),
-    })
-    expect(res.status).toBe(200)
-    const state = (await res.json()) as { stage: string }
-    expect(state.stage).toBe('awaiting-approval')
-    const artifacts = store.getWork(w.id)!.artifacts
-    expect(artifacts).toHaveLength(1)
-    expect(artifacts[0]!.humanStatus).toBe('pending')
-  })
-
-  it('answer-interview without a pending interview returns 400', async () => {
+  it('saveCreativeDraft stores all directions, always pending, versions up', async () => {
     const { store, app } = makeApp()
     const w = store.createWork({ seed: 'x' })
+    await advance(app, w.id)
+
+    const edited = { directions: [pack('work-1-dir-1', '改过的A'), pack('work-1-dir-2', '方向B')] }
+    const res = await app.request(`/api/works/${w.id}/artifacts/creative`, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({ content: edited, expectedHeadVersion: 1 }),
+    })
+    expect(res.status).toBe(200)
+    const a = (await res.json()) as { version: number; humanStatus: string }
+    expect(a.version).toBe(2)
+    expect(a.humanStatus).toBe('pending')
+    // 保存不选定:仍是 awaiting-selection
+    expect(store.getWork(w.id)!.artifacts.find((x) => x.kind === 'creative')!.humanStatus).toBe(
+      'pending',
+    )
+  })
+
+  it('save with a stale expectedHeadVersion → 409 version-conflict', async () => {
+    const { store, app } = makeApp()
+    const w = store.createWork({ seed: 'x' })
+    await advance(app, w.id)
+    const res = await app.request(`/api/works/${w.id}/artifacts/creative`, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({ content: validCreative, expectedHeadVersion: 99 }),
+    })
+    expect(res.status).toBe(409)
+    expect(((await res.json()) as { code: string }).code).toBe('version-conflict')
+  })
+
+  it('save with invalid content → 422', async () => {
+    const { store, app } = makeApp()
+    const w = store.createWork({ seed: 'x' })
+    await advance(app, w.id)
+    const res = await app.request(`/api/works/${w.id}/artifacts/creative`, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({ content: { directions: [] }, expectedHeadVersion: 1 }),
+    })
+    expect(res.status).toBe(422)
+  })
+
+  it('selectCreativeDirection lands a single-direction approved version; refresh stays selected', async () => {
+    const { store, app } = makeApp()
+    const w = store.createWork({ seed: 'x' })
+    await advance(app, w.id)
+
+    const res = await app.request(`/api/works/${w.id}/artifacts/creative/select`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ directionId: 'work-1-dir-2', expectedHeadVersion: 1 }),
+    })
+    expect(res.status).toBe(200)
+    const a = (await res.json()) as { version: number; humanStatus: string; content: { directions: unknown[] } }
+    expect(a.humanStatus).toBe('approved')
+    expect(a.content.directions).toHaveLength(1)
+
+    // 刷新仍在选定态
+    const view = (await (await app.request(`/api/works/${w.id}`)).json()) as {
+      workflowState: string
+    }
+    expect(view.workflowState).toBe('selected')
+  })
+
+  it('select with unknown directionId → 409 direction-not-selected', async () => {
+    const { store, app } = makeApp()
+    const w = store.createWork({ seed: 'x' })
+    await advance(app, w.id)
+    const res = await app.request(`/api/works/${w.id}/artifacts/creative/select`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ directionId: 'nope', expectedHeadVersion: 1 }),
+    })
+    expect(res.status).toBe(409)
+    expect(((await res.json()) as { code: string }).code).toBe('direction-not-selected')
+  })
+
+  it('select with a stale expectedHeadVersion → 409 version-conflict', async () => {
+    const { store, app } = makeApp()
+    const w = store.createWork({ seed: 'x' })
+    await advance(app, w.id)
+    const res = await app.request(`/api/works/${w.id}/artifacts/creative/select`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ directionId: 'work-1-dir-1', expectedHeadVersion: 42 }),
+    })
+    expect(res.status).toBe(409)
+    expect(((await res.json()) as { code: string }).code).toBe('version-conflict')
+  })
+
+  it('caption 成功 creative 失败 → outcome failed,重试只跑 creative', async () => {
+    const store = new InMemoryStore()
+    let fail = true
+    const flaky: ArtifactStep = {
+      id: 'creative',
+      inputSchema: fakeArtifactStep('x', null).step.inputSchema,
+      outputSchema: fakeArtifactStep('x', null).step.outputSchema,
+      async run() {
+        if (fail) throw new Error('boom')
+        return { content: validCreative }
+      },
+    }
+    const definition: PipelineDefinitionEntry[] = [
+      { stepId: 'caption', outputKind: 'caption' },
+      { stepId: 'creative', outputKind: 'creative', consumes: ['caption'], gateAfter: { kind: 'creative' } },
+    ]
+    const pipeline = new Pipeline({
+      store,
+      steps: new Map<string, ArtifactStep>([
+        ['caption', fakeArtifactStep('caption', validCaption).step],
+        ['creative', flaky],
+      ]),
+      definition,
+      resolveConfig: () => ({}),
+    })
+    const app = createApp({ store, pipeline, meta: { demo: true } })
+    const w = store.createWork({ seed: 'x' })
+
+    const r1 = await advance(app, w.id)
+    expect(r1.res.status).toBe(200)
+    expect(r1.outcome.kind).toBe('failed')
+
+    fail = false
+    const r2 = await advance(app, w.id)
+    expect(r2.outcome.kind).toBe('advanced')
+    const caps = store.getWork(w.id)!.artifacts.filter((a) => a.kind === 'caption')
+    expect(caps).toHaveLength(1) // caption 未重跑
+  })
+
+  it('interview 零残留:answer-interview 路由不存在', async () => {
+    const { store, app } = makeApp()
+    const w = (await (
+      await app.request('/api/works', {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify({ seed: 'x' }),
+      })
+    ).json()) as { id: string }
     const res = await app.request(`/api/works/${w.id}/answer-interview`, {
       method: 'POST',
       headers: jsonHeaders,
       body: JSON.stringify({ answers: [] }),
     })
-    expect(res.status).toBe(400)
-  })
-
-  it('answer-interview with an invalid body returns 400', async () => {
-    const { store, app } = makeApp()
-    const w = store.createWork({ seed: 'x' })
-    const res = await app.request(`/api/works/${w.id}/answer-interview`, {
-      method: 'POST',
-      headers: jsonHeaders,
-      body: JSON.stringify({ answers: 'nope' }),
-    })
-    expect(res.status).toBe(400)
-  })
-
-  it('interview=false: advance normalizes directly', async () => {
-    const { store, app } = makeApp({ interview: false })
-    const w = store.createWork({ seed: 'x' })
-    const res = await app.request(`/api/works/${w.id}/advance`, { method: 'POST' })
-    const state = (await res.json()) as { stage: string }
-    expect(state.stage).toBe('awaiting-approval')
-    expect(store.getWork(w.id)!.artifacts).toHaveLength(1)
-  })
-
-  it('approve marks the artifact approved and completes the pipeline', async () => {
-    const { store, app } = makeApp({ interview: false })
-    const w = store.createWork({ seed: 'x' })
-    await app.request(`/api/works/${w.id}/advance`, { method: 'POST' })
-    const res = await app.request(`/api/works/${w.id}/approve`, {
-      method: 'POST',
-      headers: jsonHeaders,
-      body: JSON.stringify({ kind: 'preprocess' }),
-    })
-    expect(res.status).toBe(200)
-    const state = (await res.json()) as { stage: string }
-    expect(state.stage).toBe('complete')
-    expect(store.getWork(w.id)!.artifacts[0]!.humanStatus).toBe('approved')
-  })
-
-  it('approve with a chapter on a per-work kind returns 400', async () => {
-    const { store, app } = makeApp()
-    const w = store.createWork({ seed: 'x' })
-    const res = await app.request(`/api/works/${w.id}/approve`, {
-      method: 'POST',
-      headers: jsonHeaders,
-      body: JSON.stringify({ kind: 'preprocess', chapter: 1 }),
-    })
-    expect(res.status).toBe(400)
-  })
-
-  it('approve without a produced artifact returns 400', async () => {
-    const { store, app } = makeApp()
-    const w = store.createWork({ seed: 'x' })
-    const res = await app.request(`/api/works/${w.id}/approve`, {
-      method: 'POST',
-      headers: jsonHeaders,
-      body: JSON.stringify({ kind: 'preprocess' }),
-    })
-    expect(res.status).toBe(400)
-  })
-
-  it('advance on an unknown work returns 404', async () => {
-    const { app } = makeApp()
-    const res = await app.request('/api/works/nope/advance', { method: 'POST' })
     expect(res.status).toBe(404)
-  })
-
-  it('returns 500 when the step fails（agent 输出不稳的兜底）', async () => {
-    const badStep: ArtifactStep = {
-      id: 'preprocess',
-      inputSchema: preprocessStepInputSchema,
-      outputSchema: z.object({ content: jsonValueSchema }),
-      run: async () => {
-        throw new Error('llm output schema mismatch')
-      },
-    }
-    const { store, app } = makeApp({ step: badStep })
-    const w = store.createWork({ seed: 'x' })
-    const res = await app.request(`/api/works/${w.id}/advance`, { method: 'POST' })
-    expect(res.status).toBe(500)
-    const body = (await res.json()) as { error: string }
-    expect(body.error).toContain('llm output schema mismatch')
   })
 })

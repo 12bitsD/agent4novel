@@ -1,14 +1,14 @@
 import { z } from 'zod'
 import type { AgentConfig } from './step.js'
 
-export const artifactKinds = ['preprocess', 'outline', 'setting', 'beat', 'prose'] as const
+export const artifactKinds = ['caption', 'creative', 'outline', 'setting', 'beat', 'prose'] as const
 export type ArtifactKind = (typeof artifactKinds)[number]
 
 export const humanStatuses = ['pending', 'approved'] as const
 export type HumanStatus = (typeof humanStatuses)[number]
 
 export const perChapterKinds: ArtifactKind[] = ['beat', 'prose']
-export const perWorkKinds: ArtifactKind[] = ['preprocess', 'outline', 'setting']
+export const perWorkKinds: ArtifactKind[] = ['caption', 'creative', 'outline', 'setting']
 
 export type JsonValue =
   | string
@@ -49,3 +49,26 @@ export type WorkSummary = {
 }
 
 export type WorkDetail = Work & { artifacts: Artifact[] }
+
+// 读模型(#3c):GET /works/:id 同快照附带,web 只渲染不重建状态机
+export const workflowStates = [
+  'ready-to-generate',
+  'generating',
+  'awaiting-selection',
+  'selected',
+  'failed',
+] as const
+export type WorkflowState = (typeof workflowStates)[number]
+
+export type WorkView = WorkDetail & {
+  workflowState: WorkflowState
+  allowedActions: string[]
+}
+
+// 统一错误形(#3c 决策 16):code 机器读,retryable 供 web 决定重试,attemptId 串联日志
+export type ApiError = {
+  code: string
+  retryable: boolean
+  attemptId?: string
+  message: string
+}

@@ -28,14 +28,14 @@ describe('InMemoryStore', () => {
   it('appends versioned artifacts (JsonValue content) and getWork returns the latest', () => {
     const store = new InMemoryStore()
     const w = store.createWork({ seed: 'x' })
-    // store 不感知内容形状（JsonValue 透传），用中性 fixture，不绑定具体节点形态
-    store.appendArtifact(w.id, 'preprocess', { note: 'v1' })
-    store.appendArtifact(w.id, 'preprocess', { note: 'v2' })
+    // store 不感知内容形状(JsonValue 透传),用中性 fixture,不绑定具体节点形态
+    store.appendArtifact(w.id, 'caption', { note: 'v1' })
+    store.appendArtifact(w.id, 'caption', { note: 'v2' })
     const detail = store.getWork(w.id)!
-    const pps = detail.artifacts.filter((a) => a.kind === 'preprocess')
-    expect(pps).toHaveLength(1)
-    expect(pps[0].version).toBe(2)
-    expect((pps[0].content as { note: string }).note).toBe('v2')
+    const caps = detail.artifacts.filter((a) => a.kind === 'caption')
+    expect(caps).toHaveLength(1)
+    expect(caps[0].version).toBe(2)
+    expect((caps[0].content as { note: string }).note).toBe('v2')
   })
 
   it('per-chapter kind requires a chapter', () => {
@@ -47,7 +47,7 @@ describe('InMemoryStore', () => {
   it('per-work kind rejects a chapter', () => {
     const store = new InMemoryStore()
     const w = store.createWork({ seed: 'x' })
-    expect(() => store.appendArtifact(w.id, 'preprocess', 'x', { chapter: 1 })).toThrow(
+    expect(() => store.appendArtifact(w.id, 'caption', 'x', { chapter: 1 })).toThrow(
       /must not have a chapter/,
     )
   })
@@ -68,5 +68,15 @@ describe('InMemoryStore', () => {
     const store = new InMemoryStore()
     const w = store.createWork({ seed: 'x' })
     expect(() => store.setStatus(w.id, 'outline', 'approved')).toThrow(/artifact not found/)
+  })
+
+  it('headVersion reflects the latest version, undefined when absent', () => {
+    const store = new InMemoryStore()
+    const w = store.createWork({ seed: 'x' })
+    expect(store.headVersion(w.id, 'creative')).toBeUndefined()
+    store.appendArtifact(w.id, 'creative', { note: 'v1' })
+    expect(store.headVersion(w.id, 'creative')).toBe(1)
+    store.appendArtifact(w.id, 'creative', { note: 'v2' })
+    expect(store.headVersion(w.id, 'creative')).toBe(2)
   })
 })

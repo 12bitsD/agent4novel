@@ -1,0 +1,112 @@
+/* agent4novel 设计系统:多巴胺点缀 + Claude 式极简
+   亮暗双主题:默认跟随系统(prefers-color-scheme),:root[data-theme] 可手动锁定。
+   规则:组件内联样式只许引用 var(--*) token,禁止新增硬编码色值。 */
+
+:root {
+  /* 底色与墨色(亮) */
+  --bg: #faf9f6;
+  --bg-raised: #ffffff;
+  --bg-sunken: #f3f1ec;
+  --ink: #1a1918;
+  --ink-2: #6b6963;
+  --ink-3: #a3a099;
+  --line: #e8e6e0;
+
+  /* 多巴胺点缀 */
+  --accent: #d97757;
+  --accent-ink: #ffffff;
+  --violet: #7c6cf0;
+  --teal: #0e9f8a;
+  --amber: #e8a13a;
+  --pink: #e5618f;
+
+  /* 语义色 */
+  --danger: #c34a3d;
+  --ok: #2e9e6b;
+  --warn-bg: #fdf3e3;
+  --warn-ink: #8a5e14;
+
+  /* 阴影与圆角 */
+  --shadow-pill: 0 4px 16px rgba(26, 25, 24, 0.14);
+  --radius: 8px;
+  --radius-lg: 12px;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #1c1b1a;
+    --bg-raised: #262522;
+    --bg-sunken: #151412;
+    --ink: #f2f1ec;
+    --ink-2: #a3a099;
+    --ink-3: #6b6963;
+    --line: #38362f;
+
+    --accent: #e8896b;
+    --accent-ink: #1c1b1a;
+    --violet: #9b8ff5;
+    --teal: #2bbfa8;
+    --amber: #f0b45c;
+    --pink: #f08aad;
+
+    --danger: #e07a6d;
+    --ok: #4cc48d;
+    --warn-bg: #2e2618;
+    --warn-ink: #f0b45c;
+
+    --shadow-pill: 0 4px 16px rgba(0, 0, 0, 0.5);
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #1c1b1a;
+  --bg-raised: #262522;
+  --bg-sunken: #151412;
+  --ink: #f2f1ec;
+  --ink-2: #a3a099;
+  --ink-3: #6b6963;
+  --line: #38362f;
+
+  --accent: #e8896b;
+  --accent-ink: #1c1b1a;
+  --violet: #9b8ff5;
+  --teal: #2bbfa8;
+  --amber: #f0b45c;
+  --pink: #f08aad;
+
+  --danger: #e07a6d;
+  --ok: #4cc48d;
+  --warn-bg: #2e2618;
+  --warn-ink: #f0b45c;
+
+  --shadow-pill: 0 4px 16px rgba(0, 0, 0, 0.5);
+
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family:
+    system-ui,
+    -apple-system,
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'Microsoft YaHei',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 原生控件跟随主题 */
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
+  color: var(--ink);
+}

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { z } from 'zod'
-import { interviewAnswerSchema, jsonValueSchema, type JsonValue } from '@agent4novel/contracts'
+import { jsonValueSchema, type JsonValue } from '@agent4novel/contracts'
+import { KnownError } from '../src/errors.js'
 import { InMemoryStore } from '../src/store/in-memory-store.js'
 import { Pipeline } from '../src/pipeline/pipeline.js'
 import type {
@@ -10,12 +11,11 @@ import type {
   PipelineOutput,
 } from '../src/pipeline/pipeline.js'
 
-// 步骤输入契约（#3b 拓宽）：pipeline 组装 { workId, seed, phase?, answers? }，step 按需取用
+// 步骤输入契约(#3c):pipeline 组装 { workId, seed, upstream },step 按需取用
 const stepInputSchema = z.object({
   workId: z.string(),
   seed: z.string(),
-  phase: z.enum(['questions', 'normalize']).optional(),
-  answers: z.array(interviewAnswerSchema).optional(),
+  upstream: jsonValueSchema,
 })
 
 function fakeStep(id: string, content: JsonValue): ArtifactStep {
@@ -29,8 +29,8 @@ function fakeStep(id: string, content: JsonValue): ArtifactStep {
   }
 }
 
-// interview 版 fake：按 phase 返回固定问题 / 固定要点 JSON，并记录收到的输入
-function interviewFakeStep(id: string): { step: ArtifactStep; seen: PipelineInput[] } {
+// 记录收到的输入的 fake,用于 consumes 注入断言
+function recordingStep(id: string, content: JsonValue): { step: ArtifactStep; seen: PipelineInput[] } {
   const seen: PipelineInput[] = []
   const step: ArtifactStep = {
     id,
@@ -38,217 +38,255 @@ function interviewFakeStep(id: string): { step: ArtifactStep; seen: PipelineInpu
     outputSchema: z.object({ content: jsonValueSchema }),
     async run(input): Promise<PipelineOutput> {
       seen.push(input)
-      const content: JsonValue =
-        input.phase === 'questions'
-          ? { questions: ['主角是谁？', '爽点是什么？'] }
-          : {
-              inputStage: '脑洞',
-              hooks: ['卖点（fake）'],
-              synopsis: ['梗概（fake）'],
-              setting: [],
-              outline: [],
-            }
       return { content }
     },
   }
   return { step, seen }
 }
 
+// caption(无关卡,自动 approved)→ creative(gateAfter)→ outline(gateAfter)
 const definition: PipelineDefinitionEntry[] = [
-  { stepId: 'preprocess', outputKind: 'preprocess' },
-  { stepId: 'outline', outputKind: 'outline', gateAfter: { kind: 'outline' } },
-  { stepId: 'setting', outputKind: 'setting', gateBefore: { kind: 'outline' } },
+  { stepId: 'caption', outputKind: 'caption' },
+  { stepId: 'creative', outputKind: 'creative', consumes: ['caption'], gateAfter: { kind: 'creative' } },
+  { stepId: 'outline', outputKind: 'outline', consumes: ['creative'], gateAfter: { kind: 'outline' } },
 ]
 
 function makePipeline() {
   const store = new InMemoryStore()
+  const creative = recordingStep('creative', { made: 'creative' })
+  const outline = recordingStep('outline', { made: 'outline' })
   const steps = new Map<string, ArtifactStep>([
-    ['preprocess', fakeStep('preprocess', 'preprocess content')],
-    ['outline', fakeStep('outline', 'outline content')],
-    ['setting', fakeStep('setting', 'setting content')],
+    ['caption', fakeStep('caption', { made: 'caption' })],
+    ['creative', creative.step],
+    ['outline', outline.step],
   ])
   const pipeline = new Pipeline({ store, steps, definition, resolveConfig: () => ({}) })
-  return { store, pipeline }
+  return { store, pipeline, seen: { creative: creative.seen, outline: outline.seen } }
 }
 
-const interviewDefinition: PipelineDefinitionEntry[] = [
-  {
-    stepId: 'preprocess',
-    outputKind: 'preprocess',
-    gateAfter: { kind: 'preprocess' },
-    interview: true,
-  },
-]
-
-function makeInterviewPipeline(interview: boolean) {
-  const store = new InMemoryStore()
-  const { step, seen } = interviewFakeStep('preprocess')
-  const steps = new Map<string, ArtifactStep>([['preprocess', step]])
-  const def: PipelineDefinitionEntry[] = [{ ...interviewDefinition[0]!, interview }]
-  const pipeline = new Pipeline({ store, steps, definition: def, resolveConfig: () => ({}) })
-  return { store, pipeline, seen }
-}
-
-describe('Pipeline', () => {
+describe('Pipeline(#3c 链式 advance)', () => {
   it('initial state is ready at the first step', () => {
     const { store, pipeline } = makePipeline()
     const w = store.createWork({ seed: 'x' })
     const state = pipeline.getState(w.id)
     expect(state.stage).toBe('ready')
-    expect(state.nextStepId).toBe('preprocess')
+    expect(state.nextStepId).toBe('caption')
   })
 
-  it('advance runs steps in order', async () => {
+  it('advance chains auto-approved steps until the next gate', async () => {
     const { store, pipeline } = makePipeline()
     const w = store.createWork({ seed: 'x' })
-    const r1 = await pipeline.advance(w.id)
-    expect(r1.stepId).toBe('preprocess')
+    // caption 无关卡 → 链式直跑 creative(gateAfter)→ awaiting-approval
+    const r = await pipeline.advance(w.id)
+    expect(r.kind).toBe('advanced')
+    if (r.kind === 'advanced') expect(r.stepId).toBe('creative')
+    expect(r.state.stage).toBe('awaiting-approval')
+    expect(r.state.pendingGate?.kind).toBe('creative')
+
+    const artifacts = store.getWork(w.id)!.artifacts
+    expect(artifacts.find((a) => a.kind === 'caption')?.humanStatus).toBe('approved')
+    expect(artifacts.find((a) => a.kind === 'creative')?.humanStatus).toBe('pending')
+  })
+
+  it('consumes injects the latest approved upstream into step input', async () => {
+    const { store, pipeline, seen } = makePipeline()
+    const w = store.createWork({ seed: '种子文本' })
+    await pipeline.advance(w.id)
+    expect(seen.creative[0]).toMatchObject({
+      workId: w.id,
+      seed: '种子文本',
+      upstream: { caption: { made: 'caption' } },
+    })
+  })
+
+  it('advance is a no-op at a gate, resumes after approve, and completes', async () => {
+    const { store, pipeline } = makePipeline()
+    const w = store.createWork({ seed: 'x' })
+    await pipeline.advance(w.id) // caption + creative(gate)
+
     const r2 = await pipeline.advance(w.id)
-    expect(r2.stepId).toBe('outline')
-  })
+    expect(r2.kind).toBe('awaiting-approval')
+    expect(store.getWork(w.id)!.artifacts.some((a) => a.kind === 'outline')).toBe(false)
 
-  it('gateAfter blocks the next step until approved', async () => {
-    const { store, pipeline } = makePipeline()
-    const w = store.createWork({ seed: 'x' })
-    await pipeline.advance(w.id) // preprocess
-    const r2 = await pipeline.advance(w.id) // outline (gateAfter)
-    expect(r2.state.stage).toBe('awaiting-approval')
-    expect(r2.state.pendingGate?.kind).toBe('outline')
-
-    // advance while gate pending: no side effect, no setting produced
+    pipeline.approve(w.id, 'creative')
     const r3 = await pipeline.advance(w.id)
-    expect(r3.stepId).toBeNull()
-    expect(store.getWork(w.id)!.artifacts.some((a) => a.kind === 'setting')).toBe(false)
-  })
-
-  it('approve unblocks the gated step, then pipeline completes', async () => {
-    const { store, pipeline } = makePipeline()
-    const w = store.createWork({ seed: 'x' })
-    await pipeline.advance(w.id) // preprocess
-    await pipeline.advance(w.id) // outline (gateAfter)
+    expect(r3.kind).toBe('advanced')
+    if (r3.kind === 'advanced') expect(r3.stepId).toBe('outline')
 
     pipeline.approve(w.id, 'outline')
-    const r3 = await pipeline.advance(w.id)
-    expect(r3.stepId).toBe('setting')
-
     const r4 = await pipeline.advance(w.id)
-    expect(r4.stepId).toBeNull()
-    expect(r4.state.stage).toBe('complete')
-    expect(r4.state.nextStepId).toBeNull()
+    expect(r4.kind).toBe('complete')
+    // complete 后重复调用 = no-op
+    const r5 = await pipeline.advance(w.id)
+    expect(r5.kind).toBe('complete')
+  })
+
+  it('creative latest pending blocks outline(consumes 读最新版且必须 approved)', async () => {
+    const { store, pipeline } = makePipeline()
+    const w = store.createWork({ seed: 'x' })
+    await pipeline.advance(w.id)
+    pipeline.approve(w.id, 'creative')
+    // 人工保存草稿 → 最新版 pending → 停在该关卡,outline 不推进
+    store.appendArtifact(w.id, 'creative', { made: 'draft' })
+    const state = pipeline.getState(w.id)
+    expect(state.stage).toBe('awaiting-approval')
+    expect(state.pendingGate?.kind).toBe('creative')
+    const r = await pipeline.advance(w.id)
+    expect(r.kind).toBe('awaiting-approval')
+    expect(store.getWork(w.id)!.artifacts.some((a) => a.kind === 'outline')).toBe(false)
+  })
+
+  it('a failing step yields outcome failed with retryable, and retry resumes from it', async () => {
+    const store = new InMemoryStore()
+    let fail = true
+    const flaky: ArtifactStep = {
+      id: 'creative',
+      inputSchema: stepInputSchema,
+      outputSchema: z.object({ content: jsonValueSchema }),
+      async run() {
+        if (fail) throw new KnownError('llm-timeout', 'boom', { retryable: true, attemptId: 'a1' })
+        return { content: { made: 'creative' } }
+      },
+    }
+    const steps = new Map<string, ArtifactStep>([
+      ['caption', fakeStep('caption', { made: 'caption' })],
+      ['creative', flaky],
+      ['outline', fakeStep('outline', 'ok')],
+    ])
+    const pipeline = new Pipeline({ store, steps, definition, resolveConfig: () => ({}) })
+    const w = store.createWork({ seed: 'x' })
+
+    const r1 = await pipeline.advance(w.id)
+    expect(r1.kind).toBe('failed')
+    if (r1.kind === 'failed') {
+      expect(r1.stepId).toBe('creative')
+      expect(r1.code).toBe('llm-timeout')
+      expect(r1.retryable).toBe(true)
+      expect(r1.attemptId).toBe('a1')
+    }
+    // caption 已成功 → 重试只跑 creative(caption 不重跑:仍只有一份 caption 产物)
+    fail = false
+    const r2 = await pipeline.advance(w.id)
+    expect(r2.kind).toBe('advanced')
+    const captions = store.getWork(w.id)!.artifacts.filter((a) => a.kind === 'caption')
+    expect(captions).toHaveLength(1)
+  })
+
+  it('concurrent advance on the same work → advance-in-progress', async () => {
+    const store = new InMemoryStore()
+    let release!: () => void
+    const slow: ArtifactStep = {
+      id: 'caption',
+      inputSchema: stepInputSchema,
+      outputSchema: z.object({ content: jsonValueSchema }),
+      run: () => new Promise((res) => (release = () => res({ content: 'slow' }))),
+    }
+    const steps = new Map<string, ArtifactStep>([
+      ['caption', slow],
+      ['creative', fakeStep('creative', 'ok')],
+      ['outline', fakeStep('outline', 'ok')],
+    ])
+    const pipeline = new Pipeline({ store, steps, definition, resolveConfig: () => ({}) })
+    const w = store.createWork({ seed: 'x' })
+
+    const p1 = pipeline.advance(w.id)
+    await expect(pipeline.advance(w.id)).rejects.toMatchObject({ code: 'advance-in-progress' })
+    release()
+    await p1
+    // 锁在 finally 中释放:之后还能正常推进
+    const r = await pipeline.advance(w.id)
+    expect(r.kind).not.toBe('failed')
   })
 
   it('rejects a step whose output does not match its schema', async () => {
     const store = new InMemoryStore()
     const badStep: ArtifactStep = {
-      id: 'preprocess',
+      id: 'caption',
       inputSchema: stepInputSchema,
       outputSchema: z.object({ content: jsonValueSchema }),
       run: async () => ({ content: undefined }) as unknown as { content: JsonValue },
     }
     const steps = new Map<string, ArtifactStep>([
-      ['preprocess', badStep],
+      ['caption', badStep],
+      ['creative', fakeStep('creative', 'ok')],
       ['outline', fakeStep('outline', 'ok')],
-      ['setting', fakeStep('setting', 'ok')],
     ])
     const pipeline = new Pipeline({ store, steps, definition, resolveConfig: () => ({}) })
     const w = store.createWork({ seed: 'x' })
-    await expect(pipeline.advance(w.id)).rejects.toThrow()
+    const r = await pipeline.advance(w.id)
+    expect(r.kind).toBe('failed')
+    if (r.kind === 'failed') expect(r.stepId).toBe('caption')
   })
 
-  it('rejects duplicate step ids at construction', () => {
+  it('rejects duplicate step ids / outputKinds at construction', () => {
     const store = new InMemoryStore()
     const steps = new Map<string, ArtifactStep>([['a', fakeStep('a', 'x')]])
-    const badDefinition: PipelineDefinitionEntry[] = [
-      { stepId: 'a', outputKind: 'preprocess' },
-      { stepId: 'a', outputKind: 'outline' },
-    ]
     expect(
-      () => new Pipeline({ store, steps, definition: badDefinition, resolveConfig: () => ({}) }),
+      () =>
+        new Pipeline({
+          store,
+          steps,
+          definition: [
+            { stepId: 'a', outputKind: 'caption' },
+            { stepId: 'a', outputKind: 'creative' },
+          ],
+          resolveConfig: () => ({}),
+        }),
     ).toThrow(/duplicate/)
+    expect(
+      () =>
+        new Pipeline({
+          store,
+          steps: new Map([['a', fakeStep('a', 'x')], ['b', fakeStep('b', 'x')]]),
+          definition: [
+            { stepId: 'a', outputKind: 'caption' },
+            { stepId: 'b', outputKind: 'caption' },
+          ],
+          resolveConfig: () => ({}),
+        }),
+    ).toThrow(/duplicate/)
+  })
+
+  it('rejects consumes pointing at non-prior kinds(禁自依赖与环)', () => {
+    const store = new InMemoryStore()
+    const steps = new Map<string, ArtifactStep>([
+      ['a', fakeStep('a', 'x')],
+      ['b', fakeStep('b', 'x')],
+    ])
+    // 前向依赖(环)
+    expect(
+      () =>
+        new Pipeline({
+          store,
+          steps,
+          definition: [
+            { stepId: 'a', outputKind: 'caption', consumes: ['creative'] },
+            { stepId: 'b', outputKind: 'creative' },
+          ],
+          resolveConfig: () => ({}),
+        }),
+    ).toThrow(/consumes/)
+    // 自依赖
+    expect(
+      () =>
+        new Pipeline({
+          store,
+          steps,
+          definition: [
+            { stepId: 'a', outputKind: 'caption', consumes: ['caption'] },
+            { stepId: 'b', outputKind: 'creative' },
+          ],
+          resolveConfig: () => ({}),
+        }),
+    ).toThrow(/consumes/)
   })
 
   it('rejects a definition referencing an unregistered step', () => {
     const store = new InMemoryStore()
     const steps = new Map<string, ArtifactStep>([['a', fakeStep('a', 'x')]])
-    const def: PipelineDefinitionEntry[] = [{ stepId: 'missing', outputKind: 'preprocess' }]
+    const def: PipelineDefinitionEntry[] = [{ stepId: 'missing', outputKind: 'caption' }]
     expect(() => new Pipeline({ store, steps, definition: def, resolveConfig: () => ({}) })).toThrow(
       /not registered/,
     )
-  })
-})
-
-describe('Pipeline interview', () => {
-  it('interview=true: advance enters awaiting-interview with questions and writes no artifact', async () => {
-    const { store, pipeline } = makeInterviewPipeline(true)
-    const w = store.createWork({ seed: '一个脑洞' })
-    const r = await pipeline.advance(w.id)
-    expect(r.stepId).toBe('preprocess')
-    expect(r.state.stage).toBe('awaiting-interview')
-    expect(r.state.pendingInterview?.questions).toEqual(['主角是谁？', '爽点是什么？'])
-    expect(store.getWork(w.id)!.artifacts).toHaveLength(0)
-  })
-
-  it('advance is a no-op while awaiting interview', async () => {
-    const { store, pipeline } = makeInterviewPipeline(true)
-    const w = store.createWork({ seed: 'x' })
-    await pipeline.advance(w.id)
-    const r = await pipeline.advance(w.id)
-    expect(r.stepId).toBeNull()
-    expect(r.state.stage).toBe('awaiting-interview')
-    expect(store.getWork(w.id)!.artifacts).toHaveLength(0)
-  })
-
-  it('answerInterview normalizes, persists a pending artifact, and clears the interview', async () => {
-    const { store, pipeline } = makeInterviewPipeline(true)
-    const w = store.createWork({ seed: 'x' })
-    await pipeline.advance(w.id)
-    const r = await pipeline.answerInterview(w.id, [{ question: '主角是谁？', answer: '林澈' }])
-    expect(r.stepId).toBe('preprocess')
-    expect(r.state.stage).toBe('awaiting-approval')
-    expect(r.state.pendingInterview).toBeUndefined()
-    const artifacts = store.getWork(w.id)!.artifacts
-    expect(artifacts).toHaveLength(1)
-    expect(artifacts[0]!.humanStatus).toBe('pending')
-    expect(artifacts[0]!.content).toMatchObject({ inputStage: '脑洞', hooks: ['卖点（fake）'] })
-  })
-
-  it('answerInterview throws without a pending interview', async () => {
-    const { store, pipeline } = makeInterviewPipeline(true)
-    const w = store.createWork({ seed: 'x' })
-    await expect(pipeline.answerInterview(w.id, [])).rejects.toThrow(/no pending interview/)
-  })
-
-  it('step receives assembled context: workId, seed from store, phase, answers', async () => {
-    const { store, pipeline, seen } = makeInterviewPipeline(true)
-    const w = store.createWork({ seed: '种子文本' })
-    await pipeline.advance(w.id)
-    expect(seen[0]).toMatchObject({ workId: w.id, seed: '种子文本', phase: 'questions' })
-    await pipeline.answerInterview(w.id, [{ question: 'q', answer: 'a' }])
-    expect(seen[1]).toMatchObject({
-      workId: w.id,
-      seed: '种子文本',
-      phase: 'normalize',
-      answers: [{ question: 'q', answer: 'a' }],
-    })
-  })
-
-  it('interview=false: advance goes straight to normalize and persists', async () => {
-    const { store, pipeline, seen } = makeInterviewPipeline(false)
-    const w = store.createWork({ seed: 'x' })
-    const r = await pipeline.advance(w.id)
-    expect(r.state.stage).toBe('awaiting-approval')
-    expect(store.getWork(w.id)!.artifacts).toHaveLength(1)
-    // pipeline 不显式传 phase（缺省 normalize 是 step 自己的事）
-    expect(seen[0]!.phase).toBeUndefined()
-  })
-
-  it('approve after interview completes the pipeline', async () => {
-    const { store, pipeline } = makeInterviewPipeline(true)
-    const w = store.createWork({ seed: 'x' })
-    await pipeline.advance(w.id)
-    await pipeline.answerInterview(w.id, [])
-    pipeline.approve(w.id, 'preprocess')
-    const state = pipeline.getState(w.id)
-    expect(state.stage).toBe('complete')
   })
 })

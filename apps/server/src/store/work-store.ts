@@ -16,4 +16,6 @@ export interface WorkStore {
     status: HumanStatus,
     opts?: { chapter?: number },
   ): void
+  // 某 bucket 最新版本号(无产物 → undefined);供 expectedHeadVersion 乐观锁比对
+  headVersion(workId: string, kind: ArtifactKind, opts?: { chapter?: number }): number | undefined
 }

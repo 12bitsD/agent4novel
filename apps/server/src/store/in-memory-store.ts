@@ -111,4 +111,11 @@ export class InMemoryStore implements WorkStore {
     }
     bucket.versions[bucket.versions.length - 1].humanStatus = status
   }
+
+  headVersion(workId: string, kind: ArtifactKind, opts?: { chapter?: number }): number | undefined {
+    const bucket = this.findBucket(workId, kind, opts?.chapter)
+    return bucket && bucket.versions.length > 0
+      ? bucket.versions[bucket.versions.length - 1].version
+      : undefined
+  }
 }

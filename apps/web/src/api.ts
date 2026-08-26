@@ -1,27 +1,27 @@
 import type {
   Artifact,
-  ArtifactKind,
-  InterviewAnswer,
-  PreprocessContent,
+  CreativeContent,
   Work,
-  WorkDetail,
   WorkSummary,
+  WorkView,
 } from '@agent4novel/contracts'
 
-// server pipeline 的 wire 形状（PipelineState 是 server 内部类型，这里只声明前端需要的最小面）
-export type PipelineStateDto = {
-  workId: string
-  stage: 'ready' | 'blocked' | 'awaiting-approval' | 'awaiting-interview' | 'complete'
-  nextStepId: string | null
-  pendingGate?: { kind: ArtifactKind; chapter?: number }
-  pendingInterview?: { questions: string[] }
-}
+// advance 的可穷举结果(#3c,与 server pipeline.ts 同形)
+export type AdvanceOutcomeDto =
+  | { kind: 'advanced'; stepId: string }
+  | { kind: 'awaiting-approval' }
+  | { kind: 'complete' }
+  | { kind: 'failed'; stepId: string; code: string; retryable: boolean; attemptId?: string }
 
-export type AppConfig = { demo: boolean; interview: boolean }
+export type AppConfig = { demo: boolean }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)
-  if (!res.ok) throw new Error(`${init?.method ?? 'GET'} ${url} failed: ${res.status}`)
+  if (!res.ok) {
+    // 统一错误形 { code, retryable, attemptId, message };读不到就退化为状态码
+    const body = (await res.json().catch(() => null)) as { code?: string; message?: string } | null
+    throw new Error(body?.message ?? `${init?.method ?? 'GET'} ${url} failed: ${res.status}`)
+  }
   return res.json()
 }
 
@@ -41,33 +41,39 @@ export function listWorks(): Promise<WorkSummary[]> {
   return request<WorkSummary[]>('/api/works')
 }
 
-export function getWork(id: string): Promise<WorkDetail> {
-  return request<WorkDetail>(`/api/works/${id}`)
+export function getWork(id: string): Promise<WorkView> {
+  return request<WorkView>(`/api/works/${id}`)
 }
 
 export function createWork(input: { seed: string; title?: string }): Promise<Work> {
   return post<Work>('/api/works', input)
 }
 
-export function savePreprocess(workId: string, content: PreprocessContent): Promise<Artifact> {
-  return request<Artifact>(`/api/works/${workId}/artifacts/preprocess`, {
+// saveCreativeDraft:保存全部方向,永远 pending;expectedHeadVersion 乐观锁(409 时 web 保留 dirty edits)
+export function saveCreativeDraft(
+  workId: string,
+  content: CreativeContent,
+  expectedHeadVersion: number,
+): Promise<Artifact> {
+  return request<Artifact>(`/api/works/${workId}/artifacts/creative`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, expectedHeadVersion }),
   })
 }
 
-export function advance(workId: string): Promise<PipelineStateDto> {
-  return post<PipelineStateDto>(`/api/works/${workId}/advance`)
-}
-
-export function answerInterview(
+// selectCreativeDirection:显式选定单方向 → approved
+export function selectCreativeDirection(
   workId: string,
-  answers: InterviewAnswer[],
-): Promise<PipelineStateDto> {
-  return post<PipelineStateDto>(`/api/works/${workId}/answer-interview`, { answers })
+  directionId: string,
+  expectedHeadVersion: number,
+): Promise<Artifact> {
+  return post<Artifact>(`/api/works/${workId}/artifacts/creative/select`, {
+    directionId,
+    expectedHeadVersion,
+  })
 }
 
-export function approve(workId: string, kind: ArtifactKind): Promise<PipelineStateDto> {
-  return post<PipelineStateDto>(`/api/works/${workId}/approve`, { kind })
+export function advance(workId: string): Promise<AdvanceOutcomeDto> {
+  return post<AdvanceOutcomeDto>(`/api/works/${workId}/advance`)
 }

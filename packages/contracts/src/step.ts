@@ -5,6 +5,8 @@ export const agentConfigSchema = z.object({
   systemPrompt: z.string().optional(),
   skills: z.array(z.string()).optional(),
   tools: z.array(z.string()).optional(),
+  // creative 步骤直出方向个数(#3c):默认 2,严格 1~3
+  directionCount: z.number().int().min(1).max(3).optional(),
 })
 
 export type AgentConfig = z.infer<typeof agentConfigSchema>

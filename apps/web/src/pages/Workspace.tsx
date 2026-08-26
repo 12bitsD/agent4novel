@@ -1,248 +1,73 @@
-import { useEffect, useState } from 'react'
-import type { PreprocessContent, WorkDetail } from '@agent4novel/contracts'
-import { inputStages, preprocessContentSchema } from '@agent4novel/contracts'
-import { approve, getWork, savePreprocess } from '../api.js'
-import { fieldStyle, removeAt, replaceAt, smallBtnStyle, tabStyle } from '../ui.js'
+import { useCallback, useEffect, useState } from 'react'
+import type { WorkView } from '@agent4novel/contracts'
+import { advance, getWork } from '../api.js'
+import { btnPrimary, btnSecondary, cardStyle } from '../ui.js'
 
-const STATUSES = ['idea', 'beat', 'prose'] as const
-type Status = (typeof STATUSES)[number]
-
-const STATUS_LABELS: Record<Status, string> = {
-  idea: 'idea',
-  beat: '章纲',
-  prose: '正文',
-}
-
-const EMPTY: PreprocessContent = {
-  inputStage: '脑洞',
-  hooks: [],
-  synopsis: [],
-  setting: [],
-  outline: [],
-}
-
-// 要点 hint（设定/大纲，对齐 schema.md「hint（粗）」）：标题 + 内容
-type Hint = { title: string; content: string }
-
-// 字符串要点列表编辑（卖点 / 梗概）：增、删、改
-function StringListEditor({
-  label,
-  items,
-  onChange,
-}: {
-  label: string
-  items: string[]
-  onChange: (items: string[]) => void
-}) {
-  return (
-    <section style={{ marginBottom: 16 }}>
-      <strong>{label}</strong>
-      {items.map((item, i) => (
-        <div key={i} style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'flex-start' }}>
-          <textarea
-            rows={2}
-            value={item}
-            onChange={(e) => onChange(replaceAt(items, i, e.target.value))}
-            style={fieldStyle}
-          />
-          <button onClick={() => onChange(removeAt(items, i))} style={smallBtnStyle}>
-            删除
-          </button>
-        </div>
-      ))}
-      <button onClick={() => onChange([...items, ''])} style={{ ...smallBtnStyle, marginTop: 8 }}>
-        ＋添加
-      </button>
-    </section>
-  )
-}
-
-// 要点 hint 列表编辑（设定 / 大纲）：增、删、改
-function HintListEditor({
-  label,
-  items,
-  onChange,
-}: {
-  label: string
-  items: Hint[]
-  onChange: (items: Hint[]) => void
-}) {
-  return (
-    <section style={{ marginBottom: 16 }}>
-      <strong>{label}</strong>
-      {items.map((item, i) => (
-        <div
-          key={i}
-          style={{ marginTop: 8, padding: 10, border: '1px solid #eee', borderRadius: 8 }}
-        >
-          <input
-            value={item.title}
-            placeholder="标题"
-            onChange={(e) => onChange(replaceAt(items, i, { ...item, title: e.target.value }))}
-            style={{ ...fieldStyle, marginBottom: 6 }}
-          />
-          <textarea
-            rows={3}
-            value={item.content}
-            placeholder="内容"
-            onChange={(e) => onChange(replaceAt(items, i, { ...item, content: e.target.value }))}
-            style={fieldStyle}
-          />
-          <button
-            onClick={() => onChange(removeAt(items, i))}
-            style={{ ...smallBtnStyle, marginTop: 6 }}
-          >
-            删除
-          </button>
-        </div>
-      ))}
-      <button
-        onClick={() => onChange([...items, { title: '', content: '' }])}
-        style={{ ...smallBtnStyle, marginTop: 8 }}
-      >
-        ＋添加
-      </button>
-    </section>
-  )
-}
-
+// 切片 2 的最小 Workspace:只渲染 server 读模型 + 触发生成;创意海报在切片 3 落地。
+// 状态机不在此重建——workflowState/allowedActions 全部来自 GET /works/:id 同快照。
 export default function Workspace({ workId, onBack }: { workId: string; onBack: () => void }) {
-  const [status, setStatus] = useState<Status>('idea')
-  const [work, setWork] = useState<WorkDetail | null>(null)
-  const [form, setForm] = useState<PreprocessContent>(EMPTY)
-  const [version, setVersion] = useState<number | null>(null)
-  const [humanStatus, setHumanStatus] = useState<string | null>(null)
+  const [work, setWork] = useState<WorkView | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [generating, setGenerating] = useState(false)
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     getWork(workId)
-      .then((w) => {
-        setWork(w)
-        const pp = w.artifacts.find((a) => a.kind === 'preprocess')
-        if (pp) {
-          const parsed = preprocessContentSchema.safeParse(pp.content)
-          if (parsed.success) setForm(parsed.data)
-          setVersion(pp.version)
-          setHumanStatus(pp.humanStatus)
-        }
-      })
+      .then(setWork)
       .catch((e) => setError(String(e)))
   }, [workId])
 
-  const save = async () => {
+  useEffect(refresh, [refresh])
+
+  const generate = async () => {
     setError(null)
-    setNotice(null)
+    setGenerating(true)
     try {
-      const artifact = await savePreprocess(workId, form)
-      setVersion(artifact.version)
-      setHumanStatus(artifact.humanStatus)
-      setNotice(`已保存（版本 ${artifact.version}）`)
+      await advance(workId)
+      refresh()
     } catch (err) {
       setError(String(err))
+    } finally {
+      setGenerating(false)
     }
   }
 
-  // 不编辑直接通过：过 preprocess 关卡
-  const approvePreprocess = async () => {
-    setError(null)
-    setNotice(null)
-    try {
-      await approve(workId, 'preprocess')
-      setHumanStatus('approved')
-      setNotice('已通过 preprocess 关卡')
-    } catch (err) {
-      setError(String(err))
-    }
-  }
+  const state = generating ? 'generating' : (work?.workflowState ?? 'ready-to-generate')
 
   return (
-    <main style={{ padding: 24, fontFamily: 'system-ui', maxWidth: 760 }}>
-      <button onClick={onBack} style={{ marginBottom: 16 }}>
+    <main style={{ padding: 24, maxWidth: 760 }}>
+      <button
+        onClick={onBack}
+        style={{ ...btnSecondary, padding: '4px 10px', fontSize: 13, marginBottom: 16 }}
+      >
         ← 返回书架
       </button>
       {work && <h1>{work.title}</h1>}
+      {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {STATUSES.map((s) => (
-          <button key={s} onClick={() => setStatus(s)} style={tabStyle(status === s)}>
-            {STATUS_LABELS[s]}
-          </button>
-        ))}
-      </div>
-      {error && <p style={{ color: 'crimson' }}>{error}</p>}
-
-      {status !== 'idea' ? (
-        <p style={{ color: '#999' }}>「{STATUS_LABELS[status]}」状态将在后续版本实现</p>
-      ) : (
-        <>
-          {work && (
-            <section
-              style={{ marginBottom: 16, padding: 12, background: '#fafafa', borderRadius: 8 }}
-            >
-              <strong style={{ color: '#666' }}>脑洞（seed）</strong>
-              <p style={{ whiteSpace: 'pre-wrap' }}>{work.seed}</p>
-            </section>
-          )}
-          <section style={{ marginBottom: 16 }}>
-            <strong>输入阶段（inputStage）</strong>
-            <select
-              value={form.inputStage}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  inputStage: e.target.value as PreprocessContent['inputStage'],
-                }))
-              }
-              style={{ ...fieldStyle, marginTop: 8, width: 'auto', display: 'block' }}
-            >
-              {inputStages.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </section>
-          <StringListEditor
-            label="卖点"
-            items={form.hooks}
-            onChange={(hooks) => setForm((p) => ({ ...p, hooks }))}
-          />
-          <StringListEditor
-            label="梗概"
-            items={form.synopsis}
-            onChange={(synopsis) => setForm((p) => ({ ...p, synopsis }))}
-          />
-          <HintListEditor
-            label="设定"
-            items={form.setting}
-            onChange={(setting) => setForm((p) => ({ ...p, setting }))}
-          />
-          <HintListEditor
-            label="大纲"
-            items={form.outline}
-            onChange={(outline) => setForm((p) => ({ ...p, outline }))}
-          />
-          <button onClick={save} style={{ padding: '10px 24px', fontSize: 15 }}>
-            保存
-          </button>
-          {humanStatus === 'pending' && (
-            <button
-              onClick={approvePreprocess}
-              style={{ marginLeft: 12, padding: '10px 24px', fontSize: 15 }}
-            >
-              通过
-            </button>
-          )}
-          {version !== null && (
-            <span style={{ marginLeft: 12, color: '#666' }}>
-              当前版本：{version}
-              {humanStatus !== null && `（${humanStatus === 'pending' ? '待把关' : '已通过'}）`}
-            </span>
-          )}
-          {notice && <span style={{ marginLeft: 12, color: '#2a7' }}>{notice}</span>}
-        </>
+      {work && (
+        <section style={{ ...cardStyle, marginBottom: 16, background: 'var(--bg-sunken)' }}>
+          <strong style={{ color: 'var(--ink-2)' }}>脑洞（seed）</strong>
+          <p style={{ whiteSpace: 'pre-wrap' }}>{work.seed}</p>
+        </section>
       )}
+
+      {(state === 'ready-to-generate' || state === 'failed') && (
+        <button onClick={generate} disabled={generating} style={btnPrimary}>
+          生成创意稿
+        </button>
+      )}
+      {state === 'generating' && <p style={{ color: 'var(--ink-2)' }}>正在提炼素材并生成创意稿……</p>}
+
+      {work?.artifacts.map((a) => (
+        <section key={a.id} style={{ ...cardStyle, marginTop: 16 }}>
+          <strong>
+            {a.kind}（版本 {a.version},{a.humanStatus === 'pending' ? '待把关' : '已通过'}）
+          </strong>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13, color: 'var(--ink-2)' }}>
+            {JSON.stringify(a.content, null, 2)}
+          </pre>
+        </section>
+      ))}
     </main>
   )
 }
