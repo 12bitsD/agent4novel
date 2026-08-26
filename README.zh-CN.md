@@ -112,7 +112,8 @@ pnpm build
 | [#2](https://github.com/12bitsD/agent4novel/issues/2) | 脚手架 + 存储 + pipeline 骨架 + 书架 | ✅ |
 | [#3](https://github.com/12bitsD/agent4novel/issues/3) | 统一入口 + 创作界面 idea 状态（人工链路） | ✅ |
 | [#10](https://github.com/12bitsD/agent4novel/issues/10) | 预处理 RealStep + interview + outline/setting 形态定案 | ✅ |
-| [#4](https://github.com/12bitsD/agent4novel/issues/4) | 大纲生成 | ◀ 下一个 |
+| [#11](https://github.com/12bitsD/agent4novel/issues/11) | 预处理重构：提炼稿 + 创意稿方向包 + 比较界面 | ◀ 下一个 |
+| [#4](https://github.com/12bitsD/agent4novel/issues/4) | 大纲生成 | |
 | [#5](https://github.com/12bitsD/agent4novel/issues/5) | 章纲/正文关卡 | |
 | [#6](https://github.com/12bitsD/agent4novel/issues/6) | 续写 + 作品详情 + router | |
 | [#7](https://github.com/12bitsD/agent4novel/issues/7) | Agent 配置（文风/题材/爽点） | |

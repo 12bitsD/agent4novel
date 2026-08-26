@@ -112,7 +112,8 @@ Every ticket runs the same loop: grill-to-align → wiki tech plan → TDD red/g
 | [#2](https://github.com/12bitsD/agent4novel/issues/2) | Scaffold + storage + pipeline skeleton + bookcase | ✅ |
 | [#3](https://github.com/12bitsD/agent4novel/issues/3) | Unified entry + workspace idea state (manual chain) | ✅ |
 | [#10](https://github.com/12bitsD/agent4novel/issues/10) | Preprocess RealStep + interview + outline/setting shapes | ✅ |
-| [#4](https://github.com/12bitsD/agent4novel/issues/4) | Outline generation | ◀ next |
+| [#11](https://github.com/12bitsD/agent4novel/issues/11) | Preprocess rework: caption + creative direction packs + compare view | ◀ next |
+| [#4](https://github.com/12bitsD/agent4novel/issues/4) | Outline generation | |
 | [#5](https://github.com/12bitsD/agent4novel/issues/5) | Beat/prose gates | |
 | [#6](https://github.com/12bitsD/agent4novel/issues/6) | Continue writing + work detail + router | |
 | [#7](https://github.com/12bitsD/agent4novel/issues/7) | Agent configuration (style / genre / payoffs) | |

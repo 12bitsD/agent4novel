@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。每个里程碑收尾时刷新本文件（最后更新：2026-08-26，#3b 闭环 @ 4ed74f9）。
+> 用途：context compaction / 新会话接力。每个里程碑收尾时刷新本文件（最后更新：2026-08-27，#3c grill 对齐完成，待实现）。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票 HOW 看 docs/wiki/NNNN-*.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。
 
 ## Primary Request and Intent
@@ -54,9 +54,9 @@
 
 ## 下一步
 
-**#4 大纲生成**（outline 形态的生成步骤实现；definition 加第二阶段，gateBefore preprocess 已 approved）。老规矩：先 grill 对齐 → wiki 技术方案 → 执行计划。
-后续队列：#5 章纲/正文关卡 → #6 续写+详情页+router → #7 Agent 配置 → #8 坏例 → #9 SQLite adapter。
+**#3c / issue #11 预处理重构**（wiki 011）：preprocess 拆为 caption（提炼稿，自动通过）→ creative（创意稿方向包 ×N，默认 2，比较界面选定=编辑即通过）两步。14 项决策已 grill 拍板，全部记录在 wiki 011「决策基线」——开工前只需细化技术方案与执行计划。#3b 的 interview 两阶段、SKILL.md、KnownError 等机制继承；preprocess 产物形态（inputStage + 四数组）作废。
+后续队列：#4 大纲生成（blocked by #11）→ #9 SQLite（**提前到 #5 之前**，正文产出前必须有持久化）→ #5 章纲/正文关卡 → #6 → #7 → #8。#12 = 优化项（失败重试/重新生成入口/渐进展示），低优，后续 grill。
 
 ## 环境
 
-git: GitHub 12bitsD/agent4novel（public），gh 已认证 12bitsD；git user linhao/bits12@163.com。node v25 / pnpm 10.33。端口 server 8787 / web 5173。`pnpm dev` 起两端；无 DEEPSEEK_API_KEY 时自动演示模式。
+git: GitHub 12bitsD/agent4novel（public），gh 已认证 12bitsD；git user Bits12(Mac)/bits12@163.com。node v25 / pnpm 10.33。端口 server 8787 / web 5173。`pnpm dev` 起两端；无 DEEPSEEK_API_KEY 时自动演示模式。
