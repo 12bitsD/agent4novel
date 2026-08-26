@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { seedCharBudget } from '@agent4novel/contracts'
 import { createWork, getConfig } from '../api.js'
 import type { AppConfig } from '../api.js'
 import { ACCEPTED_FILE_TYPES, parseFile } from '../file-parser.js'
@@ -6,8 +7,8 @@ import { btnPrimary, btnSecondary, fieldStyle } from '../ui.js'
 
 const mainFieldStyle: React.CSSProperties = { ...fieldStyle, padding: 12, fontSize: 15 }
 
-// 超长素材预提示(#3c 决策 17):截断统一收在 server prompt 组装处,前端只提前告知
-const SEED_WARN_CHARS = 100_000
+// 超长素材预提示(#3c 决策 17):截断统一收在 server prompt 组装处,前端只提前告知;budget 单源在 contracts
+const SEED_WARN_CHARS = seedCharBudget
 
 export default function Entry({
   onBack,

@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server'
 import { createApp } from './app.js'
+import { consumeGuards } from './pipeline/consume-guards.js'
 import { Pipeline } from './pipeline/pipeline.js'
 import type { ArtifactStep, PipelineDefinitionEntry } from './pipeline/pipeline.js'
 import { seed } from './seed.js'
@@ -24,7 +25,13 @@ const definition: PipelineDefinitionEntry[] = [
   { stepId: 'caption', outputKind: 'caption' },
   { stepId: 'creative', outputKind: 'creative', consumes: ['caption'], gateAfter: { kind: 'creative' } },
 ]
-const pipeline = new Pipeline({ store, steps, definition, resolveConfig: () => ({}) })
+const pipeline = new Pipeline({
+  store,
+  steps,
+  definition,
+  resolveConfig: () => ({}),
+  consumeGuards,
+})
 
 const app = createApp({ store, pipeline, meta: { demo } })
 

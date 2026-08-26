@@ -281,6 +281,40 @@ describe('Pipeline(#3c 链式 advance)', () => {
     ).toThrow(/consumes/)
   })
 
+  it('消费守卫:approved 但守卫不过的 creative 阻塞下游(advance → 不推进)', async () => {
+    // 用共享守卫(pipeline/consume-guards.ts):creative 必须恰好 1 方向
+    const { consumeGuards } = await import('../src/pipeline/consume-guards.js')
+    const store = new InMemoryStore()
+    const steps = new Map<string, ArtifactStep>([
+      ['caption', fakeStep('caption', { made: 'caption' })],
+      ['creative', fakeStep('creative', { made: 'creative' })],
+      ['outline', fakeStep('outline', 'ok')],
+    ])
+    const pipeline = new Pipeline({ store, steps, definition, resolveConfig: () => ({}), consumeGuards })
+    const w = store.createWork({ seed: 'x' })
+    await pipeline.advance(w.id)
+    // 模拟异常路径:2 方向的 creative 被标 approved(绕过了 select)
+    store.appendArtifact(w.id, 'creative', {
+      directions: [
+        {
+          directionId: 'd1', title: 'A', hook: 'h', tags: [], synopsis: 's',
+          characters: [], setting: [], payoffs: [], outline: [],
+        },
+        {
+          directionId: 'd2', title: 'B', hook: 'h', tags: [], synopsis: 's',
+          characters: [], setting: [], payoffs: [], outline: [],
+        },
+      ],
+    })
+    store.setStatus(w.id, 'creative', 'approved')
+    const state = pipeline.getState(w.id)
+    expect(state.stage).toBe('blocked')
+    expect(state.pendingGate?.kind).toBe('creative')
+    const r = await pipeline.advance(w.id)
+    expect(r.kind).toBe('awaiting-approval')
+    expect(store.getWork(w.id)!.artifacts.some((a) => a.kind === 'outline')).toBe(false)
+  })
+
   it('rejects a definition referencing an unregistered step', () => {
     const store = new InMemoryStore()
     const steps = new Map<string, ArtifactStep>([['a', fakeStep('a', 'x')]])

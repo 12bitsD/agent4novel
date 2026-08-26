@@ -50,10 +50,10 @@ export type WorkSummary = {
 
 export type WorkDetail = Work & { artifacts: Artifact[] }
 
-// 读模型(#3c):GET /works/:id 同快照附带,web 只渲染不重建状态机
+// 读模型(#3c):GET /works/:id 同快照附带,web 只渲染不重建状态机。
+// 注意:web 另有一个本地瞬态 'generating'(advance 请求在途),不属于本契约。
 export const workflowStates = [
   'ready-to-generate',
-  'generating',
   'awaiting-selection',
   'selected',
   'failed',

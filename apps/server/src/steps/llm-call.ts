@@ -1,17 +1,34 @@
+import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { generateObject } from 'ai'
+import { seedCharBudget } from '@agent4novel/contracts'
 import type { AgentConfig } from '@agent4novel/contracts'
 import type { z } from 'zod'
 import { KnownError } from '../errors.js'
 import { defaultModelId, registry } from './llm.js'
 
-// 超长素材统一截断点(#3c 决策 17):caption/creative 共用,按 deepseek-chat context window 定的保守 budget
-export const SEED_CHAR_BUDGET = 100_000
+// 提示词以文件维护(ADR-0002),各 step 一个目录,此处共享 loader,模块级缓存
+const skillCache = new Map<string, string>()
+export function loadSkill(stepId: string): string {
+  let text = skillCache.get(stepId)
+  if (!text) {
+    text = readFileSync(new URL(`./skills/${stepId}/SKILL.md`, import.meta.url), 'utf8')
+    skillCache.set(stepId, text)
+  }
+  return text
+}
+
+// 超长素材统一截断点(#3c 决策 17):caption/creative 共用;budget 单源在 contracts/limits.ts
 export function truncateSeed(seed: string): string {
-  return seed.length > SEED_CHAR_BUDGET ? seed.slice(0, SEED_CHAR_BUDGET) : seed
+  return seed.length > seedCharBudget ? seed.slice(0, seedCharBudget) : seed
+}
+
+function hash12(text: string): string {
+  return createHash('sha256').update(text).digest('hex').slice(0, 12)
 }
 
 // LLM 调用小帮手(#3c 决策 15/16):generateObject + zod + token 上限 + 超时;类型化错误。
-// 日志只记 attemptId/model/latency/token/finishReason,不落素材/prompt 全文。
+// 日志只记 attemptId/model/latency/token/finishReason/长度+hash,不落素材/prompt 全文。
 export async function callLlm<T>(args: {
   schema: z.ZodType<T>
   system: string
@@ -42,6 +59,7 @@ export async function callLlm<T>(args: {
         outputTokens: usage?.outputTokens,
         finishReason,
         promptChars: args.prompt.length,
+        promptHash: hash12(args.prompt),
       }),
     )
     return object
@@ -54,6 +72,8 @@ export async function callLlm<T>(args: {
         model,
         latencyMs: Date.now() - started,
         error: err instanceof Error ? err.name : String(err),
+        promptChars: args.prompt.length,
+        promptHash: hash12(args.prompt),
       }),
     )
     if (err instanceof KnownError) throw err

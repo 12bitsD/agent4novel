@@ -304,4 +304,51 @@ describe('creative flow(#3c 全链路)', () => {
     })
     expect(res.status).toBe(404)
   })
+
+  it('通用 approve 对 creative 关闭(只能走 select 选定单方向)', async () => {
+    const { store, app } = makeApp()
+    const w = store.createWork({ seed: 'x' })
+    await advance(app, w.id)
+    const res = await app.request(`/api/works/${w.id}/approve`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ kind: 'creative' }),
+    })
+    expect(res.status).toBe(409)
+    expect(((await res.json()) as { code: string }).code).toBe('direction-not-selected')
+  })
+
+  it('advance 失败后读模型产出 failed 态(可重试)', async () => {
+    const store = new InMemoryStore()
+    const flaky: ArtifactStep = {
+      id: 'creative',
+      inputSchema: fakeArtifactStep('x', null).step.inputSchema,
+      outputSchema: fakeArtifactStep('x', null).step.outputSchema,
+      async run() {
+        throw new Error('boom')
+      },
+    }
+    const definition: PipelineDefinitionEntry[] = [
+      { stepId: 'caption', outputKind: 'caption' },
+      { stepId: 'creative', outputKind: 'creative', consumes: ['caption'], gateAfter: { kind: 'creative' } },
+    ]
+    const pipeline = new Pipeline({
+      store,
+      steps: new Map<string, ArtifactStep>([
+        ['caption', fakeArtifactStep('caption', validCaption).step],
+        ['creative', flaky],
+      ]),
+      definition,
+      resolveConfig: () => ({}),
+    })
+    const app = createApp({ store, pipeline, meta: { demo: true } })
+    const w = store.createWork({ seed: 'x' })
+    await advance(app, w.id)
+    const view = (await (await app.request(`/api/works/${w.id}`)).json()) as {
+      workflowState: string
+      allowedActions: string[]
+    }
+    expect(view.workflowState).toBe('failed')
+    expect(view.allowedActions).toEqual(['generate'])
+  })
 })

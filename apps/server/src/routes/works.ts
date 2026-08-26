@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { z } from 'zod'
 import { artifactKinds, creativeContentSchema, perChapterKinds, perWorkKinds } from '@agent4novel/contracts'
-import type { ApiError, WorkflowState, WorkView } from '@agent4novel/contracts'
+import type { ApiError, ArtifactKind, WorkflowState, WorkView } from '@agent4novel/contracts'
 import type { Pipeline } from '../pipeline/pipeline.js'
 import { KnownError } from '../errors.js'
 import type { WorkStore } from '../store/work-store.js'
@@ -80,13 +80,36 @@ function routeError(c: Context, err: unknown): Response {
   return c.json(errorBody('internal', msg), 500)
 }
 
+// 乐观锁:expectedHeadVersion 必须等于当前 head,否则 409(#3c 决策 9)
+function assertHead(
+  c: Context,
+  store: WorkStore,
+  workId: string,
+  kind: ArtifactKind,
+  expected: number,
+): Response | null {
+  const head = store.headVersion(workId, kind)
+  if (head === undefined || head !== expected) {
+    return c.json(
+      errorBody('version-conflict', `head is ${head ?? 'none'}, expected ${expected}`),
+      409,
+    )
+  }
+  return null
+}
+
 // 读模型(#3c 决策 11):与 artifacts 同一快照派生,web 只渲染不重建状态机
-function workflowOf(state: ReturnType<Pipeline['getState']>): {
+function workflowOf(
+  state: ReturnType<Pipeline['getState']>,
+  failure: { stepId: string; code: string; retryable: boolean } | null,
+): {
   workflowState: WorkflowState
   allowedActions: string[]
 } {
   switch (state.stage) {
     case 'ready':
+      // 最近一次 advance 失败过 → failed(可重试,重试 = 同一 advance)
+      if (failure) return { workflowState: 'failed', allowedActions: ['generate'] }
       return { workflowState: 'ready-to-generate', allowedActions: ['generate'] }
     case 'awaiting-approval':
       return {
@@ -128,7 +151,10 @@ export function worksRoutes({ store, pipeline }: WorksRoutesDeps): Hono {
     const workId = c.req.param('id')
     const work = store.getWork(workId)
     if (!work) return c.json(errorBody('work-not-found', 'not found'), 404)
-    const view: WorkView = { ...work, ...workflowOf(pipeline.getState(workId)) }
+    const view: WorkView = {
+      ...work,
+      ...workflowOf(pipeline.getState(workId), pipeline.failureOf(workId)),
+    }
     return c.json(view)
   })
 
@@ -145,13 +171,8 @@ export function worksRoutes({ store, pipeline }: WorksRoutesDeps): Hono {
         422,
       )
     }
-    const head = store.headVersion(workId, 'creative')
-    if (head === undefined || head !== parsed.data.expectedHeadVersion) {
-      return c.json(
-        errorBody('version-conflict', `head is ${head ?? 'none'}, expected ${parsed.data.expectedHeadVersion}`),
-        409,
-      )
-    }
+    const conflict = assertHead(c, store, workId, 'creative', parsed.data.expectedHeadVersion)
+    if (conflict) return conflict
     const artifact = store.appendArtifact(workId, 'creative', parsed.data.content)
     return c.json(artifact)
   })
@@ -170,13 +191,8 @@ export function worksRoutes({ store, pipeline }: WorksRoutesDeps): Hono {
         400,
       )
     }
-    const head = store.headVersion(workId, 'creative')
-    if (head === undefined || head !== parsed.data.expectedHeadVersion) {
-      return c.json(
-        errorBody('version-conflict', `head is ${head ?? 'none'}, expected ${parsed.data.expectedHeadVersion}`),
-        409,
-      )
-    }
+    const conflict = assertHead(c, store, workId, 'creative', parsed.data.expectedHeadVersion)
+    if (conflict) return conflict
     const current = work.artifacts.find((a) => a.kind === 'creative')
     const content = creativeContentSchema.safeParse(current?.content)
     if (!current || !content.success) {
@@ -197,14 +213,24 @@ export function worksRoutes({ store, pipeline }: WorksRoutesDeps): Hono {
   // advance = 推进到下一个关卡(链式);返回可穷举 outcome
   app.post('/api/works/:id/advance', async (c) => {
     const workId = c.req.param('id')
+    const requestId = crypto.randomUUID()
     const started = Date.now()
     try {
       const outcome = await pipeline.advance(workId)
       console.log(
-        JSON.stringify({ event: 'pipeline.advance', workId, outcome: outcome.kind, latencyMs: Date.now() - started }),
+        JSON.stringify({
+          event: 'pipeline.advance',
+          requestId,
+          workId,
+          outcome: outcome.kind,
+          latencyMs: Date.now() - started,
+        }),
       )
       return c.json(outcome)
     } catch (err) {
+      if (err instanceof KnownError && err.code === 'advance-in-progress') {
+        console.log(JSON.stringify({ event: 'pipeline.lock-conflict', requestId, workId }))
+      }
       return routeError(c, err)
     }
   })
@@ -217,6 +243,16 @@ export function worksRoutes({ store, pipeline }: WorksRoutesDeps): Hono {
       return c.json(
         { ...errorBody('invalid-input', 'invalid input'), issues: parsed.error.issues },
         400,
+      )
+    }
+    // creative 的「通过」只能走 select(恰好 1 方向);通用 approve 对它关闭
+    if (parsed.data.kind === 'creative') {
+      return c.json(
+        errorBody(
+          'direction-not-selected',
+          'creative must be approved via POST .../artifacts/creative/select',
+        ),
+        409,
       )
     }
     try {

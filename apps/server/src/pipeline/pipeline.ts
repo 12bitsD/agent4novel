@@ -58,6 +58,9 @@ export type PipelineDeps = {
   steps: Map<string, ArtifactStep>
   definition: PipelineDefinitionEntry[]
   resolveConfig: (workId: string, stepId: string) => AgentConfig
+  // 消费守卫(#3c):consumes 的上游产物除了「最新版 approved」还要过领域校验,
+  // 由装配处(index.ts)按 kind 注入,pipeline 保持泛型。守卫抛错 = 该产物不算数。
+  consumeGuards?: Partial<Record<ArtifactKind, (content: JsonValue) => void>>
 }
 
 export class Pipeline {
@@ -65,14 +68,18 @@ export class Pipeline {
   private steps: Map<string, ArtifactStep>
   private definition: PipelineDefinitionEntry[]
   private resolveConfig: (workId: string, stepId: string) => AgentConfig
+  private consumeGuards: Partial<Record<ArtifactKind, (content: JsonValue) => void>>
   // per-work 内存互斥锁(#3c):并发 advance → 409 advance-in-progress;真正事务/lease 归 #9
   private advancing = new Set<string>()
+  // 最近一次 advance 失败(供读模型 'failed' 态);成功推进或到达关卡即清除
+  private lastFailure = new Map<string, { stepId: string; code: string; retryable: boolean }>()
 
   constructor(deps: PipelineDeps) {
     this.store = deps.store
     this.steps = deps.steps
     this.definition = deps.definition
     this.resolveConfig = deps.resolveConfig
+    this.consumeGuards = deps.consumeGuards ?? {}
 
     const ids = new Set(this.definition.map((d) => d.stepId))
     if (ids.size !== this.definition.length) {
@@ -105,11 +112,11 @@ export class Pipeline {
     for (const entry of this.definition) {
       const out = latest.get(`${entry.outputKind}:`)
       if (!out) {
-        // 上游最新版不是 approved → 本步不可跑(下游不推进)
+        // 上游最新版必须 approved 且过消费守卫,否则本步不可跑(下游不推进)
         if (entry.consumes) {
           for (const dep of entry.consumes) {
             const upstream = latest.get(`${dep}:`)
-            if (!upstream || upstream.humanStatus !== 'approved') {
+            if (!upstream || upstream.humanStatus !== 'approved' || !this.guardOk(dep, upstream)) {
               return {
                 workId,
                 stage: 'blocked',
@@ -169,6 +176,11 @@ export class Pipeline {
           await this.runEntry(workId, entry)
         } catch (err) {
           const known = err instanceof KnownError ? err : null
+          this.lastFailure.set(workId, {
+            stepId: entry.stepId,
+            code: known?.code ?? 'llm-unavailable',
+            retryable: known?.retryable ?? true,
+          })
           return {
             kind: 'failed',
             stepId: entry.stepId,
@@ -178,6 +190,7 @@ export class Pipeline {
             state: this.getState(workId),
           }
         }
+        this.lastFailure.delete(workId)
         lastStepId = entry.stepId
         if (entry.gateAfter) {
           return { kind: 'advanced', stepId: entry.stepId, state: this.getState(workId) }
@@ -190,6 +203,22 @@ export class Pipeline {
     }
   }
 
+  // 读模型用:最近一次失败(无 → null)。审批等人工动作也会清掉它
+  failureOf(workId: string): { stepId: string; code: string; retryable: boolean } | null {
+    return this.lastFailure.get(workId) ?? null
+  }
+
+  private guardOk(kind: ArtifactKind, artifact: Artifact): boolean {
+    const guard = this.consumeGuards[kind]
+    if (!guard) return true
+    try {
+      guard(artifact.content)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   private async runEntry(workId: string, entry: PipelineDefinitionEntry): Promise<void> {
     const step = this.steps.get(entry.stepId)!
     const config = this.resolveConfig(workId, entry.stepId)
@@ -197,16 +226,38 @@ export class Pipeline {
     const upstream: Record<string, JsonValue> = {}
     for (const dep of entry.consumes ?? []) {
       const a = work.artifacts.find((x) => x.kind === dep)
-      if (a) upstream[dep] = a.content
+      if (a) {
+        const guard = this.consumeGuards[dep]
+        if (guard) guard(a.content) // 守卫抛错(如 direction-not-selected)→ 由 advance 收敛为 failed
+        upstream[dep] = a.content
+      }
     }
     const output = await runStep(step, { workId, seed: work.seed, upstream }, config)
-    this.store.appendArtifact(workId, entry.outputKind, output.content)
+    const artifact = this.store.appendArtifact(workId, entry.outputKind, output.content)
     if (!entry.gateAfter) {
       this.store.setStatus(workId, entry.outputKind, 'approved')
     }
+    // 谱系(决策 19):消费的上游版本号记运行日志,不进 artifact 字段
+    const consumed = Object.fromEntries(
+      (entry.consumes ?? [])
+        .map((dep) => [dep, work.artifacts.find((x) => x.kind === dep)?.version])
+        .filter(([, v]) => v !== undefined),
+    )
+    console.log(
+      JSON.stringify({
+        event: 'pipeline.step',
+        workId,
+        stepId: entry.stepId,
+        outputKind: entry.outputKind,
+        outputVersion: artifact.version,
+        consumed,
+        seedChars: work.seed.length,
+      }),
+    )
   }
 
   approve(workId: string, kind: ArtifactKind, chapter?: number): void {
     this.store.setStatus(workId, kind, 'approved', chapter !== undefined ? { chapter } : undefined)
+    this.lastFailure.delete(workId)
   }
 }

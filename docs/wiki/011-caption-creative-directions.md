@@ -155,3 +155,4 @@ definition:
 - 2026-08-27(grill 第二轮):推翻 fan-out 改单次直出;interview 整体移除;consumes + 链式 advance;创意海报 v2;新立 #13 设定完整版(block #5);#9 提前至 #5 前。队列:#3c → #4 → #13 → #9 → #5。
 - 2026-08-27(技术方案 V0 → 评审 → V1):26 条评审裁决落地(见「评审留痕」),方案定稿,待执行计划。
 - 2026-08-27(**已落地**):4 切片执行完毕——切片 0 全应用多巴胺设计系统(styles.css 亮暗双主题 token,用户追加需求);切片 1 contracts 增量;切片 2 server 切换(consumes/链式 advance/互斥锁/两命令/读模型/类型化错误)+ web 最小迁移;切片 3 创意海报 + creative-compare 纯映射;切片 4 删 preprocess + 文档同步。96 测试三端绿,演示模式 E2E 冒烟通过(创建→advance 链式→保存→选定→刷新→stale 409)。真模型 SKILL.md 效果未验,待有 key 后迭代。commits: ff2f06d / d68ae12 / 收尾。
+- 2026-08-27(**评审修复**):两轴 code-review 后修复——① 消费守卫落地(`pipeline/consume-guards.ts`,creative 被消费时恰好 1 方向,生产/测试同源;通用 /approve 对 creative 关闭 409);② 读模型接通 `failed` 态(pipeline 记 lastFailure,approve/成功清除;`generating` 移出契约,纯 web 本地瞬态);③ 可观测性补齐(advance 加 requestId + 锁冲突日志,llm 日志加 promptHash,谱系 consumed 版本号入 pipeline.step 日志);④ 截断预算单源入 contracts/limits.ts;⑤ 抽 assertHead / 共享 loadSkill / fake flavors 简化。99 测试绿。

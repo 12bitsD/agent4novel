@@ -1,21 +1,11 @@
-import { readFileSync } from 'node:fs'
 import { captionContentSchema } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
 import type { AgentConfig, CaptionContent } from '@agent4novel/contracts'
 import type { ArtifactStep } from '../pipeline/pipeline.js'
 import { creativeLlmOutputSchema, creativeStepInputSchema, creativeStepOutputSchema } from './creative-io.js'
-import { callLlm, truncateSeed } from './llm-call.js'
+import { callLlm, loadSkill, truncateSeed } from './llm-call.js'
 
 export const DEFAULT_DIRECTION_COUNT = 2
-
-// 提示词以文件维护(ADR-0002),模块级缓存
-let skillCache: string | undefined
-function loadSkill(): string {
-  if (!skillCache) {
-    skillCache = readFileSync(new URL('./skills/creative/SKILL.md', import.meta.url), 'utf8')
-  }
-  return skillCache
-}
 
 // 文案协议以 skills/creative/SKILL.md「输入(user prompt)格式」节为准(ADR-0002),此处只做数据插值
 function buildPrompt(input: { seed: string; caption: CaptionContent }, count: number): string {
@@ -40,7 +30,7 @@ export function createCreativeStep(): ArtifactStep {
       )
       const raw = await callLlm({
         schema: creativeLlmOutputSchema,
-        system: loadSkill(),
+        system: loadSkill('creative'),
         prompt: buildPrompt({ seed: input.seed, caption }, count),
         config,
         stepId: 'creative',
