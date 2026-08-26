@@ -114,11 +114,12 @@ Every ticket runs the same loop: grill-to-align → wiki tech plan → TDD red/g
 | [#10](https://github.com/12bitsD/agent4novel/issues/10) | Preprocess RealStep + interview + outline/setting shapes | ✅ |
 | [#11](https://github.com/12bitsD/agent4novel/issues/11) | Preprocess rework: caption + creative direction packs + compare view | ◀ next |
 | [#4](https://github.com/12bitsD/agent4novel/issues/4) | Outline generation | |
+| [#13](https://github.com/12bitsD/agent4novel/issues/13) | Setting generation (full version) | |
+| [#9](https://github.com/12bitsD/agent4novel/issues/9) | SQLite persistence (before #5: prose must survive restarts) | |
 | [#5](https://github.com/12bitsD/agent4novel/issues/5) | Beat/prose gates | |
 | [#6](https://github.com/12bitsD/agent4novel/issues/6) | Continue writing + work detail + router | |
 | [#7](https://github.com/12bitsD/agent4novel/issues/7) | Agent configuration (style / genre / payoffs) | |
 | [#8](https://github.com/12bitsD/agent4novel/issues/8) | Bad-example collection | |
-| [#9](https://github.com/12bitsD/agent4novel/issues/9) | SQLite persistence | |
 
 ---
 
