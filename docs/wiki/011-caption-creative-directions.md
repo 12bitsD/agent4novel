@@ -1,6 +1,6 @@
 # 011 预处理重构:Caption + Creative 方向包 + 比较界面(#3c)
 
-> Ticket: [#11](https://github.com/12bitsD/agent4novel/issues/11) · Spec: [#1](https://github.com/12bitsD/agent4novel/issues/1) · 状态:已对齐,待执行计划
+> Ticket: [#11](https://github.com/12bitsD/agent4novel/issues/11) · Spec: [#1](https://github.com/12bitsD/agent4novel/issues/1) · 状态:技术方案 V1 已评审,待执行计划
 
 ## 实现目的
 
@@ -12,101 +12,145 @@
 
 本票把 preprocess 重构为两步:**caption(理解层,提炼稿,自动通过)→ creative(生成层,N 个创意稿,比较视图关卡)**,并把方向比较展示给作者。
 
-## 决策基线(grill 2026-08-27 拍板,两轮)
+## 阶段假设(评审 #19/#20 驳回的依据)
 
-| # | 决策 | 结论 | Why |
-|---|---|---|---|
-| 1 | 流程结构 | caption 步骤 → creative 步骤,pipeline definition 两项,零新基建 | 理解/生成分层;理解错误在最便宜的点可纠正 |
-| 2 | caption 关卡 | **不设关卡**,落库即 approved,不直接展示(仅比较视图里折叠「素材理解」只读区) | 作者见到的第一个产物是创意稿;减少一次点击 |
-| 3 | interview | **机制整体移除**(definition interview 项、awaiting-interview 状态、answer-interview 路由、Entry 问答表单全删) | 识别>回忆:对不会写作的作者,看两个创意稿做选择比答 3-5 个问题门槛低;缺口由「比较选定+编辑+#12 重新生成」覆盖 |
-| 4 | creative 生成 | **单次调用直出 N 个创意稿**(prompt = caption + 原始素材) | 创意稿是 hint 级产物,单次输出能力内;差异化在同一上下文里最强;比 fan-out 快近一半、实现最简。fan-out/sub-agent 模式留给 #5/#6 按章生成 |
-| 5 | 方向个数 | `AgentConfig.directionCount`,默认 **2**,提示词插值;schema 校验 1~3 | 产品参数进配置(AgentConfig 第一个住户) |
-| 6 | Creative 字段 | title / hook / tags / synopsis / characters / setting / payoffs / outline,**全 hint 级** | 装「选方向所需 + 下游种子」,不装细版 |
-| 7 | 步骤间传递 | definition 条目加 **`consumes`** 显式声明;输入统一**从 store 读最新 approved**;产出即 await 落库;**advance = 推进到下一个关卡**(无关卡步骤链式执行) | 单一输入路径(内存直传与重启恢复同一条);crash-safe;存储耗时占比 <0.01%,延迟预算花在并发/prompt/流式 |
-| 8 | 比较视图 | 创作界面内**全页「创意海报」**:tab 带方向名切换、编辑本地缓存、脏时浮动「保存」pill(双包落库 pending)、底部浮动细条「就按这个方向写 →」(单包落库 approved) | 浏览与选定分离——选定是流程动作(approved→解锁大纲),不能由 tab 点击隐式触发 |
-| 9 | 选定机制 | 编辑即通过的细化:**creative 多包保存 = pending,单包保存 = approved**;被放弃的包留版本链 | 零新状态字段;后悔药在数据层免费 |
-| 10 | approve 校验 | creative 被消费时恰好 1 包,校验在消费方输入组装处,不满足抛 KnownError → 400 | store 不感知形状的原则不破 |
-| 11 | 中间态 | 阻塞 + loading(创作界面直达比较视图) | 本地单用户可接受;渐进展示留优化项 |
-| 12 | 数据模型 | preprocess kind 拆为 **caption + creative** 两个 kind(5 节点 → 6 节点) | schema.md 同步 |
-| 13 | 领域词 | Caption = **提炼稿**,Creative = **创意稿**(已进 CONTEXT.md) | 词汇红线 |
-| 14 | 版本回看 | MVP 不做;选定在 UI 层是单向门,选定动作带确认提示;回退能力随 #6 详情页 | 范围控制;版本链数据层已支持 |
-| 15 | 超长素材 | caption 输入硬截 **100K 字符** + UI 告知 | 覆盖 99% 场景;分段提炼记优化项 |
-| 16 | 生成触发 | Entry 提交即自动 advance,创作界面 loading 直达比较视图 | 沿用现状,减少一次点击 |
-| 17 | directionCount UI | v1 只做配置项默认值,不暴露 UI | UI 归 #7 Agent 配置 |
+**当前存储生命周期等同于进程生命周期,无持久化数据、外部用户或跨版本兼容要求;迁移与回滚机制推迟至 #9 引入 SQLite 时设计。** #9 之后的 schema 变更必须走 expand → migrate → contract。
+
+## 决策基线(grill 2026-08-27 两轮 + 方案评审)
+
+| # | 决策 | 结论 |
+|---|---|---|
+| 1 | 流程结构 | caption 步骤 → creative 步骤,pipeline definition 两项,零新基建 |
+| 2 | caption 关卡 | 不设关卡,落库即 approved,不直接展示(仅比较视图折叠「素材理解」只读区) |
+| 3 | interview | **机制整体移除**(definition 项、awaiting-interview、answer-interview 路由、Entry 问答表单) |
+| 4 | creative 生成 | **单次调用直出 N 个创意稿**(`generateObject` structured output);fan-out 留给 #5/#6 按章生成 |
+| 5 | 方向个数 | `AgentConfig.directionCount` 默认 2,范围 1~3;**生成时严格校验 `directions.length === directionCount`**,Fake 与 Real 同一校验 |
+| 6 | Creative 字段 | title / hook / tags / synopsis / characters / setting / payoffs / outline,全 hint 级;**逐字段 trim/非空/长度/数量上限 + strict()**;各域 hint schema 分别导出(不公共化) |
+| 7 | 步骤间传递 | definition 加 `consumes`(只能指向前序产物,启动校验唯一性/禁环);读**最新版本且必须 approved**(最新版 pending 时 stage=awaiting-approval,下游不推进);产出即落库;**advance = 推进到下一个关卡**(链式,循环上限 = definition 长度) |
+| 8 | 方向标识 | server 在生成落库时为每个方向注入稳定 **`directionId`**;tab key 与 select 目标均用它(标题可重名、下标可变,不作标识) |
+| 9 | 保存与选定 | **两个命令**:`saveCreativeDraft`(永远 pending,存全部方向)+ `selectCreativeDirection`(显式 approved 单方向);均携带 `expectedHeadVersion`,stale → 409;保存/选定期间 UI 互斥禁用 |
+| 10 | 比较视图 | 全页「创意海报 v2」:tab 带方向名、编辑本地缓存、脏时浮动保存 pill、底部选定细条(确认提示)、折叠素材理解区;a11y 最低要求(原生 button tab + aria + 焦点管理) |
+| 11 | 读模型 | `GET /works/:id` 响应扩展 **`workflowState` + `allowedActions`**(与 artifacts 同一快照);不拆独立 /state 路由(高频轮询或响应过大时再拆) |
+| 12 | 失败与重试 | **重试进 #3c**:同输入、同幂等、从失败 step 恢复(caption 已成功不重跑——stage 派生自 artifact 天然成立);**重新生成(带补充想法)留 #12**;Entry 失败后必须能进 Workspace |
+| 13 | advance 并发 | per-work 内存互斥锁(**finally 清理**),并发 → 409 `advance-in-progress`;真正事务/lease 归 #9 |
+| 14 | advance 返回 | 可穷举 outcome:`advanced | awaiting-approval | complete | failed(stepId, code, retryable, attemptId)`;complete 后重复调用 = no-op |
+| 15 | LLM 调用 | `generateObject` + zod(淘汰剥围栏+JSON.parse);显式 token 上限 + timeout + AbortSignal;类型化错误(invalid-output / unavailable / timeout) |
+| 16 | HTTP 错误 | `{code, retryable, attemptId, message}`;依赖未就绪/版本冲突 409,内容非法 400/422,模型输出非法 502,不可用/超时 503/504 |
+| 17 | 超长素材 | seed 不可变即 snapshot(不另加元结构);**截断统一收在 prompt 组装一处**(caption/creative 共用),按模型 context window 定 budget;前端只做预提示 |
+| 18 | PipelineInput | `upstream` 保持 JsonValue(pipeline 泛型);**类型精确性由各 step 的 inputSchema 在边界严格恢复**(runStep 的本职);seed 是所有步骤的固有输入,不占 consumes |
+| 19 | 谱系 | 消费的上游版本号记运行日志,不进 artifact 字段 |
+| 20 | 可观测性 | 结构化 JSON console 日志(不引库):requestId/workId/stepId/attemptId/model、latency、输入输出 token、finish reason、错误分类、锁冲突;**不落素材/prompt/正文全文**,只记长度与 hash |
+| 21 | 版本回看 | MVP 不做,选定动作带确认提示;能力随 #6 详情页 |
+| 22 | 领域词 | 提炼稿(caption)/ 创意稿(creative),已进 CONTEXT.md |
+| 23 | 触发时机 | Entry 只创建作品并跳创作界面;**advance 由 Workspace 触发**(避免 Entry 请求挂 30~60s 两次 LLM 调用) |
+| 24 | directionCount UI | v1 只做配置项默认值,UI 归 #7 |
 
 ## 明确不做
 
-- 跨包混搭不做结构化支持(选定后编辑 + 版本链取回;「爽点和设定不在一个方向上」是低频作者级操作)
-- 图片输入(caption 先只吃文本;多模态是 caption 步骤的未来落点)
-- 失败重试策略、重新生成入口(带补充想法输入框)、渐进展示 → issue [#12](https://github.com/12bitsD/agent4novel/issues/12)
-- 版本回看 UI(决策 14,随 #6)
-- 超长素材分段提炼再合并(决策 15 的优化路径,记 #12)
-- directionCount 配置 UI(决策 17,随 #7)
+- 跨包混搭结构化支持(选定后编辑 + 版本链取回)
+- 图片输入(caption 先只吃文本;多模态是未来落点)
+- 重新生成入口(带补充想法)、渐进展示、分段提炼、版本回看 UI → [#12](https://github.com/12bitsD/agent4novel/issues/12) / #6
+- 迁移/回滚机制(见「阶段假设」)
+- directionCount 配置 UI(#7)
 
-## 技术方案
+## 技术方案 V1
+
+### 现状锚点(commit `fc9667a`)
+
+- pipeline stage **派生自 artifact 状态**,不持久化;artifact **append-only 版本链**,`getWork` 返回各 bucket **最新版本**
+- definition 仅 preprocess 一项;`advance` 一次一步;interview 瞬态在 `pendingInterviews` Map
+- `PUT /artifacts/preprocess` 人工保存即 approved;web:Entry 问答流、Workspace idea 视图四数组编辑
 
 ### 链路
 
 ```
-Entry 提交(txt/md/docx/pdf 解析文本,>100K 字符截断+告知)
-  → advance(推进到下一关卡,链式执行):
-    ① caption 步骤:素材 → 提炼稿,落库即 approved
-    ② creative 步骤:单次调用(caption + 原始素材)→ N 个创意稿
-       gateAfter → 落库 pending
-  → 创作界面:创意海报比较视图
-    保存 pill = 双包新版本 pending;「就按这个方向写 →」= 单包 approved
-  → #4 大纲步骤解锁(consumes: ['creative'],输入组装校验恰好 1 包)
+Entry 提交 → POST /works(只创建) → 跳创作界面 → Workspace 触发 advance(链式):
+  ① caption 步骤:素材(截断) → 提炼稿,落库即 approved
+  ② creative 步骤:单次 generateObject(caption + 素材 + directionCount)
+     → 注入 directionId → 落库 pending(gateAfter)
+→ 创意海报比较视图
+   保存 pill = saveCreativeDraft(全部方向,pending)
+   「就按这个方向写 →」= selectCreativeDirection(directionId, 单方向 approved)
+→ #4 解锁(consumes:['creative'],组装校验恰好 1 方向)
 ```
 
-### contracts
+definition:
 
-- `preprocess.ts` 拆为 `caption.ts` + `creative.ts`;`preprocessContentSchema`、interview 相关 schema(questions/answer)删除
-- **captionSchema**:`{ inputStage: '脑洞|设定|主线|模板', summary: string, elements: Hint[], gaps: string[] }`(Hint = `{title, content}` 复用)
-- **creativeSchema**:`{ title, hook, tags: string[], synopsis, characters: Hint[], setting: Hint[], payoffs: string[], outline: Hint[] }`;creative 产物 = `{ directions: creativeSchema[] }`(长度 1~3)
-- `agentConfigSchema` 加 `directionCount: z.number().int().min(1).max(3).optional()`
+```ts
+[
+  { stepId: 'caption', outputKind: 'caption' },
+  { stepId: 'creative', outputKind: 'creative', consumes: ['caption'], gateAfter: { kind: 'creative' } },
+]
+// 构造时校验:stepId/outputKind 唯一、consumes 只指前序 outputKind、禁自依赖与环
+```
+
+### contracts(packages/contracts)
+
+- 新增 `caption.ts`:`captionContentSchema = { inputStage, summary, elements: captionElementSchema[], gaps: string[] }`(inputStages 迁入)
+- 新增 `creative.ts`:`creativePackSchema = { directionId, title, hook, tags[], synopsis, characters: characterHintSchema[], setting: settingHintSchema[], payoffs[], outline: outlineHintSchema[] }`;`creativeContentSchema = { directions: pack[].min(1).max(3) }`;各域 hint schema 独立导出(今日同形 `{title, content}`,演进自由)
+- 全部 object `.strict()`;字符串 trim + 非空 + 长度上限;数组数量上限;tags 唯一
+- 改 `artifacts.ts`:preprocess → caption + creative(6 节点)
+- 改 `step.ts`:`agentConfigSchema += directionCount: int 1~3 optional`
+- 删 `preprocess.ts`(含 interview schema)
 
 ### server
 
-- **pipeline**:`PipelineDefinitionEntry` 加 `consumes?: ArtifactKind[]`;删 `interview` 项与 `pendingInterviews` 瞬态、`awaiting-interview` 状态、`answerInterview`;`advance()` 改为循环推进(无关卡步骤链式执行,产出即落库,遇 gateAfter/complete 停);`PipelineStage` 移除 `awaiting-interview`
-- **步骤**:`steps/caption/`(SKILL.md + step)+ `steps/creative/`(SKILL.md + step)替换 `steps/preprocess*`;creative step = 单次 generateText(prompt 插值 directionCount、caption、素材)→ JSON.parse 剥围栏 → zod 校验
-- **路由**:删 `answer-interview`;`PUT /api/works/:id/artifacts/preprocess` → `PUT .../artifacts/creative`(保存时按包数定状态:>1 包 pending,=1 包 approved);approve/advance 保留;`/api/config` 去掉 interview 字段
-- **FakeStep**:caption fake(固定提炼稿)+ creative fake(两个固定创意稿),演示模式与测试全 fake 不联网
-- `seed.ts` 演示数据同步新形态
+- **pipeline.ts**:definition 加 `consumes` + 启动校验;删 interview 机制;`advance()` 链式循环(上限 = definition 长度)+ per-work 互斥锁(finally 清理,冲突 → `advance-in-progress`);返回可穷举 outcome;consumes 注入 = 读最新版且必须 approved
+- **steps/**:`caption/`、`creative/` 替换 `preprocess*`;io 契约同源(Real/Fake);`generateObject` + timeout/AbortSignal;类型化 LLM 错误;creative 输出校验 `directions.length === directionCount` 后注入 directionId
+- **fake-step.ts**:caption/creative 两个 fake;Fake 按 config.directionCount 确定性生成 N 个方向
+- **routes/works.ts**:
+  - 删 `answer-interview`
+  - `PUT /api/works/:id/artifacts/creative` = saveCreativeDraft(body: content + `expectedHeadVersion`;**永远 pending**)
+  - `POST /api/works/:id/artifacts/creative/select` = selectCreativeDirection(body: `{directionId, expectedHeadVersion}`;落单方向新版本 + approved)
+  - `GET /api/works/:id` 扩展 `workflowState + allowedActions`(同快照派生)
+  - 错误统一 `{code, retryable, attemptId, message}` + 409/422/502/503 映射
+- `/api/config` → `{ demo }`;`index.ts` 装配两步;`seed.ts` 同步新形态
+- 结构化 JSON 日志(字段见决策 20)
 
 ### web
 
-- **比较视图**(创作界面内,creative pending 时):tab(带方向名)切换 / 编辑本地缓存 / 脏时浮动保存 pill / 底部「就按这个方向写 →」(带确认提示)/ 折叠「素材理解」只读区
-- **创意海报排版**:tag/爽点 chip 化、hook 引号焦点、synopsis 段落、人物卡片横排、设定词条式、主线箭头链
-- Entry:删问答表单,提交后跳创作界面自动 advance(loading)
-- idea 视图改为单包详情视图(选定后可编辑)
+- **api.ts**:删 answerInterview;`saveCreativeDraft` / `selectCreativeDirection`;DTO 对齐(workflowState/allowedActions、错误形)
+- **Entry.tsx**:删问答流;只创建 + 跳转;>100K 字符预提示
+- **Workspace.tsx**:只渲染 server 读模型(`ready-to-generate | generating | awaiting-selection | selected | failed` + allowedActions),不重建状态机;`ready-to-generate`/`failed` 给「生成创意稿」按钮(重试 = 同一 advance)
+- **CreativePoster.tsx**:海报排版(tags/payoffs chip、hook 焦点、synopsis 段落、characters 卡片、setting 词条、outline 箭头链);编辑全本地缓存;保存 pill 与选定细条互斥禁用;409 时保留 dirty edits 并提示
+- **纯状态/command 映射抽离**(如 `creative-compare.ts`):tab↔directionId 绑定、保存全部方向、选定当前方向、409 保留 dirty——**纯函数 + vitest 覆盖,不引浏览器 E2E**
 
-### 形状不变量(schema.md 同步)
+### 测试策略
 
-- caption / creative:per-work,`chapter` 必须为 undefined
-- creative approved 时 `directions` 恰好 1(消费方输入组装校验)
+| 层 | 覆盖点 |
+|---|---|
+| contracts | caption/creative 收/拒(长度/数量/strict);directionCount 边界 |
+| pipeline | 链式 advance;consumes 注入与「最新 pending 不推进」;并发 advance 409;complete no-op;非法 definition 启动失败;directionCount=1 仍需显式 select |
+| steps | creative prompt 含素材+caption+directionCount;数量严格校验;类型化错误;Fake 按 N 出包 |
+| app(HTTP E2E) | 创建→advance→比较→编辑保存→选定→刷新仍 selected;caption 成功 creative 失败 → 重试只跑 creative;stale version 409;interview 零残留 |
+| web(vitest) | creative-compare 纯映射:tab↔directionId、保存全部、选定、409 保 dirty |
 
-## 测试策略
+### 实施顺序(红绿切片)
 
-- seam 不变:store / step 两个接缝;FakeStep 按新结构出样例
-- 覆盖点:caption 自动通过(落库 approved);creative 单次调用产出双包(schema 校验);directionCount 插值与 1~3 校验;consumes 输入组装(creative 拿到 caption 内容;directions ≠ 1 → 400);保存规则(双包 pending / 单包 approved);advance 链式推进到关卡;旧 interview 路径零残留
+1. contracts 增量(caption.ts/creative.ts/directionCount;preprocess 暂留)+ 测试
+2. server 切换 + web 最小编译修复(**同一切片,内部顺序:server/fake → 新 route/读模型 → web 最小迁移 → 联合测试;切片结束双绿**,内部 commit 不单独部署)
+3. web 创意海报 + creative-compare 纯映射与测试
+4. 收尾:删 preprocess 残留、schema.md 6 节点、README/CONTEXT 扫尾
 
-## 实施顺序(红绿切片)
+### 边界与错误
 
-1. contracts:caption/creative schema + AgentConfig.directionCount + 测试
-2. server pipeline:consumes + 链式 advance + interview 机制拆除 + 测试
-3. server steps:caption/creative(Real + Fake)+ SKILL.md ×2 + 测试
-4. 路由与 config:PUT creative(包数定状态)、删 answer-interview、/api/config 瘦身 + app 测试
-5. web:Entry 简化 + 比较视图(创意海报)+ 单包详情 + api.ts 对齐
-6. schema.md / CONTEXT.md / README / seed.ts 收尾同步
+- creative 消费时 directions ≠ 1 → 409 `direction-not-selected`
+- 并发 advance → 409 `advance-in-progress`;保存/选定 stale → 409 `version-conflict`(web 保留 dirty edits)
+- 素材 >100K 字符 → prompt 组装处统一截断 + Entry 预提示
+- LLM 非法输出 502 / 超时 504 / 不可用 503;advance outcome `failed` 带 retryable
+- caption 成功后 creative 失败 → 重试只跑 creative(stage 派生天然成立)
 
-## 边界与错误
+## 评审留痕(V0 → V1,2026-08-27)
 
-- creative 消费时 directions ≠ 1 → KnownError → 400「请先选定一个方向」
-- 素材 >100K 字符 → 截断 + UI 告知
-- creative 单包时「保存」pill 行为 = approved(规则一致)
-- 模型输出脏 JSON / schema 不符 → 步骤失败 500 兜底(现状模式;重试入口归 #12)
+评审 26 条:**采用 24(其中 7 条轻量化裁剪),驳回 2**。
+
+- **驳回 #19(preprocess 存量迁移)/ #20(旧 workflow 状态迁移)**:阶段假设不成立——存储生命周期 = 进程生命周期,无存量、无外部用户;迁移与回滚机制推迟至 #9 设计,此后 schema 变更走 expand → migrate → contract
+- **轻量化**:#2 SourceSnapshot 元结构(seed 不可变即 snapshot)/ #6 consumes 版本措辞(机制实为最新版必须 approved)/ #7 seed 为固有输入、谱系走日志 / #8 PipelineInput 宽度(类型在 step inputSchema 边界恢复)/ #9 completion policy 保持缺省 auto / #13 内存级互斥锁(事务归 #9)/ #24 不引日志库
+- **评审后两项调整**:#17 读模型不拆 /state 路由,扩展 getWork 同响应(同快照);#21 不能只测 HTTP 层——抽纯状态/command 映射用 vitest 覆盖 tab/directionId/保存/选定/409 等 Web 风险
+- **修正**:per-work 互斥锁 finally 清理 + 明确 409 code;采用计数 24/7/2
 
 ## 状态记录
 
-- 2026-08-27(grill 第一轮):方向包化方案对齐(14 项决策),issue #11 建立,#4 改挂 blocked by #11,#12 装优化项。
-- 2026-08-27(grill 第二轮,深化修订):**推翻** LLM tool-call fan-out(4/6/7 项)——创意稿 hint 级,单次调用直出更快、差异化更强、实现更简,fan-out 留给 #5/#6;interview 从「挂 caption」改为**机制整体移除**;步骤间传递定案 consumes + 统一读 store + 链式 advance;比较视图定案「创意海报 v2」;保存规则细化(多包 pending/单包 approved);新增版本回看挂账(14)、超长截断(15)、设定完整版 gap → issue #13(block #5)。队列修订:#3c → #4 → #13 → #9 → #5。
+- 2026-08-27(grill 第一轮):方向包化方案对齐,issue #11 建立,#4 改挂 blocked by #11,#12 装优化项。
+- 2026-08-27(grill 第二轮):推翻 fan-out 改单次直出;interview 整体移除;consumes + 链式 advance;创意海报 v2;新立 #13 设定完整版(block #5);#9 提前至 #5 前。队列:#3c → #4 → #13 → #9 → #5。
+- 2026-08-27(技术方案 V0 → 评审 → V1):26 条评审裁决落地(见「评审留痕」),方案定稿,待执行计划。

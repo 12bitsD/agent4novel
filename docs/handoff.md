@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。每个里程碑收尾时刷新本文件（最后更新：2026-08-27，#3c grill 对齐完成，待实现）。
+> 用途：context compaction / 新会话接力。每个里程碑收尾时刷新本文件（最后更新：2026-08-27，#3c 技术方案 V1 评审定稿，待执行计划）。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票 HOW 看 docs/wiki/NNNN-*.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。
 
 ## Primary Request and Intent
@@ -54,7 +54,7 @@
 
 ## 下一步
 
-**#3c / issue #11 预处理重构**（wiki 011，grill 两轮已收敛，17 项决策在「决策基线」）：preprocess 拆为 caption（提炼稿，自动通过）→ creative（单次调用直出 N 个创意稿，比较视图「创意海报」选定）两步；interview 机制整体移除；pipeline 加 consumes + 链式 advance。技术方案与切片顺序已细化，下一步直接进执行计划（plan mode）。
+**#3c / issue #11 预处理重构**（wiki 011，技术方案 V1 已评审定稿：grill 两轮收敛 + 26 条评审裁决——采用 24 含 7 轻量化、驳回 2 迁移项，留痕在 wiki）：preprocess 拆为 caption（提炼稿，自动通过）→ creative（单次 generateObject 直出 N 个创意稿，比较视图「创意海报」保存/选定两命令 + directionId + expectedHeadVersion）两步；interview 机制整体移除；pipeline 加 consumes + 链式 advance + per-work 互斥锁；读模型 workflowState/allowedActions 并入 GET /works/:id。下一步直接进执行计划（plan mode）。
 后续队列：#4 大纲 → **#13 设定完整版**（#3c grill 发现的 gap，block #5）→ #9 SQLite（提前到 #5 前）→ #5 章纲/正文关卡 → #6 → #7 → #8。#12 = 优化项（失败重试/重新生成/渐进展示/分段提炼/版本回看），低优。
 
 ## 环境
