@@ -27,7 +27,7 @@
 
 小说创作长期是手工作坊式的活计：一个作者，一支笔，几十万字一点点磨。agent4novel 想把它搬进一条现代流水线——AI 像一支随叫随到的编辑团队，负责补设定、排大纲、写正文；你是唯一的主编：故事方向你定，每道关卡你审。混沌的灵感进去，结构严谨的长篇出来。
 
-它面向「有想法但没受过写作训练」的作者。你给它一句话脑洞（或一份设定文档），它先反过来问你几个关键问题，然后一环一环地生成：卖点与梗概、全书大纲、每章的章纲、每章的正文。工具完全在本地运行，单用户、开源，数据不出你自己的电脑。
+它面向「有想法但没受过写作训练」的作者。你给它一句话脑洞（或一份设定文档），它先提炼素材、给出几个创意方向供你比较选定，然后一环一环地生成：全书大纲、每章的章纲、每章的正文。工具完全在本地运行，单用户、开源，数据不出你自己的电脑。
 
 ## 快速开始
 
@@ -113,8 +113,8 @@ pnpm build
 | [#3](https://github.com/12bitsD/agent4novel/issues/3) | 统一入口 + 创作界面 idea 状态（人工链路） | ✅ |
 | [#10](https://github.com/12bitsD/agent4novel/issues/10) | 预处理 RealStep + interview + outline/setting 形态定案 | ✅ |
 | [#11](https://github.com/12bitsD/agent4novel/issues/11) | 预处理重构：提炼稿 + 创意稿方向包 + 比较视图 | ✅ |
-| [#4](https://github.com/12bitsD/agent4novel/issues/4) | 大纲生成 | ◀ 下一个 |
-| [#13](https://github.com/12bitsD/agent4novel/issues/13) | 设定完整版生成 | |
+| [#4](https://github.com/12bitsD/agent4novel/issues/4) | 大纲生成：弧线 + 剧情点(两层,与章节解耦) | ✅ |
+| [#13](https://github.com/12bitsD/agent4novel/issues/13) | 设定完整版生成 | ◀ 下一个 |
 | [#9](https://github.com/12bitsD/agent4novel/issues/9) | SQLite 持久化（提前到 #5 前：正文产出必须扛得住重启） | |
 | [#5](https://github.com/12bitsD/agent4novel/issues/5) | 章纲/正文关卡 | |
 | [#6](https://github.com/12bitsD/agent4novel/issues/6) | 续写 + 作品详情 + router | |

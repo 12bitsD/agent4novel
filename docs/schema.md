@@ -10,7 +10,7 @@ agent4novel 的领域数据模型。代码英文 id ↔ 领域中文词（见 [C
 |---|---|---|
 | `caption` | 提炼稿（#3c）：`{inputStage（脑洞/设定/主线/模板）, summary, elements:[{kind,content}], gaps[]}`；理解层产物，落库即 approved，不设关卡 | 每作品一份 |
 | `creative` | 创意稿（#3c）：`{directions:[方向包 ×N]}`，方向包 = `directionId + title + hook + tags[] + synopsis + characters[] + setting[] + payoffs[] + outline[]`（全 hint 级）；N=directionCount（默认 2，严格 1~3）；选定时落**单方向**新版本 | 每作品一份 |
-| `outline` | 大纲完整版：`{chapters:[{number,title,summary}]}`（分章无卷；场景/冲突/钩子归 beat 层） | 每作品一份 |
+| `outline` | 大纲（#4，两层，与章节解耦）：`{arcs:[{arcId, title, conflict, development, resolution, segments:[{segmentId, title, summary, outcome}]}]}`；弧线 3~8、每弧剧情点 2~8；`arcId`/`segmentId` 由 server 注入；章数不在本层（归 #5） | 每作品一份 |
 | `setting` | 设定完整版：`{worldview, powerSystem, factions:[{name,description}], characters:[{name,role,motivation,profile}], extra?}` | 每作品一份 |
 | `beat` | 章纲 | 每作品 × 每章一份 |
 | `prose` | 正文 | 每作品 × 每章一份 |
@@ -57,5 +57,5 @@ Artifact = {
 
 - `appendArtifact` 追加新版本（version+1），旧版本保留，可回退/对比
 - `humanStatus` 语义：`pending` = 待作者把关（关卡中）；`approved` = 已通过
-- 人工保存语义分节点（#3c）：caption 落库即 `approved`（无关卡）；creative 保存草稿 = 新版本 + `pending`（`saveCreativeDraft`），显式选定方向 = 单方向新版本 + `approved`（`selectCreativeDirection`）；后续节点的人工保存策略随各票定
+- 人工保存语义分节点：caption 落库即 `approved`（无关卡）；creative 保存草稿 = 新版本 + `pending`（`saveCreativeDraft`），显式选定方向 = 单方向新版本 + `approved`（`selectCreativeDirection`）；outline（#4）保存草稿 = 新版本 + `pending`（`saveOutlineDraft`，新增弧线/剧情点的 id 由 server 补注入），通过 = 通用 `/approve`；后续节点的人工保存策略随各票定
 - 关卡在步骤边界：`gateAfter` 的步骤产出后置 `pending` 等 approve；`gateBefore` 的步骤要求目标产物已 `approved`；`consumes` 的上游产物读最新版且必须 `approved`

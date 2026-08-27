@@ -1,6 +1,6 @@
 # 004 — 大纲生成:弧线 + 剧情点两层结构(#4)
 
-> Ticket: [#4](https://github.com/12bitsD/agent4novel/issues/4) · Spec: [#1](https://github.com/12bitsD/agent4novel/issues/1) · 状态:方案 V1 已定稿(grill 对齐),待实现
+> Ticket: [#4](https://github.com/12bitsD/agent4novel/issues/4) · Spec: [#1](https://github.com/12bitsD/agent4novel/issues/1) · 状态:✅ 已落地(2026-08-28)
 
 ## 实现目的
 
@@ -145,3 +145,4 @@ definition:
 
 - 2026-08-28(grill):推翻 #3b「分章每章一句话」旧基线,确立「与章节解耦的两层结构」;16 项决策收敛(见决策基线)。命名撞车记录:beats 撞章纲 beat、爽点撞 creative payoffs,定 **弧线/剧情点**。隐形关系显式化:弧线改动级联剧情点,v1 轻提示,级联重生成归 #12。
 - 2026-08-28(方案 V1):技术方案起草定稿,issue #4 AC 同步改写,待 /plan 执行。
+- 2026-08-28(**已落地**):3 切片执行(切片 1+2 合并提交——contracts 破坏性变更与 server 切换天然耦合,单个绿提交)。演示模式 curl 全链路冒烟通过(创建→advance→select→advance→outline pending→保存补 id→approve→outline-approved)。124 测试绿(contracts 35 / server 65 / web 24)。顺手修复:README 双语残留的 interview 文案(#3c 清漏)。真模型 SKILL.md 效果未验,待有 key 后迭代。commits: 8897cd9(切片 1+2)/ 2aa61a2(切片 3)/ 收尾。

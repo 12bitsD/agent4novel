@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。每个里程碑收尾时刷新本文件（最后更新：2026-08-27，#3c 已落地，下一票 #4）。
+> 用途：context compaction / 新会话接力。每个里程碑收尾时刷新本文件（最后更新：2026-08-28，#4 已落地，下一票 #13）。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票 HOW 看 docs/wiki/NNNN-*.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。
 
 ## Primary Request and Intent
@@ -18,6 +18,7 @@
 - **#3a** 统一入口（启动界面：输入+上传 txt/md/docx/pdf）+ 创作界面 idea 状态（wiki 003）
 - **#3b / issue #10** 预处理 RealStep + outline/setting 形态对齐（wiki 010 ✅；其 interview 机制已被 #3c 移除）
 - **#3c / issue #11** 预处理重构（wiki 011 ✅）：caption（提炼稿，落库即 approved）→ creative（单次 generateObject 直出 N 个创意稿，gateAfter = 创意海报比较视图）；保存/选定两命令；interview 机制整体移除；全应用多巴胺设计系统（亮暗双主题）
+- **#4** 大纲生成（wiki 004 ✅）：**推翻「分章每章一句话」**，大纲 = 弧线（冲突生命周期：标题/核心冲突/冲突发展/矛盾解决）+ 剧情点（标题/概要/落点）两层，与章节解耦；选定创意稿后 web 自动续跑 advance；保存 = pending + 通用 /approve 通过；读模型 5 态（selected 移除，加 awaiting-outline-review/outline-approved）
 
 ## 关键架构与契约（不能丢）
 
@@ -26,11 +27,11 @@
 - **6 节点 kind**：caption/creative/outline/setting 每作品一份；beat/prose 每作品×每章。Artifact.content: JsonValue；humanStatus: pending | approved；appendArtifact 版本 +1。
 - **creative 保存语义**（#3c 起，取代「人工保存即通过」）：`PUT /artifacts/creative` = saveCreativeDraft，存全部方向、永远 pending、带 `expectedHeadVersion` 乐观锁；`POST /artifacts/creative/select` = selectCreativeDirection，落**单方向**新版本 + approved。`directionId` 由 server 注入（`${workId}-dir-N`），web 永不生成、编辑不可改。
 - **pipeline（#3c）**：definition 加 `consumes`（只指前序 outputKind，启动校验唯一/禁环）；`PipelineInput = {workId, seed, upstream}`，upstream 读**最新版且必须 approved**；`advance()` 链式推进到下一个关卡（上限 = definition 长度），per-work 互斥锁（finally 释放，冲突 → 409 `advance-in-progress`），返回可穷举 outcome `advanced | awaiting-approval | complete | failed(stepId, code, retryable, attemptId)`；interview 机制零残留。
-- **读模型**：`GET /works/:id` 同快照附带 `workflowState`（ready-to-generate | awaiting-selection | selected | failed；`generating` 是 web 本地瞬态，不入契约）+ `allowedActions`，web 只渲染不重建状态机。`failed` 由 pipeline `lastFailure` 驱动，approve/成功清除。
+- **读模型**：`GET /works/:id` 同快照附带 `workflowState`（ready-to-generate | awaiting-selection | awaiting-outline-review | outline-approved | failed；`generating` 是 web 本地瞬态，不入契约）+ `allowedActions`，按 `pendingGate.kind` 分派，web 只渲染不重建状态机。`failed` 由 pipeline `lastFailure` 驱动，approve/成功清除。
 - **LLM 调用**：`steps/llm-call.ts` 统一 generateObject + zod + maxTokens + AbortSignal 超时 + 类型化错误（llm-invalid-output→502 / llm-unavailable→503 / llm-timeout→504）；素材 >100K 字符截断收在这一处；`steps/llm.ts` 唯一感知 provider。
 - **错误**：HTTP 统一 `{code, retryable, attemptId, message}`；409 = advance-in-progress / version-conflict / direction-not-selected，422 内容非法。
 - **web 设计系统**（#3c）：`apps/web/src/styles.css` 唯一全局面，亮暗双主题 CSS 变量（prefers-color-scheme + data-theme 预留）；多巴胺在点缀层（主 CTA 珊瑚 accent，方向 tab 珊瑚/紫/青轮转，chip 用强调色），底色纸白/墨黑极简；**内联样式只许 var(--*)，禁硬编码色值**。创意海报风险面抽纯函数 `web/src/creative-compare.ts`（tab↔directionId、保存全部、选定、409 保 dirty），vitest 覆盖，无浏览器 E2E。
-- 栈：pnpm workspaces + TS E2E、Vite+React(5173 /api proxy)、Hono(8787)、zod、Vitest、tsx、AI SDK v7 + @ai-sdk/deepseek。测试 99 绿（contracts 29 / server 56 / web 14）。
+- 栈：pnpm workspaces + TS E2E、Vite+React(5173 /api proxy)、Hono(8787)、zod、Vitest、tsx、AI SDK v7 + @ai-sdk/deepseek。测试 124 绿（contracts 35 / server 65 / web 24）。
 
 ## 词汇红线（CONTEXT.md 单源）
 
@@ -57,8 +58,8 @@
 
 ## 下一步
 
-**#4 大纲生成（创意稿 → 弧线 + 剧情点）**（wiki 004 已定稿，issue #4 AC 已改写，待 /plan 实现）：两层结构与章节解耦；`consumes:['creative']` + gateAfter；选定后 web 自动 advance；保存 pending + 通用 /approve 通过；读模型加 awaiting-outline-review / outline-approved（移除 selected）。
-后续队列：#4 → **#13 设定完整版**（block #5）→ #9 SQLite（提前到 #5 前）→ #5 章纲/正文关卡 → #6 → #7 → #8。#12 = 优化项（失败重试已随 #3c 进主干，剩重新生成/渐进展示/分段提炼/版本回看），低优。
+**#13 设定完整版生成（创意稿 → setting 定稿）**（wiki 待建；issue #13，blocked by #11 已解除）：consumes creative（+caption?），生成 `{worldview, powerSystem, factions[], characters[], extra?}`，可 review/编辑/保存；block #5。
+后续队列：**#13** → #9 SQLite（提前到 #5 前）→ #5 章纲/正文关卡（输入 = 剧情点切片 + 章数规划）→ #6 → #7 → #8。#12 = 优化项（重新生成/渐进展示/版本回看/弧线级联重生成），低优。
 
 ## 环境
 

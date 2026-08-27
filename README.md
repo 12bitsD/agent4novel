@@ -27,7 +27,7 @@
 
 Novel writing has long been a cottage craft: one author, one pen, hundreds of thousands of characters ground out word by word. agent4novel moves it onto a modern assembly line — the AI works like an on-call editorial team, filling out worldbuilding, structuring the outline, writing chapters; you are the editor-in-chief: the direction is yours, and every gate needs your sign-off. Raw inspiration goes in; a finished book comes out.
 
-It is built for authors who have ideas but no writing training. Give it a one-line idea (or an uploaded setting doc); it asks a few key questions back, then generates ring by ring: hooks and synopsis, the book outline, each chapter's beat sheet, each chapter's prose. Everything runs locally — single-user, open source, and your data never leaves your machine.
+It is built for authors who have ideas but no writing training. Give it a one-line idea (or an uploaded setting doc); it distills the material and offers a few creative directions for you to compare and pick, then generates ring by ring: the book outline, each chapter's beat sheet, each chapter's prose. Everything runs locally — single-user, open source, and your data never leaves your machine.
 
 ## Quick start
 
@@ -113,8 +113,8 @@ Every ticket runs the same loop: grill-to-align → wiki tech plan → TDD red/g
 | [#3](https://github.com/12bitsD/agent4novel/issues/3) | Unified entry + workspace idea state (manual chain) | ✅ |
 | [#10](https://github.com/12bitsD/agent4novel/issues/10) | Preprocess RealStep + interview + outline/setting shapes | ✅ |
 | [#11](https://github.com/12bitsD/agent4novel/issues/11) | Preprocess rework: caption + creative direction packs + compare view | ✅ |
-| [#4](https://github.com/12bitsD/agent4novel/issues/4) | Outline generation | ◀ next |
-| [#13](https://github.com/12bitsD/agent4novel/issues/13) | Setting generation (full version) | |
+| [#4](https://github.com/12bitsD/agent4novel/issues/4) | Outline: arcs + segments (two-level, chapter-free) | ✅ |
+| [#13](https://github.com/12bitsD/agent4novel/issues/13) | Setting generation (full version) | ◀ next |
 | [#9](https://github.com/12bitsD/agent4novel/issues/9) | SQLite persistence (before #5: prose must survive restarts) | |
 | [#5](https://github.com/12bitsD/agent4novel/issues/5) | Beat/prose gates | |
 | [#6](https://github.com/12bitsD/agent4novel/issues/6) | Continue writing + work detail + router | |
