@@ -126,14 +126,17 @@ export default function CreativePoster({
   caption,
   readonly,
   onChanged,
+  onSelected,
 }: {
   workId: string
   content: CreativeContent
   headVersion: number
   caption: CaptionContent | null
-  /** selected 态:只读展示选定方向 */
+  /** 只读展示(当前链路选定后即离开海报,保留给未来回溯场景) */
   readonly: boolean
   onChanged: () => void
+  /** 选定成功后调用(#4:Workspace 借此自动续跑 advance 生成大纲) */
+  onSelected?: () => void
 }) {
   const [s, setS] = useState<CompareState>(() => initCompare(content, headVersion))
   const [captionOpen, setCaptionOpen] = useState(false)
@@ -173,7 +176,9 @@ export default function CreativePoster({
       }
       await selectCreativeDirection(workId, next.activeId, head)
       setS((cur) => selectSucceeded(cur))
-      onChanged()
+      // #4 决策 10:选定后自动续跑 advance(由 Workspace 触发);无钩子则只刷新
+      if (onSelected) onSelected()
+      else onChanged()
     } catch (err) {
       const code = (err as { code?: string })?.code
       setS((cur) => commandFailed(cur, code ?? String(err)))

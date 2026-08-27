@@ -1,6 +1,8 @@
 import type {
   Artifact,
+  ArtifactKind,
   CreativeContent,
+  OutlineDraft,
   Work,
   WorkSummary,
   WorkView,
@@ -78,4 +80,22 @@ export function selectCreativeDirection(
 
 export function advance(workId: string): Promise<AdvanceOutcomeDto> {
   return post<AdvanceOutcomeDto>(`/api/works/${workId}/advance`)
+}
+
+// saveOutlineDraft(#4):保存大纲草稿(新项无 id,server 补注入),永远 pending;乐观锁同上
+export function saveOutlineDraft(
+  workId: string,
+  content: OutlineDraft,
+  expectedHeadVersion: number,
+): Promise<Artifact> {
+  return request<Artifact>(`/api/works/${workId}/artifacts/outline`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, expectedHeadVersion }),
+  })
+}
+
+// 通用「通过」(#4 起 outline 走这里;creative 被 server 拒绝,只能走 select)
+export function approveArtifact(workId: string, kind: ArtifactKind): Promise<unknown> {
+  return post<unknown>(`/api/works/${workId}/approve`, { kind })
 }
