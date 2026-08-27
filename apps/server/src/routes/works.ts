@@ -1,8 +1,15 @@
 import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { z } from 'zod'
-import { artifactKinds, creativeContentSchema, perChapterKinds, perWorkKinds } from '@agent4novel/contracts'
-import type { ApiError, ArtifactKind, WorkflowState, WorkView } from '@agent4novel/contracts'
+import {
+  artifactKinds,
+  creativeContentSchema,
+  outlineContentSchema,
+  outlineDraftSchema,
+  perChapterKinds,
+  perWorkKinds,
+} from '@agent4novel/contracts'
+import type { ApiError, ArtifactKind, OutlineContent, OutlineDraft, WorkflowState, WorkView } from '@agent4novel/contracts'
 import type { Pipeline } from '../pipeline/pipeline.js'
 import { KnownError } from '../errors.js'
 import type { WorkStore } from '../store/work-store.js'
@@ -23,6 +30,30 @@ const selectCreativeSchema = z.object({
   directionId: z.string().min(1),
   expectedHeadVersion: z.number().int().min(1),
 })
+
+// saveOutlineDraft(#4):保存草稿,永远 pending;id 可缺省(新增项),server 规整时补注入
+const saveOutlineSchema = z.object({
+  content: outlineDraftSchema,
+  expectedHeadVersion: z.number().int().min(1),
+})
+
+// id 规整(#4 决策 6):已有 id 保留(上下移/编辑不动标识),新项(无 id)补注入随机后缀避免位置碰撞
+function normalizeOutlineIds(workId: string, draft: OutlineDraft): OutlineContent {
+  const content = {
+    arcs: draft.arcs.map((arc) => {
+      const arcId = arc.arcId ?? `${workId}-arc-${crypto.randomUUID().slice(0, 8)}`
+      return {
+        ...arc,
+        arcId,
+        segments: arc.segments.map((seg) => ({
+          ...seg,
+          segmentId: seg.segmentId ?? `${arcId}-seg-${crypto.randomUUID().slice(0, 8)}`,
+        })),
+      }
+    }),
+  }
+  return outlineContentSchema.parse(content)
+}
 
 const approveBodySchema = z
   .object({
@@ -98,7 +129,7 @@ function assertHead(
   return null
 }
 
-// 读模型(#3c 决策 11):与 artifacts 同一快照派生,web 只渲染不重建状态机
+// 读模型(#3c 决策 11,#4 按 pendingGate.kind 分派):与 artifacts 同一快照派生,web 只渲染不重建状态机
 function workflowOf(
   state: ReturnType<Pipeline['getState']>,
   failure: { stepId: string; code: string; retryable: boolean } | null,
@@ -112,12 +143,15 @@ function workflowOf(
       if (failure) return { workflowState: 'failed', allowedActions: ['generate'] }
       return { workflowState: 'ready-to-generate', allowedActions: ['generate'] }
     case 'awaiting-approval':
+      if (state.pendingGate?.kind === 'outline') {
+        return { workflowState: 'awaiting-outline-review', allowedActions: ['save-draft', 'approve'] }
+      }
       return {
         workflowState: 'awaiting-selection',
         allowedActions: ['save-draft', 'select', 'generate'],
       }
     case 'complete':
-      return { workflowState: 'selected', allowedActions: ['save-draft'] }
+      return { workflowState: 'outline-approved', allowedActions: ['save-draft'] }
     case 'blocked':
       return { workflowState: 'ready-to-generate', allowedActions: [] }
   }
@@ -207,6 +241,29 @@ export function worksRoutes({ store, pipeline }: WorksRoutesDeps): Hono {
     }
     const artifact = store.appendArtifact(workId, 'creative', { directions: [pack] })
     store.setStatus(workId, 'creative', 'approved')
+    return c.json(artifact)
+  })
+
+  // saveOutlineDraft(#4):保存大纲草稿,永远 pending;「通过」走通用 /approve
+  app.put('/api/works/:id/artifacts/outline', async (c) => {
+    const workId = c.req.param('id')
+    if (!store.getWork(workId)) return c.json(errorBody('work-not-found', 'not found'), 404)
+    const body = await readJsonBody(c)
+    if (!body.ok) return body.response
+    const parsed = saveOutlineSchema.safeParse(body.data)
+    if (!parsed.success) {
+      return c.json(
+        { ...errorBody('invalid-content', 'invalid content'), issues: parsed.error.issues },
+        422,
+      )
+    }
+    const conflict = assertHead(c, store, workId, 'outline', parsed.data.expectedHeadVersion)
+    if (conflict) return conflict
+    const artifact = store.appendArtifact(
+      workId,
+      'outline',
+      normalizeOutlineIds(workId, parsed.data.content),
+    )
     return c.json(artifact)
   })
 

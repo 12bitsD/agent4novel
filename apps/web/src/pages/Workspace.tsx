@@ -47,7 +47,7 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
 
   const state = generating ? 'generating' : (work?.workflowState ?? 'ready-to-generate')
   const showPoster =
-    (work?.workflowState === 'awaiting-selection' || work?.workflowState === 'selected') &&
+    work?.workflowState === 'awaiting-selection' &&
     creative !== null &&
     creativeArtifact !== undefined
 
@@ -84,7 +84,7 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
           content={creative as CreativeContent}
           headVersion={creativeArtifact.version}
           caption={caption}
-          readonly={work!.workflowState === 'selected'}
+          readonly={false}
           onChanged={refresh}
         />
       )}

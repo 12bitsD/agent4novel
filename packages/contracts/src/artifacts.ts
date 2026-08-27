@@ -50,12 +50,14 @@ export type WorkSummary = {
 
 export type WorkDetail = Work & { artifacts: Artifact[] }
 
-// 读模型(#3c):GET /works/:id 同快照附带,web 只渲染不重建状态机。
+// 读模型(#3c / #4):GET /works/:id 同快照附带,web 只渲染不重建状态机。
 // 注意:web 另有一个本地瞬态 'generating'(advance 请求在途),不属于本契约。
+// #4:随 outline 关卡加入,按 pendingGate.kind 分派;'selected' 在 3 项 definition 下不可达,已移除。
 export const workflowStates = [
   'ready-to-generate',
   'awaiting-selection',
-  'selected',
+  'awaiting-outline-review',
+  'outline-approved',
   'failed',
 ] as const
 export type WorkflowState = (typeof workflowStates)[number]

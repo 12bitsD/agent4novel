@@ -3,6 +3,7 @@ import { createApp } from '../src/app.js'
 import { seed } from '../src/seed.js'
 import { InMemoryStore } from '../src/store/in-memory-store.js'
 import { Pipeline } from '../src/pipeline/pipeline.js'
+import { consumeGuards } from '../src/pipeline/consume-guards.js'
 import type { ArtifactStep, PipelineDefinitionEntry } from '../src/pipeline/pipeline.js'
 import type { AgentConfig } from '@agent4novel/contracts'
 import { fakeArtifactStep } from './fakes.js'
@@ -32,27 +33,49 @@ function pack(directionId: string, title = '方向A') {
 
 const validCreative = { directions: [pack('work-1-dir-1'), pack('work-1-dir-2', '方向B')] }
 
-// 与生产装配同形:store + pipeline(caption 无关卡 → creative gateAfter)+ meta
+function arc(id: string) {
+  return {
+    arcId: id,
+    title: `弧线${id}`,
+    conflict: '核心冲突',
+    development: '冲突发展',
+    resolution: '矛盾解决与收束局势',
+    segments: [1, 2].map((j) => ({
+      segmentId: `${id}-seg-${j}`,
+      title: `剧情点${j}`,
+      summary: '本段发生什么',
+      outcome: '本段结束后的局势',
+    })),
+  }
+}
+
+const validOutline = { arcs: [arc('w-arc-1'), arc('w-arc-2'), arc('w-arc-3')] }
+
+// 与生产装配同形:store + pipeline(caption → creative gateAfter → outline gateAfter)+ consumeGuards + meta
 function makeApp(opts?: { demo?: boolean; config?: AgentConfig }) {
   const store = new InMemoryStore()
   const caption = fakeArtifactStep('caption', validCaption)
   const creative = fakeArtifactStep('creative', validCreative)
+  const outline = fakeArtifactStep('outline', validOutline)
   const steps = new Map<string, ArtifactStep>([
     ['caption', caption.step],
     ['creative', creative.step],
+    ['outline', outline.step],
   ])
   const definition: PipelineDefinitionEntry[] = [
     { stepId: 'caption', outputKind: 'caption' },
     { stepId: 'creative', outputKind: 'creative', consumes: ['caption'], gateAfter: { kind: 'creative' } },
+    { stepId: 'outline', outputKind: 'outline', consumes: ['creative'], gateAfter: { kind: 'outline' } },
   ]
   const pipeline = new Pipeline({
     store,
     steps,
     definition,
     resolveConfig: () => opts?.config ?? {},
+    consumeGuards,
   })
   const app = createApp({ store, pipeline, meta: { demo: opts?.demo ?? true } })
-  return { store, app, seen: { caption: caption.seen, creative: creative.seen } }
+  return { store, app, seen: { caption: caption.seen, creative: creative.seen, outline: outline.seen } }
 }
 
 async function advance(app: ReturnType<typeof createApp>, workId: string) {
@@ -216,11 +239,13 @@ describe('creative flow(#3c 全链路)', () => {
     expect(a.humanStatus).toBe('approved')
     expect(a.content.directions).toHaveLength(1)
 
-    // 刷新仍在选定态
+    // #4:选定后 definition 未到终点(outline 待生成)→ 读模型回到 ready-to-generate('selected' 态已移除)
     const view = (await (await app.request(`/api/works/${w.id}`)).json()) as {
       workflowState: string
+      allowedActions: string[]
     }
-    expect(view.workflowState).toBe('selected')
+    expect(view.workflowState).toBe('ready-to-generate')
+    expect(view.allowedActions).toEqual(['generate'])
   })
 
   it('select with unknown directionId → 409 direction-not-selected', async () => {
@@ -350,5 +375,145 @@ describe('creative flow(#3c 全链路)', () => {
     }
     expect(view.workflowState).toBe('failed')
     expect(view.allowedActions).toEqual(['generate'])
+  })
+})
+
+describe('outline flow(#4 全链路)', () => {
+  async function selectFirst(app: ReturnType<typeof createApp>, workId: string) {
+    return app.request(`/api/works/${workId}/artifacts/creative/select`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ directionId: 'work-1-dir-1', expectedHeadVersion: 1 }),
+    })
+  }
+
+  it('选定后 advance 生成大纲 → awaiting-outline-review;approve → complete', async () => {
+    const { store, app, seen } = makeApp()
+    const w = store.createWork({ seed: '一个脑洞' })
+    await advance(app, w.id) // caption + creative(gate)
+    await selectFirst(app, w.id)
+
+    const { outcome } = await advance(app, w.id)
+    expect(outcome.kind).toBe('advanced')
+    // outline 步骤经 consumes 拿到选定单方向 creative(守卫:恰好 1 方向)
+    expect(seen.outline[0]).toMatchObject({
+      upstream: { creative: { directions: [pack('work-1-dir-1')] } },
+    })
+    expect(
+      store.getWork(w.id)!.artifacts.find((a) => a.kind === 'outline')?.humanStatus,
+    ).toBe('pending')
+
+    const view = (await (await app.request(`/api/works/${w.id}`)).json()) as {
+      workflowState: string
+      allowedActions: string[]
+    }
+    expect(view.workflowState).toBe('awaiting-outline-review')
+    expect(view.allowedActions).toEqual(['save-draft', 'approve'])
+
+    const res = await app.request(`/api/works/${w.id}/approve`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ kind: 'outline' }),
+    })
+    expect(res.status).toBe(200)
+    const view2 = (await (await app.request(`/api/works/${w.id}`)).json()) as {
+      workflowState: string
+    }
+    expect(view2.workflowState).toBe('outline-approved')
+  })
+
+  it('saveOutlineDraft:永远 pending、版本 +1、新增剧情点被 server 补注入 id', async () => {
+    const { store, app } = makeApp()
+    const w = store.createWork({ seed: 'x' })
+    await advance(app, w.id)
+    await selectFirst(app, w.id)
+    await advance(app, w.id)
+
+    const edited = {
+      arcs: validOutline.arcs.map((a, i) =>
+        i === 0
+          ? {
+              ...a,
+              segments: [
+                ...a.segments,
+                { title: '新剧情点', summary: '作者手加的一段', outcome: '新局势' }, // 无 segmentId
+              ],
+            }
+          : a,
+      ),
+    }
+    const res = await app.request(`/api/works/${w.id}/artifacts/outline`, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({ content: edited, expectedHeadVersion: 1 }),
+    })
+    expect(res.status).toBe(200)
+    const saved = (await res.json()) as {
+      version: number
+      humanStatus: string
+      content: { arcs: Array<{ segments: Array<{ segmentId: string }> }> }
+    }
+    expect(saved.version).toBe(2)
+    expect(saved.humanStatus).toBe('pending')
+    const segs = saved.content.arcs[0]!.segments
+    expect(segs).toHaveLength(3)
+    expect(segs[2]!.segmentId).toContain('w-arc-1-seg-')
+    // 已有 id 原样保留
+    expect(segs[0]!.segmentId).toBe('w-arc-1-seg-1')
+    expect(
+      store.getWork(w.id)!.artifacts.find((a) => a.kind === 'outline')?.humanStatus,
+    ).toBe('pending')
+  })
+
+  it('outline 保存 stale expectedHeadVersion → 409 version-conflict', async () => {
+    const { store, app } = makeApp()
+    const w = store.createWork({ seed: 'x' })
+    await advance(app, w.id)
+    await selectFirst(app, w.id)
+    await advance(app, w.id)
+    const res = await app.request(`/api/works/${w.id}/artifacts/outline`, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({ content: validOutline, expectedHeadVersion: 99 }),
+    })
+    expect(res.status).toBe(409)
+    expect(((await res.json()) as { code: string }).code).toBe('version-conflict')
+  })
+
+  it('outline 保存非法内容(弧线数量越界)→ 422', async () => {
+    const { store, app } = makeApp()
+    const w = store.createWork({ seed: 'x' })
+    await advance(app, w.id)
+    await selectFirst(app, w.id)
+    await advance(app, w.id)
+    const res = await app.request(`/api/works/${w.id}/artifacts/outline`, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({ content: { arcs: [arc('a-1')] }, expectedHeadVersion: 1 }),
+    })
+    expect(res.status).toBe(422)
+  })
+
+  it('大纲 approved 后再保存 → 回到 awaiting-outline-review(版本链天然支持)', async () => {
+    const { store, app } = makeApp()
+    const w = store.createWork({ seed: 'x' })
+    await advance(app, w.id)
+    await selectFirst(app, w.id)
+    await advance(app, w.id)
+    await app.request(`/api/works/${w.id}/approve`, {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ kind: 'outline' }),
+    })
+    const res = await app.request(`/api/works/${w.id}/artifacts/outline`, {
+      method: 'PUT',
+      headers: jsonHeaders,
+      body: JSON.stringify({ content: validOutline, expectedHeadVersion: 1 }),
+    })
+    expect(res.status).toBe(200)
+    const view = (await (await app.request(`/api/works/${w.id}`)).json()) as {
+      workflowState: string
+    }
+    expect(view.workflowState).toBe('awaiting-outline-review')
   })
 })

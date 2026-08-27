@@ -1,6 +1,7 @@
 import type { ArtifactStep } from '../pipeline/pipeline.js'
 import { captionStepInputSchema, captionStepOutputSchema } from './caption-io.js'
 import { creativeStepInputSchema, creativeStepOutputSchema } from './creative-io.js'
+import { outlineStepInputSchema, outlineStepOutputSchema } from './outline-io.js'
 import { DEFAULT_DIRECTION_COUNT } from './creative-step.js'
 
 // 演示模式(无 DEEPSEEK_API_KEY):固定输出,仍走完整 schema 校验链路
@@ -48,6 +49,38 @@ export function createFakeCreativeStep(): ArtifactStep {
               setting: [{ title: '(演示)世界观', content: `基于输入:${input.seed.slice(0, 50)}` }],
               payoffs: [`(演示)${flavor}爽点:以小博大`],
               outline: [{ title: '(演示)主线', content: '开端 → 发展 → 高潮 → 结局' }],
+            }
+          }),
+        },
+      }
+    },
+  }
+}
+
+// 演示大纲:3 弧 × 3 剧情点,确定性产出(数量边界内:弧线 3~8、每弧剧情点 2~8)
+export function createFakeOutlineStep(): ArtifactStep {
+  const arcTitles = ['开局立足', '冲突升级', '高潮收束']
+  return {
+    id: 'outline',
+    inputSchema: outlineStepInputSchema,
+    outputSchema: outlineStepOutputSchema,
+    async run(input) {
+      return {
+        content: {
+          arcs: arcTitles.map((title, i) => {
+            const arcId = `${input.workId}-arc-${i + 1}`
+            return {
+              arcId,
+              title: `(演示)${title}`,
+              conflict: `(演示)第 ${i + 1} 弧核心冲突:基于「${input.seed.slice(0, 30)}」的矛盾`,
+              development: `(演示)冲突逐步升级,主角应对并成长`,
+              resolution: `(演示)矛盾解决,收束到新的局势起点`,
+              segments: [1, 2, 3].map((j) => ({
+                segmentId: `${arcId}-seg-${j}`,
+                title: `(演示)剧情点 ${j}`,
+                summary: `(演示)本段发生的关键事件 ${j}`,
+                outcome: `(演示)本段结束后的局势 ${j}`,
+              })),
             }
           }),
         },

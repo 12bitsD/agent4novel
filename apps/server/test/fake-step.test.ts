@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { captionContentSchema, creativeContentSchema, runStep } from '@agent4novel/contracts'
-import { createFakeCaptionStep, createFakeCreativeStep } from '../src/steps/fake-step.js'
+import { captionContentSchema, creativeContentSchema, outlineContentSchema, runStep } from '@agent4novel/contracts'
+import { createFakeCaptionStep, createFakeCreativeStep, createFakeOutlineStep } from '../src/steps/fake-step.js'
 
 const caption = {
   inputStage: '脑洞' as const,
@@ -36,5 +36,35 @@ describe('fake creative step(演示模式)', () => {
     expect(creativeContentSchema.parse(one.content).directions).toHaveLength(1)
     const three = await runStep(createFakeCreativeStep(), input, { directionCount: 3 })
     expect(creativeContentSchema.parse(three.content).directions).toHaveLength(3)
+  })
+})
+
+describe('fake outline step(演示模式)', () => {
+  it('出 3 弧 × 3 剧情点,带注入 id,schema 有效', async () => {
+    const creative = creativeContentSchema.parse({
+      directions: [
+        {
+          directionId: 'w-1-dir-1',
+          title: '方向A',
+          hook: '钩子',
+          tags: [],
+          synopsis: '概要。',
+          characters: [],
+          setting: [],
+          payoffs: [],
+          outline: [],
+        },
+      ],
+    })
+    const out = await runStep(
+      createFakeOutlineStep(),
+      { workId: 'w-1', seed: '一个悬疑小镇故事', upstream: { creative } },
+      {},
+    )
+    const parsed = outlineContentSchema.parse(out.content)
+    expect(parsed.arcs).toHaveLength(3)
+    expect(parsed.arcs[0]!.arcId).toBe('w-1-arc-1')
+    expect(parsed.arcs[0]!.segments).toHaveLength(3)
+    expect(parsed.arcs[2]!.segments[2]!.segmentId).toBe('w-1-arc-3-seg-3')
   })
 })
