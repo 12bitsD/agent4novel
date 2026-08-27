@@ -2,8 +2,10 @@ import { z } from 'zod'
 import {
   creativeContentSchema,
   jsonValueSchema,
+  outlineArcCount,
   outlineArcSchema,
   outlineContentSchema,
+  outlineSegmentCount,
   outlineSegmentSchema,
 } from '@agent4novel/contracts'
 
@@ -20,11 +22,14 @@ export const outlineLlmOutputSchema = z.object({
   arcs: z
     .array(
       outlineArcSchema.omit({ arcId: true, segments: true }).extend({
-        segments: z.array(outlineSegmentSchema.omit({ segmentId: true })).min(2).max(8),
+        segments: z
+          .array(outlineSegmentSchema.omit({ segmentId: true }))
+          .min(outlineSegmentCount.min)
+          .max(outlineSegmentCount.max),
       }),
     )
-    .min(3)
-    .max(8),
+    .min(outlineArcCount.min)
+    .max(outlineArcCount.max),
 })
 
 export const outlineStepOutputSchema = z.object({

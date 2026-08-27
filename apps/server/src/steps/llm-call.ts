@@ -84,8 +84,8 @@ export async function callLlm<T>(args: {
         attemptId: args.attemptId,
       })
     }
-    // generateObject 的 schema 校验失败(AI SDK 抛 NoObjectGeneratedError)→ 模型输出非法
-    if (name === 'NoObjectGeneratedError' || name === 'AI_TypeValidationError') {
+    // generateObject 的 schema 校验失败(AI SDK 抛 NoObjectGeneratedError,v7 实际名为 AI_ 前缀)→ 模型输出非法
+    if (name.includes('NoObjectGeneratedError') || name === 'AI_TypeValidationError') {
       throw new KnownError('llm-invalid-output', 'llm output failed schema validation', {
         retryable: true,
         attemptId: args.attemptId,

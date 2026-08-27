@@ -47,7 +47,8 @@
 - `registry.languageModel()` 只收 `deepseek:${string}` 模板字面量 → 开放字符串收窄在 llm-call 一处（as cast）。
 - vi.mock 提升：mock 引用必须经 `vi.hoisted` 定义。
 - contracts `export *` 双文件同名导出会被静默排除（inputStages 迁入 caption.ts 时踩过）→ 迁移期用显式 re-export。
-- AI SDK 错误按 `err.name` 分类：NoObjectGeneratedError → 模型输出非法；TimeoutError/AbortError → 超时。
+- AI SDK 错误按 `err.name` 分类：NoObjectGeneratedError → 模型输出非法；TimeoutError/AbortError → 超时。**v7 真机实测错误名带 `AI_` 前缀**（`AI_NoObjectGeneratedError`)，匹配要用 `includes`。
+- `deepseek:deepseek-v4-flash` 实测可用（#4 冒烟）：caption 3s / creative 49s / outline 54s;v1 无模型配置口，临时指定走 `resolveConfig`（正式配置归 #7)。
 
 ## 遗留 / 已知限制
 

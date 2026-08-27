@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { outlineContentSchema } from '@agent4novel/contracts'
 import type { CreativePack, OutlineContent } from '@agent4novel/contracts'
 import { approveArtifact, saveOutlineDraft } from '../api.js'
-import { btnPrimary, btnSecondary, cardStyle, fieldStyle, smallBtnStyle } from '../ui.js'
+import { btnPrimary, btnSecondary, cardStyle, chipStyle, fieldStyle, smallBtnStyle } from '../ui.js'
 import {
   addArc,
   addSegment,
@@ -93,7 +93,7 @@ export default function OutlineReview(props: {
 
   return (
     <div style={{ paddingBottom: 96 }}>
-      {/* 顶部:选定方向摘要窄条(可折叠) */}
+      {/* 顶部:选定方向速览窄条(可折叠) */}
       {pack && (
         <section style={{ ...cardStyle, marginBottom: 16, background: 'var(--bg-sunken)' }}>
           <button
@@ -103,6 +103,11 @@ export default function OutlineReview(props: {
           >
             {packOpen ? '▾' : '▸'} 选定方向:{pack.title}
           </button>
+          {pack.tags.map((t, i) => (
+            <span key={t} style={{ ...chipStyle(ARC_COLORS[i % ARC_COLORS.length]!), marginLeft: 8 }}>
+              {t}
+            </span>
+          ))}
           {packOpen && (
             <div style={{ marginTop: 8 }}>
               <p style={{ margin: '4px 0' }}>{pack.hook}</p>

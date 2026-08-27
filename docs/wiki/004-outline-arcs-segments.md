@@ -139,7 +139,14 @@ definition:
 - creative 未选定(守卫不过)→ getState blocked / advance failed `direction-not-selected`(409 语义已在)
 - 保存 stale → 409 version-conflict(web 保 dirty);并发 advance → 409 advance-in-progress
 - LLM 非法输出 502 / 超时 504 / 不可用 503;重试 = 同一 advance(creative 已 approved 不重跑)
-- 大纲 approved 后再编辑保存 → 新版本 pending → 读模型回到 awaiting-outline-review(版本链天然支持,无需特例)
+- 大纲 approved 后再编辑:UI 只读(决策 16),不再发 `save-draft` action;裸 API 保存仍可行(版本链天然支持),再编辑入口留 #6 详情页
+
+## 评审留痕(落地后两轴 code-review + 真机实测,2026-08-28)
+
+- **真机实测(deepseek-v4-flash)**:caption 3s / creative 49s 5K tokens / outline 54s 7K tokens,产出质量达标(弧线递进、落点链接续成立)。**抓到真 bug**:AI SDK v7 校验错误真名是 `AI_NoObjectGeneratedError`(带前缀),llm-call 映射只认无前缀名 → 已改 `name.includes` 并更测试
+- **修**:workflowOf 按 gate kind 显式分派(隐式 else 会在 #13 错标);outline 数量边界常量单源(`outlineArcCount`/`outlineSegmentCount`);保存时 id 补注入改「现存最大序号+1」(与生成时位置编号同格式,原 uuid 后缀偏离决策 6);顶部窄条补 tags chips(决策 16);测试名残留 'selected' 清理
+- **有意保留**:doApprove 脏时先存再通过(与 creative save-then-select 同模式);outline-step 对 upstream 的二次 parse(与 creative-step 同模式,接口层类型恢复);CreativePoster readonly prop(#6 回溯即用);outline-review 的 id 运行时守卫(有 hack-cast 测试覆盖)
+- **误报**:守卫异常路径测试已在 pipeline.test.ts(评审者漏查)
 
 ## 状态记录
 

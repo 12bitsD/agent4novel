@@ -224,7 +224,7 @@ describe('creative flow(#3c 全链路)', () => {
     expect(res.status).toBe(422)
   })
 
-  it('selectCreativeDirection lands a single-direction approved version; refresh stays selected', async () => {
+  it('selectCreativeDirection lands a single-direction approved version;读模型回到 ready-to-generate(待生成大纲)', async () => {
     const { store, app } = makeApp()
     const w = store.createWork({ seed: 'x' })
     await advance(app, w.id)
@@ -457,7 +457,8 @@ describe('outline flow(#4 全链路)', () => {
     expect(saved.humanStatus).toBe('pending')
     const segs = saved.content.arcs[0]!.segments
     expect(segs).toHaveLength(3)
-    expect(segs[2]!.segmentId).toContain('w-arc-1-seg-')
+    // 新项按「现存最大序号 +1」补注入,与生成时的位置编号格式一致
+    expect(segs[2]!.segmentId).toBe('w-arc-1-seg-3')
     // 已有 id 原样保留
     expect(segs[0]!.segmentId).toBe('w-arc-1-seg-1')
     expect(

@@ -77,10 +77,10 @@ describe('outline RealStep', () => {
   })
 
   it('模型输出未过 schema(SDK NoObjectGeneratedError)→ llm-invalid-output', async () => {
-    // 真实路径:generateObject 内部按 outlineLlmOutputSchema 校验失败抛 NoObjectGeneratedError,
-    // llm-call 按 err.name 映射;mock 不走 SDK 校验,这里直接模拟该错误名
+    // 真实路径:generateObject 内部按 outlineLlmOutputSchema 校验失败抛 AI_NoObjectGeneratedError
+    // (v7 实际错误名带 AI_ 前缀,真机实测确认),llm-call 按 err.name 映射;mock 不走 SDK 校验,这里直接模拟
     const err = new Error('schema validation failed')
-    err.name = 'NoObjectGeneratedError'
+    err.name = 'AI_NoObjectGeneratedError'
     mocks.generateObject.mockRejectedValue(err)
     await expect(runStep(step, baseInput, {})).rejects.toMatchObject({
       code: 'llm-invalid-output',

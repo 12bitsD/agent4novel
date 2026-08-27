@@ -8,6 +8,10 @@ import { z } from 'zod'
 const shortText = z.string().trim().min(1).max(100)
 const midText = z.string().trim().min(1).max(500)
 
+// 数量边界(#4 决策 7):单源,schema/LLM 输出形态/保存形态共用
+export const outlineArcCount = { min: 3, max: 8 } as const
+export const outlineSegmentCount = { min: 2, max: 8 } as const
+
 // 剧情点。segmentId 由 server 在生成落库时注入(形如 `w-3-arc-1-seg-2`),web 永不生成、编辑不得修改;
 // outcome = 落点(本段结束时局势变成什么样),长线一致性锚点
 export const outlineSegmentSchema = z
@@ -29,14 +33,14 @@ export const outlineArcSchema = z
     conflict: midText,
     development: midText,
     resolution: midText,
-    segments: z.array(outlineSegmentSchema).min(2).max(8),
+    segments: z.array(outlineSegmentSchema).min(outlineSegmentCount.min).max(outlineSegmentCount.max),
   })
   .strict()
 export type OutlineArc = z.infer<typeof outlineArcSchema>
 
 export const outlineContentSchema = z
   .object({
-    arcs: z.array(outlineArcSchema).min(3).max(8),
+    arcs: z.array(outlineArcSchema).min(outlineArcCount.min).max(outlineArcCount.max),
   })
   .strict()
 export type OutlineContent = z.infer<typeof outlineContentSchema>
@@ -55,12 +59,12 @@ export const outlineDraftSchema = z
                 segmentId: z.string().trim().min(1).max(80).optional(),
               }),
             )
-            .min(2)
-            .max(8),
+            .min(outlineSegmentCount.min)
+            .max(outlineSegmentCount.max),
         }),
       )
-      .min(3)
-      .max(8),
+      .min(outlineArcCount.min)
+      .max(outlineArcCount.max),
   })
   .strict()
 export type OutlineDraft = z.infer<typeof outlineDraftSchema>

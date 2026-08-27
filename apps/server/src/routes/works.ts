@@ -37,17 +37,26 @@ const saveOutlineSchema = z.object({
   expectedHeadVersion: z.number().int().min(1),
 })
 
-// id 规整(#4 决策 6):已有 id 保留(上下移/编辑不动标识),新项(无 id)补注入随机后缀避免位置碰撞
+// id 规整(#4 决策 6):已有 id 保留(上下移/编辑不动标识),新项(无 id)按「现存最大序号 +1」
+// 补注入,保持与生成时相同的位置编号格式(删除后按位置重排会撞号,故取 max+1)
+function nextId(prefix: string, existing: string[]): string {
+  const max = existing.reduce((m, id) => {
+    const match = /(\d+)$/.exec(id)
+    return match ? Math.max(m, Number(match[1])) : m
+  }, 0)
+  return `${prefix}${max + 1}`
+}
+
 function normalizeOutlineIds(workId: string, draft: OutlineDraft): OutlineContent {
   const content = {
     arcs: draft.arcs.map((arc) => {
-      const arcId = arc.arcId ?? `${workId}-arc-${crypto.randomUUID().slice(0, 8)}`
+      const arcId = arc.arcId ?? nextId(`${workId}-arc-`, draft.arcs.map((a) => a.arcId ?? ''))
       return {
         ...arc,
         arcId,
         segments: arc.segments.map((seg) => ({
           ...seg,
-          segmentId: seg.segmentId ?? `${arcId}-seg-${crypto.randomUUID().slice(0, 8)}`,
+          segmentId: seg.segmentId ?? nextId(`${arcId}-seg-`, arc.segments.map((x) => x.segmentId ?? '')),
         })),
       }
     }),
@@ -142,16 +151,20 @@ function workflowOf(
       // 最近一次 advance 失败过 → failed(可重试,重试 = 同一 advance)
       if (failure) return { workflowState: 'failed', allowedActions: ['generate'] }
       return { workflowState: 'ready-to-generate', allowedActions: ['generate'] }
-    case 'awaiting-approval':
-      if (state.pendingGate?.kind === 'outline') {
+    case 'awaiting-approval': {
+      // 按关卡 kind 显式分派(新节点进来必须在此登记,否则响亮失败)
+      const gate = state.pendingGate?.kind
+      if (gate === 'creative') {
+        return { workflowState: 'awaiting-selection', allowedActions: ['save-draft', 'select', 'generate'] }
+      }
+      if (gate === 'outline') {
         return { workflowState: 'awaiting-outline-review', allowedActions: ['save-draft', 'approve'] }
       }
-      return {
-        workflowState: 'awaiting-selection',
-        allowedActions: ['save-draft', 'select', 'generate'],
-      }
+      throw new Error(`unknown gate kind: ${gate ?? 'none'}`)
+    }
     case 'complete':
-      return { workflowState: 'outline-approved', allowedActions: ['save-draft'] }
+      // complete 映射 definition 末端关卡(当前 = outline);新末端节点进来时在此更新
+      return { workflowState: 'outline-approved', allowedActions: [] }
     case 'blocked':
       return { workflowState: 'ready-to-generate', allowedActions: [] }
   }
