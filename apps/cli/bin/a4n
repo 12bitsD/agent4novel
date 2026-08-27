@@ -1,0 +1,8 @@
+#!/bin/sh
+# agent4novel CLI 直跑入口(#14):绕过 pnpm 的脚本横幅,保证 stdout 是纯 JSON(Agent 友好)。
+# 直接引用本包的 tsx loader,不改 cwd(相对路径参数如 --seed-file 不受影响)。
+DIR="$(cd "$(dirname "$0")/.." && pwd)"
+exec node \
+  --require "$DIR/node_modules/tsx/dist/preflight.cjs" \
+  --import "file://$DIR/node_modules/tsx/dist/loader.mjs" \
+  "$DIR/src/main.ts" "$@"

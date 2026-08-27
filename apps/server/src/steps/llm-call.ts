@@ -6,6 +6,7 @@ import type { AgentConfig } from '@agent4novel/contracts'
 import type { z } from 'zod'
 import { KnownError } from '../errors.js'
 import { defaultModelId, registry } from './llm.js'
+import { recordTelemetry } from './telemetry.js'
 
 // 提示词以文件维护(ADR-0002),各 step 一个目录,此处共享 loader,模块级缓存
 const skillCache = new Map<string, string>()
@@ -29,51 +30,75 @@ function hash12(text: string): string {
 
 // LLM 调用小帮手(#3c 决策 15/16):generateObject + zod + token 上限 + 超时;类型化错误。
 // 日志只记 attemptId/model/latency/token/finishReason/长度+hash,不落素材/prompt 全文。
+// #14:每次调用(成败)都记一条 telemetry 进账本,systemHash 让 prompt 版本可追。
 export async function callLlm<T>(args: {
   schema: z.ZodType<T>
   system: string
   prompt: string
   config: AgentConfig
+  workId: string
   stepId: string
   attemptId: string
+  /** 默认 8000;长产物步骤(如 outline)实测会撞顶截断(#14 排查),可上调 */
+  maxOutputTokens?: number
 }): Promise<T> {
   const model = (args.config.model ?? defaultModelId) as `deepseek:${string}`
   const started = Date.now()
+  const base = {
+    stepId: args.stepId,
+    attemptId: args.attemptId,
+    model,
+    promptChars: args.prompt.length,
+    promptHash: hash12(args.prompt),
+    systemHash: hash12(args.system),
+  }
   try {
     const { object, usage, finishReason } = await generateObject({
       model: registry.languageModel(model),
       schema: args.schema,
       system: args.system,
       prompt: args.prompt,
-      maxOutputTokens: 8000,
+      maxOutputTokens: args.maxOutputTokens ?? 8000,
       abortSignal: AbortSignal.timeout(120_000),
     })
-    console.log(
-      JSON.stringify({
-        event: 'llm.call',
-        stepId: args.stepId,
-        attemptId: args.attemptId,
-        model,
-        latencyMs: Date.now() - started,
-        inputTokens: usage?.inputTokens,
-        outputTokens: usage?.outputTokens,
-        finishReason,
-        promptChars: args.prompt.length,
-        promptHash: hash12(args.prompt),
-      }),
-    )
+    const telemetry = {
+      ...base,
+      ok: true as const,
+      latencyMs: Date.now() - started,
+      inputTokens: usage?.inputTokens,
+      outputTokens: usage?.outputTokens,
+      finishReason,
+    }
+    recordTelemetry(args.workId, telemetry)
+    console.log(JSON.stringify({ event: 'llm.call', ...telemetry }))
     return object
   } catch (err) {
+    // 诊断字段(#14 排查):NoObjectGeneratedError 自带 finishReason/usage/text,
+    // 只记 text 尾片段(截断假设的证据在结尾),不落全文
+    const diag = err as {
+      finishReason?: string
+      usage?: { outputTokens?: number }
+      text?: string
+      cause?: Error
+    }
+    const telemetry = {
+      ...base,
+      ok: false as const,
+      latencyMs: Date.now() - started,
+      error: err instanceof Error ? err.name : String(err),
+      outputTokens: diag.usage?.outputTokens,
+      finishReason: diag.finishReason,
+    }
+    recordTelemetry(args.workId, telemetry)
     console.log(
       JSON.stringify({
         event: 'llm.error',
-        stepId: args.stepId,
-        attemptId: args.attemptId,
-        model,
-        latencyMs: Date.now() - started,
-        error: err instanceof Error ? err.name : String(err),
-        promptChars: args.prompt.length,
-        promptHash: hash12(args.prompt),
+        ...telemetry,
+        textChars: diag.text?.length,
+        textTail: diag.text?.slice(-200),
+        // cause 链是 finishReason=stop 却校验失败时的关键证据(zod issues / JSON parse 位置)
+        causeName: diag.cause?.name,
+        causeMessage: diag.cause?.message.slice(0, 500),
       }),
     )
     if (err instanceof KnownError) throw err

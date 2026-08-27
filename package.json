@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "pnpm --parallel -r --if-present run dev",
+    "cli": "pnpm -s --filter @agent4novel/cli run -s cli --",
     "test": "pnpm -r --if-present run test",
     "typecheck": "pnpm -r --if-present run typecheck",
     "build": "pnpm -r --if-present run build"

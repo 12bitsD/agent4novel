@@ -142,6 +142,23 @@ describe('works routes', () => {
     })
     expect(res.status).toBe(400)
   })
+
+  it('telemetry(#14):advance 响应内联遥测数组;GET /telemetry 可回看;未知作品 404', async () => {
+    const { store, app } = makeApp()
+    const w = store.createWork({ seed: 'x' })
+    // fake step 不走 callLlm → 本次推进无 LLM 记录,但字段必须在
+    const adv = await app.request(`/api/works/${w.id}/advance`, { method: 'POST' })
+    expect(adv.status).toBe(200)
+    const advBody = (await adv.json()) as { telemetry: unknown[] }
+    expect(advBody.telemetry).toEqual([])
+
+    const res = await app.request(`/api/works/${w.id}/telemetry`)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ workId: w.id, telemetry: [] })
+
+    const missing = await app.request('/api/works/nope/telemetry')
+    expect(missing.status).toBe(404)
+  })
 })
 
 describe('creative flow(#3c 全链路)', () => {

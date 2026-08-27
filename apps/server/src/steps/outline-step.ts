@@ -30,8 +30,11 @@ export function createOutlineStep(): ArtifactStep {
         system: loadSkill('outline'),
         prompt: buildPrompt({ seed: input.seed, creative }),
         config,
+        workId: input.workId,
         stepId: 'outline',
         attemptId,
+        // #14 排查实证:大纲产物在 8000 上限会被截断(finishReason=length),v4-flash 已验证接受 16000
+        maxOutputTokens: 16000,
       })
       // server 注入稳定 arcId/segmentId(web 永不生成、编辑不得修改)
       const arcs = raw.arcs.map((arc, i) => {

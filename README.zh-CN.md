@@ -45,6 +45,17 @@ export DEEPSEEK_API_KEY=sk-...
 pnpm dev
 ```
 
+### CLI（供脚本和 Agent 使用）
+
+全部能力都能从命令行驱动——stdout 恒为纯 JSON:
+
+```bash
+./apps/cli/bin/a4n smoke --seed-file seed.txt   # 一键全链路探针
+./apps/cli/bin/a4n list                         # create / get / advance / select / approve / logs …
+```
+
+打开本仓库的 Agent 可通过内置 skill `.claude/skills/agent4novel-drive` 获得完整用法。
+
 ## 它是怎么工作的
 
 <p align="center">

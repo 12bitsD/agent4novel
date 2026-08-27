@@ -12,6 +12,7 @@ import {
 import type { ApiError, ArtifactKind, OutlineContent, OutlineDraft, WorkflowState, WorkView } from '@agent4novel/contracts'
 import type { Pipeline } from '../pipeline/pipeline.js'
 import { KnownError } from '../errors.js'
+import { telemetryCursor, telemetryFor } from '../steps/telemetry.js'
 import type { WorkStore } from '../store/work-store.js'
 
 const workCreateSchema = z.object({
@@ -280,11 +281,13 @@ export function worksRoutes({ store, pipeline }: WorksRoutesDeps): Hono {
     return c.json(artifact)
   })
 
-  // advance = 推进到下一个关卡(链式);返回可穷举 outcome
+  // advance = 推进到下一个关卡(链式);返回可穷举 outcome。
+  // #14:响应内联本次推进期间的 LLM 遥测(账本 cursor 前后差集),Agent 一次调用拿到完整观测
   app.post('/api/works/:id/advance', async (c) => {
     const workId = c.req.param('id')
     const requestId = crypto.randomUUID()
     const started = Date.now()
+    const cursor = telemetryCursor()
     try {
       const outcome = await pipeline.advance(workId)
       console.log(
@@ -296,13 +299,20 @@ export function worksRoutes({ store, pipeline }: WorksRoutesDeps): Hono {
           latencyMs: Date.now() - started,
         }),
       )
-      return c.json(outcome)
+      return c.json({ ...outcome, telemetry: telemetryFor(workId, cursor) })
     } catch (err) {
       if (err instanceof KnownError && err.code === 'advance-in-progress') {
         console.log(JSON.stringify({ event: 'pipeline.lock-conflict', requestId, workId }))
       }
       return routeError(c, err)
     }
+  })
+
+  // LLM 遥测查询口(#14):回看某作品的全部 callLlm 记录(进程内账本,随进程生命周期)
+  app.get('/api/works/:id/telemetry', (c) => {
+    const workId = c.req.param('id')
+    if (!store.getWork(workId)) return c.json(errorBody('work-not-found', 'not found'), 404)
+    return c.json({ workId, telemetry: telemetryFor(workId) })
   })
 
   app.post('/api/works/:id/approve', async (c) => {

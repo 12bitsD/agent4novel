@@ -10,7 +10,10 @@ pnpm dev              # server :8787 (tsx watch) + web :5173 (vite), in parallel
 pnpm test             # vitest, all workspaces; fully faked, never networked
 pnpm typecheck
 pnpm build
+pnpm -s cli <cmd>     # CLI for driving the whole pipeline (or ./apps/cli/bin/a4n, cleaner stdout)
 ```
+
+The project ships a skill for agents driving the app end-to-end: `.claude/skills/agent4novel-drive`.
 
 Run a single test: `pnpm --filter @agent4novel/server exec vitest run test/pipeline.test.ts` (or `@agent4novel/web`, `@agent4novel/contracts`).
 

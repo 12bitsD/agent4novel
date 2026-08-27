@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。每个里程碑收尾时刷新本文件（最后更新：2026-08-28，#4 已落地，下一票 #13）。
+> 用途：context compaction / 新会话接力。每个里程碑收尾时刷新本文件（最后更新：2026-08-28，#4 + #14 已落地，下一票 #13）。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票 HOW 看 docs/wiki/NNNN-*.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。
 
 ## Primary Request and Intent
@@ -19,6 +19,7 @@
 - **#3b / issue #10** 预处理 RealStep + outline/setting 形态对齐（wiki 010 ✅；其 interview 机制已被 #3c 移除）
 - **#3c / issue #11** 预处理重构（wiki 011 ✅）：caption（提炼稿，落库即 approved）→ creative（单次 generateObject 直出 N 个创意稿，gateAfter = 创意海报比较视图）；保存/选定两命令；interview 机制整体移除；全应用多巴胺设计系统（亮暗双主题）
 - **#4** 大纲生成（wiki 004 ✅）：**推翻「分章每章一句话」**，大纲 = 弧线（冲突生命周期：标题/核心冲突/冲突发展/矛盾解决）+ 剧情点（标题/概要/落点）两层，与章节解耦；选定创意稿后 web 自动续跑 advance；保存 = pending + 通用 /approve 通过；读模型 5 态（selected 移除，加 awaiting-outline-review/outline-approved）
+- **#14** Agent 可用性基建（wiki 014 ✅）：`apps/cli`（9 命令，`bin/a4n` 直跑 stdout 纯 JSON，headVersion 自动回填，smoke 探针）；LLM 遥测进程内账本，advance 响应内联 telemetry + `GET /works/:id/telemetry` 回看；systemHash 让 prompt 版本可追；**outline 失败根因根治**（8000 截断 → outline 上限 16000 + SKILL 篇幅纪律）；项目级 skill `.claude/skills/agent4novel-drive`
 
 ## 关键架构与契约（不能丢）
 
@@ -28,10 +29,11 @@
 - **creative 保存语义**（#3c 起，取代「人工保存即通过」）：`PUT /artifacts/creative` = saveCreativeDraft，存全部方向、永远 pending、带 `expectedHeadVersion` 乐观锁；`POST /artifacts/creative/select` = selectCreativeDirection，落**单方向**新版本 + approved。`directionId` 由 server 注入（`${workId}-dir-N`），web 永不生成、编辑不可改。
 - **pipeline（#3c）**：definition 加 `consumes`（只指前序 outputKind，启动校验唯一/禁环）；`PipelineInput = {workId, seed, upstream}`，upstream 读**最新版且必须 approved**；`advance()` 链式推进到下一个关卡（上限 = definition 长度），per-work 互斥锁（finally 释放，冲突 → 409 `advance-in-progress`），返回可穷举 outcome `advanced | awaiting-approval | complete | failed(stepId, code, retryable, attemptId)`；interview 机制零残留。
 - **读模型**：`GET /works/:id` 同快照附带 `workflowState`（ready-to-generate | awaiting-selection | awaiting-outline-review | outline-approved | failed；`generating` 是 web 本地瞬态，不入契约）+ `allowedActions`，按 `pendingGate.kind` 分派，web 只渲染不重建状态机。`failed` 由 pipeline `lastFailure` 驱动，approve/成功清除。
-- **LLM 调用**：`steps/llm-call.ts` 统一 generateObject + zod + maxTokens + AbortSignal 超时 + 类型化错误（llm-invalid-output→502 / llm-unavailable→503 / llm-timeout→504）；素材 >100K 字符截断收在这一处；`steps/llm.ts` 唯一感知 provider。
+- **LLM 调用**：`steps/llm-call.ts` 统一 generateObject + zod + maxTokens（callLlm 可选参，outline 用 16000，其余默认 8000）+ AbortSignal 超时 + 类型化错误（llm-invalid-output→502 / llm-unavailable→503 / llm-timeout→504）；素材 >100K 字符截断收在这一处；`steps/llm.ts` 唯一感知 provider。**遥测（#14）**：每次调用记进程内环形账本（steps/telemetry.ts），advance 响应内联本次记录，`GET /works/:id/telemetry` 回看；`systemHash` = SKILL.md 内容 hash，prompt 版本可追。
+- **CLI（#14）**：`apps/cli`，`./apps/cli/bin/a4n <cmd>`（直跑，stdout 纯 JSON）或 `pnpm -s cli`；select/save-outline 自动回填 expectedHeadVersion；`smoke` = 一键全链路探针，**每次测试的标准动作之一**。
 - **错误**：HTTP 统一 `{code, retryable, attemptId, message}`；409 = advance-in-progress / version-conflict / direction-not-selected，422 内容非法。
 - **web 设计系统**（#3c）：`apps/web/src/styles.css` 唯一全局面，亮暗双主题 CSS 变量（prefers-color-scheme + data-theme 预留）；多巴胺在点缀层（主 CTA 珊瑚 accent，方向 tab 珊瑚/紫/青轮转，chip 用强调色），底色纸白/墨黑极简；**内联样式只许 var(--*)，禁硬编码色值**。创意海报风险面抽纯函数 `web/src/creative-compare.ts`（tab↔directionId、保存全部、选定、409 保 dirty），vitest 覆盖，无浏览器 E2E。
-- 栈：pnpm workspaces + TS E2E、Vite+React(5173 /api proxy)、Hono(8787)、zod、Vitest、tsx、AI SDK v7 + @ai-sdk/deepseek。测试 124 绿（contracts 35 / server 65 / web 24）。
+- 栈：pnpm workspaces + TS E2E、Vite+React(5173 /api proxy)、Hono(8787)、zod、Vitest、tsx、AI SDK v7 + @ai-sdk/deepseek。测试 132 绿（contracts 35 / server 66 / web 24 / cli 7）。
 
 ## 词汇红线（CONTEXT.md 单源）
 
@@ -49,6 +51,9 @@
 - contracts `export *` 双文件同名导出会被静默排除（inputStages 迁入 caption.ts 时踩过）→ 迁移期用显式 re-export。
 - AI SDK 错误按 `err.name` 分类：NoObjectGeneratedError → 模型输出非法；TimeoutError/AbortError → 超时。**v7 真机实测错误名带 `AI_` 前缀**（`AI_NoObjectGeneratedError`)，匹配要用 `includes`。
 - `deepseek:deepseek-v4-flash` 实测可用（#4 冒烟）：caption 3s / creative 49s / outline 54s;v1 无模型配置口，临时指定走 `resolveConfig`（正式配置归 #7)。
+- **outline 在 v4-flash 的失败有两种模式**（#14 遥测实证）：截断（finishReason=length 撞 8000 上限 → 已修 16000）与 schema 偏差（finishReason=stop 但不过校验，llm.error 已记 causeMessage 守株待兔）。修截断要同时收 prompt 篇幅（SKILL.md 纪律），否则拿质量换稳定。
+- **pnpm run 横幅污染 stdout**（`> pkg script …` 两行）：Agent 管道消费会炸 JSON 解析。要么 `./apps/cli/bin/a4n` 直跑，要么 `pnpm -s cli`。
+- heredoc/perl 里带反引号的模板字符串会被 shell 吃掉——改代码用 Edit 工具，别用 perl -pi。
 
 ## 遗留 / 已知限制
 

@@ -19,6 +19,7 @@ export function createCaptionStep(): ArtifactStep {
         system: loadSkill('caption'),
         prompt: buildPrompt(input),
         config,
+        workId: input.workId,
         stepId: 'caption',
         attemptId: `${input.workId}-caption-${Date.now()}`,
       })

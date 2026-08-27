@@ -45,6 +45,17 @@ export DEEPSEEK_API_KEY=sk-...
 pnpm dev
 ```
 
+### CLI (for scripts and agents)
+
+Every capability is also drivable from the command line — stdout is always pure JSON:
+
+```bash
+./apps/cli/bin/a4n smoke --seed-file seed.txt   # one-shot full-chain probe
+./apps/cli/bin/a4n list                         # create / get / advance / select / approve / logs …
+```
+
+Agents opening this repo get the full recipe via the bundled skill `.claude/skills/agent4novel-drive`.
+
 ## How it works
 
 <p align="center">

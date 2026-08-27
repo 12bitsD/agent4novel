@@ -33,6 +33,7 @@ export function createCreativeStep(): ArtifactStep {
         system: loadSkill('creative'),
         prompt: buildPrompt({ seed: input.seed, caption }, count),
         config,
+        workId: input.workId,
         stepId: 'creative',
         attemptId,
       })
