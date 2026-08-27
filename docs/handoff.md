@@ -35,7 +35,7 @@
 ## 词汇红线（CONTEXT.md 单源）
 
 - 关卡 Avoid「审核、**确认**」→ UI 用「通过」「待把关」。
-- 大纲 = 分章**无卷**；场景/冲突/钩子归 beat（章纲）层。
+- 大纲 = **弧线（冲突生命周期）+ 剧情点（情节步骤）两层，与章节解耦**（#4 grill 推翻「分章每章一句话」）；场景/冲突/钩子归 beat（章纲）层。
 - 预处理 = caption（提炼稿）→ creative（创意稿）两步；提炼稿 Avoid「摘要、解析结果」，创意稿 Avoid「brief、方案」。
 - 创意稿的「一句话钩子」字段叫 `hook`；爽点清单叫 `payoffs`；「卖点」作领域词时对应这两者，不再是独立数组。
 
@@ -57,7 +57,7 @@
 
 ## 下一步
 
-**#4 梗概 → 大纲（生成 + review）**（wiki 待建；issue #4，blocked by #11 已解除）：consumes:['creative']（组装校验恰好 1 方向），产 outline 完整版 `{chapters:[{number,title,summary}]}`（无卷），gateAfter 关卡。
+**#4 大纲生成（创意稿 → 弧线 + 剧情点）**（wiki 004 已定稿，issue #4 AC 已改写，待 /plan 实现）：两层结构与章节解耦；`consumes:['creative']` + gateAfter；选定后 web 自动 advance；保存 pending + 通用 /approve 通过；读模型加 awaiting-outline-review / outline-approved（移除 selected）。
 后续队列：#4 → **#13 设定完整版**（block #5）→ #9 SQLite（提前到 #5 前）→ #5 章纲/正文关卡 → #6 → #7 → #8。#12 = 优化项（失败重试已随 #3c 进主干，剩重新生成/渐进展示/分段提炼/版本回看），低优。
 
 ## 环境
