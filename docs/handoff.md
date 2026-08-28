@@ -65,7 +65,7 @@
 ## 下一步
 
 **#13 设定完整版生成（创意稿 → setting 定稿）**（wiki 待建；issue #13，blocked by #11 已解除）：consumes creative（+caption?），生成 `{worldview, powerSystem, factions[], characters[], extra?}`，可 review/编辑/保存；block #5。
-后续队列：**#13** → #9 SQLite（提前到 #5 前）→ #5 章纲/正文关卡（输入 = 剧情点切片 + 章数规划）→ #6 → #7 → #8。#12 = 优化项（重新生成/渐进展示/版本回看/弧线级联重生成），低优。
+后续队列：**#13** → #9 SQLite（提前到 #5 前）→ #5 章纲/正文关卡（输入 = 剧情点切片 + 章数规划）→ #6 → #7 → #8。#12 = 优化项（重新生成/渐进展示/版本回看/弧线级联重生成），低优。#15 = web↔server 换 Hono RPC 消 DTO 漂移，**服务全部定型后**再做。
 
 ## 环境
 
