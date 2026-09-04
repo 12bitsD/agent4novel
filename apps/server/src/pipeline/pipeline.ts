@@ -5,6 +5,7 @@ import type {
   ArtifactKind,
   JsonValue,
   Step,
+  WorkDetail,
 } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
 import type { WorkStore } from '../store/work-store.js'
@@ -57,9 +58,9 @@ export type PipelineDeps = {
   store: WorkStore
   steps: Map<string, ArtifactStep>
   definition: PipelineDefinitionEntry[]
-  resolveConfig: (workId: string, stepId: string) => AgentConfig
+  resolveConfig: (work: WorkDetail, stepId: string) => AgentConfig
   // 消费守卫(#3c):consumes 的上游产物除了「最新版 approved」还要过领域校验,
-  // 由装配处(index.ts)按 kind 注入,pipeline 保持泛型。守卫抛错 = 该产物不算数。
+  // 由启动装配层按 kind 注入,pipeline 保持泛型。守卫抛错 = 该产物不算数。
   consumeGuards?: Partial<Record<ArtifactKind, (content: JsonValue) => void>>
 }
 
@@ -67,7 +68,7 @@ export class Pipeline {
   private store: WorkStore
   private steps: Map<string, ArtifactStep>
   private definition: PipelineDefinitionEntry[]
-  private resolveConfig: (workId: string, stepId: string) => AgentConfig
+  private resolveConfig: (work: WorkDetail, stepId: string) => AgentConfig
   private consumeGuards: Partial<Record<ArtifactKind, (content: JsonValue) => void>>
   // per-work 内存互斥锁(#3c):并发 advance → 409 advance-in-progress;真正事务/lease 归 #9
   private advancing = new Set<string>()
@@ -221,8 +222,8 @@ export class Pipeline {
 
   private async runEntry(workId: string, entry: PipelineDefinitionEntry): Promise<void> {
     const step = this.steps.get(entry.stepId)!
-    const config = this.resolveConfig(workId, entry.stepId)
     const work = this.store.getWork(workId)!
+    const config = this.resolveConfig(work, entry.stepId)
     const upstream: Record<string, JsonValue> = {}
     for (const dep of entry.consumes ?? []) {
       const a = work.artifacts.find((x) => x.kind === dep)

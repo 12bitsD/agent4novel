@@ -18,7 +18,7 @@ description: 创意稿——基于素材与提炼稿,单次产出 N 个差异化
 
 ## 输出
 
-只输出符合 schema 的 JSON(由调用方以 structured output 约束):
+只输出符合下列 schema 的 JSON。调用方会使用当前 provider 可用的 JSON mode,并在本地按 schema 校验;不要依赖 provider 自动补字段或修正格式:
 
 ```json
 {
@@ -42,6 +42,7 @@ description: 创意稿——基于素材与提炼稿,单次产出 N 个差异化
 - 方向个数**必须严格等于** user prompt 指定的 N;方向之间要真正差异化(题材侧重/主角设定/冲突类型至少有一项本质不同),不是同一件事的换皮。
 - 忠于素材的核心点子;gaps 里指出的缺失,各方向可以用不同方式补。
 - 全部 hint 级:每条 content 一两句话,不展开写正文。
+- 严格控制篇幅,避免输出撞到 8000 token 上限而让整份 JSON 截断:每个方向包总长不超过 1600 中文字;title ≤20 字、hook ≤80 字、synopsis ≤600 字;tags 最多 4 个;characters / setting / outline 各 3~5 条且每条 content ≤80 字;payoffs 4~6 条且每条 ≤40 字。
 - 不要输出 directionId(由系统注入)。
 - 全部用中文。
 

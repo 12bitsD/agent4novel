@@ -5,7 +5,7 @@ import { seedCharBudget } from '@agent4novel/contracts'
 import type { AgentConfig } from '@agent4novel/contracts'
 import type { z } from 'zod'
 import { KnownError } from '../errors.js'
-import { defaultModelId, registry } from './llm.js'
+import { modelRuntime } from './llm.js'
 import { recordTelemetry } from './telemetry.js'
 
 // 提示词以文件维护(ADR-0002),各 step 一个目录,此处共享 loader,模块级缓存
@@ -42,7 +42,7 @@ export async function callLlm<T>(args: {
   /** 默认 8000;长产物步骤(如 outline)实测会撞顶截断(#14 排查),可上调 */
   maxOutputTokens?: number
 }): Promise<T> {
-  const model = (args.config.model ?? defaultModelId) as `deepseek:${string}`
+  const model = args.config.model ?? modelRuntime.defaultModelId
   const started = Date.now()
   const base = {
     stepId: args.stepId,
@@ -54,12 +54,12 @@ export async function callLlm<T>(args: {
   }
   try {
     const { object, usage, finishReason } = await generateObject({
-      model: registry.languageModel(model),
+      model: modelRuntime.languageModel(model),
       schema: args.schema,
       system: args.system,
       prompt: args.prompt,
       maxOutputTokens: args.maxOutputTokens ?? 8000,
-      abortSignal: AbortSignal.timeout(120_000),
+      abortSignal: AbortSignal.timeout(modelRuntime.requestTimeoutMs),
     })
     const telemetry = {
       ...base,

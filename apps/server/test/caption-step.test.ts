@@ -8,8 +8,11 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
 vi.mock('../src/steps/llm.js', () => ({
-  registry: { languageModel: mocks.languageModel },
-  defaultModelId: 'deepseek:deepseek-chat',
+  modelRuntime: {
+    defaultModelId: 'deepseek:deepseek-chat',
+    requestTimeoutMs: 120_000,
+    languageModel: mocks.languageModel,
+  },
 }))
 
 import { createCaptionStep } from '../src/steps/caption-step.js'

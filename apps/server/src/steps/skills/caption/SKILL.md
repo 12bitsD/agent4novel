@@ -16,7 +16,7 @@ description: 提炼稿——理解作者的原始素材(脑洞/设定/主线/模
 
 ## 输出
 
-只输出符合 schema 的 JSON(由调用方以 structured output 约束):
+只输出符合下列 schema 的 JSON。调用方会使用当前 provider 可用的 JSON mode,并在本地按 schema 校验;不要依赖 provider 自动补字段或修正格式:
 
 ```json
 {

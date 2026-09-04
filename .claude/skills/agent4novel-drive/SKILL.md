@@ -1,22 +1,24 @@
 ---
 name: agent4novel-drive
-description: 用命令行驱动 agent4novel 全链路(建作品/推进/选定/保存/通过)、查 LLM 遥测、读前端页面。需要测试链路通不通、分析产物质量、排查 LLM 失败时使用。
+description: 用命令行启动并驱动 agent4novel 全链路(建作品/推进/选定/保存/通过)、安全配置模型、准备测试 case、查 LLM 遥测、读前端页面。测试链路、分析产物质量、切换 DeepSeek/LongCat 或排查 LLM 失败时都应使用。
 ---
 
 # 驱动 agent4novel(#14)
 
-本项目的一切能力都能从命令行驱动,**不要手搓 curl**——用 CLI(`./apps/cli/bin/a4n`),它自动回填 `expectedHeadVersion`、stdout 恒为纯 JSON(可直接管道给 jq/python)、exit≠0 即失败。
+本项目的创作链路用 CLI(`./apps/cli/bin/a4n`)驱动,**不要手搓 curl**。CLI 自动回填 `expectedHeadVersion`;正常结果的 stdout 是纯 JSON,进度与错误走 stderr。HTTP/传输错误会 exit≠0,但 `advance` 即使 HTTP 200 也可能返回 `kind: "failed"`,所以必须同时检查 JSON outcome。
+
+模型与 provider 配置的唯一 HOW 是 [`docs/wiki/016-model-runtime-provider-config.md`](../../../docs/wiki/016-model-runtime-provider-config.md)。本 skill 只保留运行时操作,不要在其他入口复制配置规则。
 
 ## 启动服务
 
 ```bash
-# server(8787):真模型
-DEEPSEEK_API_KEY=sk-... pnpm --filter @agent4novel/server dev
-# 无 key 时自动演示模式(FakeStep,秒回,不触网)——验证链路用这个
-
-# web(5173),可选
-pnpm --filter @agent4novel/web dev
+test -f .env.local || cp .env.example .env.local   # 首次初始化；不要覆盖已有本地 key
+chmod 600 .env.local
+# 用本地编辑器填写所需 key；不要把 key 写进命令、日志或聊天，也不要打印 .env.local
+pnpm dev                         # server :8787 + web :5173
 ```
+
+Live 模式会把生成所需的素材和上游产物发送给所选远程 provider。
 
 ## CLI 命令
 
@@ -25,7 +27,7 @@ pnpm --filter @agent4novel/web dev
 ./apps/cli/bin/a4n create --seed-file seed.txt --title "标题"
 ./apps/cli/bin/a4n get <workId>                  # 快照:workflowState + allowedActions + 产物
 ./apps/cli/bin/a4n get <workId> --kind outline   # 只取某产物(含 content)
-./apps/cli/bin/a4n advance <workId>              # 推进到下一关卡(长请求,最长 300s)
+./apps/cli/bin/a4n advance <workId>              # 推进到下一关卡(完整请求默认最长 1820s)
 ./apps/cli/bin/a4n select <workId> [directionId] # 选定创意方向(缺省取第一个)
 ./apps/cli/bin/a4n save-outline <workId> --file draft.json
 ./apps/cli/bin/a4n approve <workId> outline      # 通过产物
@@ -33,7 +35,9 @@ pnpm --filter @agent4novel/web dev
 ./apps/cli/bin/a4n smoke --seed-file seed.txt    # 一键全链路探针
 ```
 
-`pnpm -s cli ...` 等价(必须带 `-s`,否则 pnpm 横幅污染 stdout)。server 地址用 `--url` 或 `A4N_BASE_URL` 覆盖。
+`pnpm -s cli ...` 等价(必须带 `-s`,否则 pnpm 横幅污染 stdout)。server 地址用 `--url` 或 `A4N_BASE_URL` 覆盖;`--timeout-ms` 或 CLI 进程环境变量 `A4N_CLI_TIMEOUT_MS` 会覆盖全部请求的等待上限。未覆盖时普通请求默认 300s,只有 `advance` 默认 1820s。
+
+`advance` 返回 `kind: "failed"` 时,先读响应内联 telemetry 或运行 `logs`,再根据 `retryable` 决定是否再次手动执行 `advance`。再次执行只会从失败 step 继续,不会自动重跑已成功且已落库的 step;系统本身**不会自动重试**。
 
 ## 遥测:分析每次 LLM 调用
 
@@ -52,6 +56,8 @@ pnpm --filter @agent4novel/web dev
 
 web 是 React SPA:`curl http://localhost:5173/` 只能拿到 HTML 壳 + 脚本标签,**看不到渲染后内容**。要内容一律走 API(CLI 就是封装);只有需要确认页面结构/样式资源时才读 HTML。`/api/*` 由 vite 代理到 8787。
 
+当前作品和 telemetry 都在内存里。server 重启后测试 case 会消失;准备多步 case 时保持同一 server 进程。
+
 ## 工作流状态机(读模型,GET /works/:id)
 
 `ready-to-generate`(可 advance)→ `awaiting-selection`(创意稿待选定)→ `awaiting-outline-review`(大纲待通过)→ `outline-approved`(锁定,只读);任何一步 LLM 失败 → `failed`(重试 = 再 advance,只重跑失败步)。`allowedActions` 字段直接告诉你当前能干什么。
@@ -60,7 +66,9 @@ web 是 React SPA:`curl http://localhost:5173/` 只能拿到 HTML 壳 + 脚本�
 
 ```bash
 pnpm test && pnpm typecheck          # 双绿门禁
-./apps/cli/bin/a4n smoke --seed-file <素材>   # 链路探针(demo 模式秒回;真模型 ~2min)
+./apps/cli/bin/a4n smoke --seed-file <素材>   # 链路探针(demo 秒回;真模型通常需要数分钟)
 ```
 
-smoke 任一步失败会以 `{code, message}` 退出非零;`steps` 数组里能看到走到哪一步断的。
+测试与 typecheck 使用 fake 或 mock transport,不会调用真实 provider。真模型耗时取决于 provider、素材与手动重试,不要把注释里的时间当成承诺。
+
+`smoke` 会创建作品、选第一个创意方向、生成并通过大纲,适合验证链路,不等于人工质量验收。成功时 stdout 有完整 `steps` 与 `final`;失败时没有部分 `steps` 结果,用 stderr 的 `[smoke]` 进度定位最后完成的动作,再读最终 error JSON。需要重试与保留中间产物时,改用逐条 CLI 命令。

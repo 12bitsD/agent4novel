@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { CliError, createClient } from '../src/client.js'
+import { describe, expect, it, vi } from 'vitest'
+import { CliError, createClient, parseCliTimeoutMs } from '../src/client.js'
 import * as cmd from '../src/commands.js'
 
 // 假 fetch:按 method+path 路由到预置响应,同时记录调用序列
@@ -31,6 +31,30 @@ const workView = {
 }
 
 describe('cli client/commands(#14)', () => {
+  it('普通请求默认 300s 超时，只有 advance 默认等待 1820s', async () => {
+    const signalTimeouts = new WeakMap<AbortSignal, number>()
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockImplementation((milliseconds) => {
+      const signal = new AbortController().signal
+      signalTimeouts.set(signal, milliseconds)
+      return signal
+    })
+    try {
+      const observed: number[] = []
+      const observingFetch = async (_url: string, init?: RequestInit): Promise<Response> => {
+        observed.push(signalTimeouts.get(init?.signal as AbortSignal)!)
+        return new Response('{}')
+      }
+      const client = createClient({ baseUrl: 'http://x', fetch: observingFetch })
+
+      await client.listWorks()
+      await client.advance('w1')
+
+      expect(observed).toEqual([300_000, 1_820_000])
+    } finally {
+      timeoutSpy.mockRestore()
+    }
+  })
+
   it('select 自动回填 creative headVersion', async () => {
     const { fn, calls } = fakeFetch({
       'GET /api/works/w1': { body: workView },
@@ -74,7 +98,13 @@ describe('cli client/commands(#14)', () => {
     await expect(cmd.get(client, 'w1', 'caption')).rejects.toMatchObject({ code: 'artifact-not-found' })
   })
 
-  it('HTTP 错误映射成 CliError(带 code/retryable/attemptId)', async () => {
+  it('校验 CLI timeout，并把 HTTP 错误映射成 CliError', async () => {
+    expect(parseCliTimeoutMs(undefined)).toBeUndefined()
+    expect(parseCliTimeoutMs('610000')).toBe(610_000)
+    expect(() => parseCliTimeoutMs('forever')).toThrow(
+      expect.objectContaining({ code: 'usage' }),
+    )
+
     const { fn } = fakeFetch({
       'POST /api/works/w1/advance': {
         status: 503,

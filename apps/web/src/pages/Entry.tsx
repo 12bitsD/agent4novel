@@ -44,7 +44,8 @@ export default function Entry({
     }
   }
 
-  // 只创建作品并跳创作界面;生成由 Workspace 触发(advance 是 30~60s 的两次 LLM 调用,不挂在这个请求上)
+  // 只创建作品并跳创作界面；生成由 Workspace 触发，advance 可能链式执行多个模型步骤，
+  // 耗时取决于 provider，不挂在这个创建请求上。
   const submit = async () => {
     if (!text.trim()) {
       setError('请输入脑洞或上传文档')
@@ -80,7 +81,7 @@ export default function Entry({
             fontSize: 14,
           }}
         >
-          演示模式（未配置 DEEPSEEK_API_KEY）：当前由内置 fake 生成示例内容
+          演示模式（未配置可用模型凭据）：当前由内置 fake 生成示例内容
         </p>
       )}
 

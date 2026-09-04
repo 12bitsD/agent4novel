@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { artifactKinds } from '@agent4novel/contracts'
 import type { ArtifactKind } from '@agent4novel/contracts'
-import { CliError, createClient } from './client.js'
+import { CliError, createClient, parseCliTimeoutMs } from './client.js'
 import * as cmd from './commands.js'
 
 // agent4novel CLI(#14):Agent 从命令行驱动全链路。stdout 只出 JSON;进度/错误走 stderr。
@@ -11,13 +11,14 @@ const USAGE = `agent4novel cli — 命令:
   list                                  作品列表
   create --seed <text> | --seed-file <f> [--title <t>]
   get <workId> [--kind caption|creative|outline]
-  advance <workId>                      推进流水线(长请求,最长 300s)
+  advance <workId>                      推进流水线(同步长请求,默认等待 1820s)
   select <workId> [directionId]         选定创意方向(缺省取第一个)
   save-outline <workId> --file <f>      保存大纲草稿(f 为大纲 content JSON)
   approve <workId> <kind>               通过产物(如 outline)
   logs <workId>                         LLM 遥测回看(latency/tokens/finishReason/hash)
   smoke --seed <text> | --seed-file <f> [--title <t>]   一键全链路探针
-全局: --url <baseUrl>  (默认 $A4N_BASE_URL 或 http://localhost:8787)
+全局: --url <baseUrl>                  默认 $A4N_BASE_URL 或 http://localhost:8787
+      --timeout-ms <milliseconds>       覆盖所有请求；普通请求默认 300000，advance 默认 1820000
 输出: stdout 恒为 JSON;错误时 stderr 输出 {code,message} 且 exit 1`
 
 type Args = { _: string[]; flags: Record<string, string> }
@@ -54,7 +55,8 @@ async function main(): Promise<void> {
   const { _, flags } = parseArgs(process.argv.slice(2))
   const [command, ...pos] = _
   const baseUrl = flags.url ?? process.env.A4N_BASE_URL ?? 'http://localhost:8787'
-  const client = createClient({ baseUrl })
+  const timeoutMs = parseCliTimeoutMs(flags['timeout-ms'] ?? process.env.A4N_CLI_TIMEOUT_MS)
+  const client = createClient({ baseUrl, timeoutMs })
   const log = (line: string) => console.error(line)
 
   let result: unknown

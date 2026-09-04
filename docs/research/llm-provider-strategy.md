@@ -3,6 +3,7 @@
 > **Scope**: how agent4novel (local-first TS web app, already on Vercel AI SDK v7 per `docs/adr/0001-orchestration-ai-sdk-thin-workflow.md`) should build a "universal client": upstream step code calls one uniform interface and never knows which LLM provider serves it. DeepSeek is the first provider; OpenAI is the next.
 > **Method**: every claim below was checked against a primary source (official provider docs, package README, published package types/source) fetched on 2026-08-24. URLs are inline. Claims I could not verify from a primary source are marked "unverified — do not rely".
 > **Audience**: decision-support for `/to-spec` → ADRs, not an essay.
+> **Status**: this is the historical DeepSeek-first selection record. LongCat-specific evidence is in [`longcat-provider-config.md`](./longcat-provider-config.md); the current implementation HOW and status live only in [wiki 016](../wiki/016-model-runtime-provider-config.md).
 
 ---
 
