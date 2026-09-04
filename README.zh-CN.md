@@ -27,7 +27,7 @@
 
 小说创作长期是手工作坊式的活计：一个作者，一支笔，几十万字一点点磨。agent4novel 想把它搬进一条现代流水线——AI 像一支随叫随到的编辑团队，负责补设定、排大纲、写正文；你是唯一的主编：故事方向你定，每道关卡你审。混沌的灵感进去，结构严谨的长篇出来。
 
-它面向「有想法但没受过写作训练」的作者。你给它一句话脑洞（或一份设定文档），它先提炼素材、给出几个创意方向供你比较选定，然后一环一环地生成：全书大纲、每章的章纲、每章的正文。工具完全在本地运行，单用户、开源，数据不出你自己的电脑。
+它面向「有想法但没受过写作训练」的作者。你给它一句话脑洞（或一份设定文档），它先提炼素材、给出几个创意方向供你比较选定，然后一环一环地生成：全书大纲、每章的章纲、每章的正文。应用与存储都在本地运行：演示模式不会调用模型服务；实时模型模式会把生成所需输入发给你配置的模型供应商，并适用该供应商的隐私条款。
 
 ## 快速开始
 
@@ -38,12 +38,18 @@ pnpm dev        # server :8787 + web :5173
 
 打开 <http://localhost:5173>。不配 API key 也能跑：此时是演示模式，由内置 fake 生成示例内容，不会调用真实模型。
 
-接真实模型（目前支持 DeepSeek）：
+接真实模型（支持 DeepSeek，以及 LongCat 的 OpenAI-compatible Chat Completions 接口）：
 
 ```bash
-export DEEPSEEK_API_KEY=sk-...
+cp .env.example .env.local
+chmod 600 .env.local
+# 编辑 .env.local：设置 A4N_MODEL 与对应 provider 的 API key
 pnpm dev
 ```
+
+`.env.local` 会在 server 启动时读取且已被 Git 忽略；shell/CI 中已有的环境变量优先。显式设置 `A4N_MODEL` 时必须同时提供对应 provider 的 key；未显式设置时按 DeepSeek → LongCat → 演示模式的顺序选择。模型 ID 采用 `provider:model`，例如 `longcat:LongCat-2.0` 或 `deepseek:deepseek-chat`。
+
+凭据、base URL 与 provider adapter 只存在于 server。`Work.config.model` 是作品级内部覆盖接缝，目前没有公开 UI/API。当前 LongCat adapter 只对接其文档明确支持的 Chat Completions，不代表兼容 Responses 等全部 OpenAI 协议。配置契约、安全规则与实测案例统一见 [wiki 016](./docs/wiki/016-model-runtime-provider-config.md)。
 
 ### CLI（供脚本和 Agent 使用）
 
@@ -77,7 +83,7 @@ pnpm dev
 - **编排器（Pipeline）**：按固定顺序驱动步骤链，用状态机（ready → awaiting-approval → complete，由产物状态推导）强制关卡——AI 产出一律 pending，作者显式通过（如创意稿的选定）后才解锁下一步。顺序、关卡、持久化逻辑全部收在这一个模块。
 - **步骤（Step）**：每个环节是一次受契约约束的 AI 生成：`runStep` 对输入输出做双向 zod 校验；提示词维护在 SKILL.md 文件里，调 prompt 不用改代码。步骤不感知自己在流水线中的位置，因此可独立测试、独立替换。
 - **产物（Artifact）**：产出按「作品 + 类型 + 章节」归档为 append-only 版本链（`{kind, chapter?, version, content, humanStatus}`），任何历史版本可回读；创意稿保存草稿保持待把关、显式选定才通过；AI 产出一律待把关。
-- **可替换点**：存储（内存版开箱即用 ↔ SQLite 持久化，#9）与模型（AI SDK `createProviderRegistry`，换厂商 = 换字符串前缀，代码不感知 key）是两个注入点；测试用 FakeStep 跑全链路，从不触网。
+- **可替换点**：Pipeline 的依赖注入接缝是存储（内存版开箱即用 ↔ SQLite 持久化，#9）与 Step（`FakeStep` ↔ `RealStep`）。`RealStep` 内部由 `ModelRuntime` 统一管理 provider 路由、凭据、base URL 与请求超时。切换已注册 provider 只需更换带 provider 前缀的模型 ID；新增 provider 仍需增加 adapter、registry 注册与 key 契约。测试把外部 I/O 全部 mock，不触网。
 
 ## 技术栈
 
@@ -91,10 +97,10 @@ pnpm dev
   <img src="https://img.shields.io/badge/Vitest-6E9F18?logo=vitest&logoColor=white" alt="Vitest">
 </p>
 
-<p align="center">Vercel AI SDK v7（<code>@ai-sdk/deepseek</code>）· pnpm workspaces · TypeScript 全链</p>
+<p align="center">Vercel AI SDK v7（<code>@ai-sdk/deepseek</code> + <code>@ai-sdk/openai-compatible</code>）· pnpm workspaces · TypeScript 全链</p>
 
 ```bash
-pnpm test        # 单元测试（全 fake，不联网）
+pnpm test        # 单元测试（外部 I/O 全 mock，不联网）
 pnpm typecheck
 pnpm build
 ```
@@ -108,13 +114,13 @@ pnpm build
 | [CONTEXT.md](./CONTEXT.md) | 领域词汇表（先读它） |
 | [docs/schema.md](./docs/schema.md) | 数据模型的唯一来源 |
 | [docs/adr/](./docs/adr/) | 不可逆决策（编排、存储、skill 文件） |
-| [docs/wiki/](./docs/wiki/) | 每张票的技术方案与状态记录（怎么做只看这里） |
+| [docs/wiki/](./docs/wiki/) | 每张票的工程上下文：设计目的、代码落点与变化原因 |
 | [docs/research/](./docs/research/) | 选型调研（技术栈、LLM provider 策略） |
 | [docs/handoff.md](./docs/handoff.md) | 会话接力快照（当前进展与下一步） |
 
 ## 开发流程
 
-每张 ticket 走同一个 loop：grill 对齐 → wiki 技术方案 → TDD 红绿切片 → 三轮自校准 → 双轴 code review。详见 [docs/wiki/README.md](./docs/wiki/README.md)。
+每张 ticket 走同一个 loop：grill 对齐 → wiki 上下文节点 → TDD 红绿切片 → 上下文交接 → 双轴 code review。详见 [docs/wiki/README.md](./docs/wiki/README.md)。
 
 ## 路线图
 
@@ -125,6 +131,8 @@ pnpm build
 | [#10](https://github.com/12bitsD/agent4novel/issues/10) | 预处理 RealStep + interview + outline/setting 形态定案 | ✅ |
 | [#11](https://github.com/12bitsD/agent4novel/issues/11) | 预处理重构：提炼稿 + 创意稿方向包 + 比较视图 | ✅ |
 | [#4](https://github.com/12bitsD/agent4novel/issues/4) | 大纲生成：弧线 + 剧情点(两层,与章节解耦) | ✅ |
+| [#14](https://github.com/12bitsD/agent4novel/issues/14) | Agent CLI + LLM 遥测 + 项目驱动 skill | ✅ |
+| [#16](https://github.com/12bitsD/agent4novel/issues/16) | 可配置 ModelRuntime + LongCat provider | ✅ |
 | [#13](https://github.com/12bitsD/agent4novel/issues/13) | 设定完整版生成 | ◀ 下一个 |
 | [#9](https://github.com/12bitsD/agent4novel/issues/9) | SQLite 持久化（提前到 #5 前：正文产出必须扛得住重启） | |
 | [#5](https://github.com/12bitsD/agent4novel/issues/5) | 章纲/正文关卡 | |

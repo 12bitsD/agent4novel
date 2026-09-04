@@ -27,7 +27,7 @@
 
 Novel writing has long been a cottage craft: one author, one pen, hundreds of thousands of characters ground out word by word. agent4novel moves it onto a modern assembly line — the AI works like an on-call editorial team, filling out worldbuilding, structuring the outline, writing chapters; you are the editor-in-chief: the direction is yours, and every gate needs your sign-off. Raw inspiration goes in; a finished book comes out.
 
-It is built for authors who have ideas but no writing training. Give it a one-line idea (or an uploaded setting doc); it distills the material and offers a few creative directions for you to compare and pick, then generates ring by ring: the book outline, each chapter's beat sheet, each chapter's prose. Everything runs locally — single-user, open source, and your data never leaves your machine.
+It is built for authors who have ideas but no writing training. Give it a one-line idea (or an uploaded setting doc); it distills the material and offers a few creative directions for you to compare and pick, then generates ring by ring: the book outline, each chapter's beat sheet, each chapter's prose. The app and its store run locally: demo mode never calls a model service, while live mode sends the generation inputs to your configured model provider, whose privacy terms then apply.
 
 ## Quick start
 
@@ -38,12 +38,18 @@ pnpm dev        # server :8787 + web :5173
 
 Open <http://localhost:5173>. No API key needed to try it: without one, the app runs in demo mode, where a built-in fake produces sample content and no real model is called.
 
-With a real model (DeepSeek today):
+With a real model (DeepSeek, or LongCat through its OpenAI-compatible Chat Completions endpoint):
 
 ```bash
-export DEEPSEEK_API_KEY=sk-...
+cp .env.example .env.local
+chmod 600 .env.local
+# edit .env.local: set A4N_MODEL and the matching provider API key
 pnpm dev
 ```
+
+The server loads `.env.local` at startup and Git ignores it; environment variables already supplied by the shell or CI take precedence. If `A4N_MODEL` is explicit, its provider key is required. Without an explicit model, the server selects an available provider in this order: DeepSeek → LongCat → demo mode. Model IDs use `provider:model`, for example `longcat:LongCat-2.0` or `deepseek:deepseek-chat`.
+
+Credentials, base URLs, and provider adapters remain server-only. `Work.config.model` is an internal per-work override seam; there is no public UI or API for changing it yet. The current LongCat adapter targets its documented Chat Completions surface, not blanket compatibility with every OpenAI protocol such as Responses. See [wiki 016](./docs/wiki/016-model-runtime-provider-config.md) for the configuration contract, safety rules, and verified cases.
 
 ### CLI (for scripts and agents)
 
@@ -77,7 +83,7 @@ The whole architecture is built around one idea: **human-in-the-loop** — machi
 - **The orchestrator (Pipeline)** drives the step chain in a fixed order and enforces gates with a state machine (ready → awaiting-approval → complete, derived from artifact status). AI output always lands as pending; the next step unlocks only after you explicitly approve (e.g. picking a creative direction). Ordering, gating and persistence logic live in this one module.
 - **Steps** are contract-bound AI generations: `runStep` zod-validates both input and output, and prompts live in SKILL.md files so prompt iteration never touches code. A step doesn't know where it sits in the pipeline, which makes it independently testable and replaceable.
 - **Artifacts** are filed by "work + kind + chapter" as an append-only version chain (`{kind, chapter?, version, content, humanStatus}`); any historical version is readable. Saving a creative draft stays pending and only an explicit pick approves; agent output always awaits review.
-- **Swappable points**: storage (in-memory out of the box ↔ SQLite persistence in #9) and model (AI SDK `createProviderRegistry` — switching providers is a string prefix, code never touches the key) are the two injection points. Tests run the whole chain on FakeStep and never touch the network.
+- **Swappable points**: the Pipeline's dependency seams are storage (in-memory out of the box ↔ SQLite persistence in #9) and Step (`FakeStep` ↔ `RealStep`). Inside `RealStep`, `ModelRuntime` owns provider routing, credentials, base URLs, and request timeout. Switching between registered providers changes only the provider-qualified model ID; adding a provider still requires its adapter, registry entry, and key contract. Tests exercise the chain with external I/O mocked and never touch the network.
 
 ## Stack
 
@@ -91,10 +97,10 @@ The whole architecture is built around one idea: **human-in-the-loop** — machi
   <img src="https://img.shields.io/badge/Vitest-6E9F18?logo=vitest&logoColor=white" alt="Vitest">
 </p>
 
-<p align="center">Vercel AI SDK v7 (<code>@ai-sdk/deepseek</code>) · pnpm workspaces · TypeScript end-to-end</p>
+<p align="center">Vercel AI SDK v7 (<code>@ai-sdk/deepseek</code> + <code>@ai-sdk/openai-compatible</code>) · pnpm workspaces · TypeScript end-to-end</p>
 
 ```bash
-pnpm test        # unit tests (all faked, never networked)
+pnpm test        # unit tests (external I/O mocked; never networked)
 pnpm typecheck
 pnpm build
 ```
@@ -108,13 +114,13 @@ The docs in this repo are written for agents first — and read fine by humans:
 | [CONTEXT.md](./CONTEXT.md) | Domain glossary (read it first) |
 | [docs/schema.md](./docs/schema.md) | Data model, the single source of truth |
 | [docs/adr/](./docs/adr/) | Irreversible decisions (orchestration, storage, skill files) |
-| [docs/wiki/](./docs/wiki/) | Per-ticket tech plans and status logs (the only source of HOW) |
+| [docs/wiki/](./docs/wiki/) | Per-ticket engineering context: design intent, code landing, and reasons for change |
 | [docs/research/](./docs/research/) | Selection research (stack, LLM provider strategy) |
 | [docs/handoff.md](./docs/handoff.md) | Session handoff snapshot (where we are, what's next) |
 
 ## Development process
 
-Every ticket runs the same loop: grill-to-align → wiki tech plan → TDD red/green slices → three self-calibration rounds → two-axis code review. See [docs/wiki/README.md](./docs/wiki/README.md).
+Every ticket runs the same loop: grill-to-align → wiki context node → TDD red/green slices → context handoff → two-axis code review. See [docs/wiki/README.md](./docs/wiki/README.md).
 
 ## Roadmap
 
@@ -125,6 +131,8 @@ Every ticket runs the same loop: grill-to-align → wiki tech plan → TDD red/g
 | [#10](https://github.com/12bitsD/agent4novel/issues/10) | Preprocess RealStep + interview + outline/setting shapes | ✅ |
 | [#11](https://github.com/12bitsD/agent4novel/issues/11) | Preprocess rework: caption + creative direction packs + compare view | ✅ |
 | [#4](https://github.com/12bitsD/agent4novel/issues/4) | Outline: arcs + segments (two-level, chapter-free) | ✅ |
+| [#14](https://github.com/12bitsD/agent4novel/issues/14) | Agent CLI + LLM telemetry + project driving skill | ✅ |
+| [#16](https://github.com/12bitsD/agent4novel/issues/16) | Configurable ModelRuntime + LongCat provider | ✅ |
 | [#13](https://github.com/12bitsD/agent4novel/issues/13) | Setting generation (full version) | ◀ next |
 | [#9](https://github.com/12bitsD/agent4novel/issues/9) | SQLite persistence (before #5: prose must survive restarts) | |
 | [#5](https://github.com/12bitsD/agent4novel/issues/5) | Beat/prose gates | |
