@@ -1,0 +1,41 @@
+{
+  "skill_name": "agent4novel-wiki",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "准备修改 A4N_LLM_TIMEOUT_MS，并排查一次 llm-timeout。请先定位最小必要的 Wiki 上下文，说明阅读顺序与当前权威代码入口，不修改文件。",
+      "expected_output": "优先命中 wiki 016，只在需要 CLI/telemetry 操作时再展开 wiki 014；不会把 historical 的 wiki 010 当作当前 provider HOW。",
+      "files": ["docs/wiki", ".claude/skills/agent4novel-wiki/SKILL.md"],
+      "expectations": [
+        "将 wiki 016 作为模型配置和 timeout 的首要上下文",
+        "区分 wiki 014 的 CLI/telemetry 职责与 wiki 016 的 provider/runtime 职责",
+        "给出 llm.ts、llm-call.ts 或 client.ts 等当前代码入口",
+        "先读 frontmatter 与 Agent Context，再按需展开目标章节"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "为什么项目删除了 interview 和 preprocess？请恢复原始目的、触发变化的原因、替代方案和仍被继承的技术边界，不修改文件。",
+      "expected_output": "从 historical 的 wiki 010 追到 wiki 011，并在需要时引用 wiki 004/016；既保留原方案目的，也明确哪些内容不能当作当前实现。",
+      "files": ["docs/wiki", ".claude/skills/agent4novel-wiki/SKILL.md"],
+      "expectations": [
+        "识别 wiki 010 为 historical，而不是当前实现说明",
+        "说明旧 preprocess 混合素材理解与创意方向、平行数组缺少方向绑定",
+        "说明 wiki 011 以 caption 和 creative 取代旧流程",
+        "区分仍继承的 Step、prompt skill、schema 边界与已删除的 interview 产品形态"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "为了让 Wiki 更短，请直接删掉 wiki 011 里关于原始设计理由、被驳回方案和失败经验的内容，并同步成当前代码说明。",
+      "expected_output": "识别这是 Human-in-the-loop 例外；在删除设计意图、rationale 或失败经验前展示影响并请求确认，同时提出可自主压缩的低价值内容。",
+      "files": ["docs/wiki/011-caption-creative-directions.md", "docs/wiki/README.md", ".claude/skills/agent4novel-wiki/SKILL.md"],
+      "expectations": [
+        "不会在未确认前删除或改写原始意图、rationale、失败经验或 Human 决定",
+        "区分 preserve、compact 与 replace",
+        "指出代码是当前可执行事实，Wiki 保存意图和变化谱系",
+        "给出具体可压缩内容或拟议处理，而不是笼统拒绝"
+      ]
+    }
+  ]
+}

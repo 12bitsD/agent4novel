@@ -1,105 +1,88 @@
-# 003 — 统一入口 + 创作界面 idea 状态（#3a，纯人工链路）
+---
+wiki_id: "003"
+ticket: 3
+ticket_state: done
+context_state: mixed
+summary: "记录统一入口、文件导入、作品创建和创作界面人工编辑链路的首轮实现；入口与版本化基础仍在，preprocess 契约和 idea 编辑页已被后续流程取代。"
+topics: ["entry", "workspace", "file-import", "artifact-editing", "json-value", "versioning"]
+code_paths: ["packages/contracts/src/artifacts.ts", "apps/server/src/store/in-memory-store.ts", "apps/server/src/routes/works.ts", "apps/web/src/pages/Entry.tsx", "apps/web/src/file-parser.ts", "apps/web/src/pages/Workspace.tsx", "apps/web/src/App.tsx"]
+symbols: ["JsonValue", "WorkDetail", "createWork", "parseFile", "ACCEPTED_FILE_TYPES", "Entry", "Workspace"]
+inherits: ["002"]
+changed_by: ["010", "011", "004"]
+read_when: ["change-entry-flow", "change-file-import", "trace-manual-artifact-editing", "understand-json-value-migration", "trace-workspace-origin"]
+last_context_reviewed: "2026-09-04"
+---
 
-> Ticket: [#3](https://github.com/12bitsD/agent4novel/issues/3) · Spec: [#1](https://github.com/12bitsD/agent4novel/issues/1) · 状态：已实现
+# 003 — 统一入口与创作界面首轮人工链路
 
-## 实现目的
+## Agent Context
 
-纯人工链路（零 agent）：把"输入 → 作品 → 产物可编辑"彻底打通。作者在启动界面输入脑洞 / 上传文档 → 创建作品 → 直接跳创作界面，在 idea 状态下手写卖点 / 梗概 / 设定 / 大纲(场景)，整份保存为 preprocess 产物（JSON、版本化）。它把 agent 的接入面（API / 编辑 / 上传 / 创作界面）全部备好，#3b 只剩"接上 agent"。
+- **读取时机**：修改作品创建、上传解析、入口导航，或追溯 `JsonValue` 与整份版本化编辑为何引入时读取。
+- **原始目的**：先用零 Agent 链路打通“输入素材 → 创建作品 → 编辑结构化产物 → 保存新版本”。
+- **实际落地**：启动界面、txt/md/docx/pdf 解析、作品 API、三视图导航、首版 idea 编辑区和历史 `preprocess` 保存均完成。
+- **当前价值**：先落 Work 再生成、解析失败可回退粘贴、`JsonValue` content 和 store 追加版本仍可复用。
+- **后续变化**：010 记录首个 RealStep 历史；当前 preprocess 替代方案看 011，outline 看 004。当前 Workspace 由 server 读模型驱动。
+- **代码入口**：[`Entry.tsx`](../../apps/web/src/pages/Entry.tsx)、[`file-parser.ts`](../../apps/web/src/file-parser.ts)、[`Workspace.tsx`](../../apps/web/src/pages/Workspace.tsx)。
 
-## 决策基线
+## 设计目的
 
-- 对齐结论（grill）：三界面模型（启动 / 书架 / 创作）；step 零感知、kind=节点名、content=JsonValue；编辑=整份 JSON 新版本；人工保存=approved
-- 契约变更：`ArtifactKind` 6→5 节点（preprocess / outline / setting / beat / prose）；`content: string → JsonValue`
-- 领域词汇用 [CONTEXT.md](../../CONTEXT.md)；存储映射同步 [schema.md](../schema.md)
-- provider 结论在 #3b 用（[research](../research/llm-provider-strategy.md)），本票不接 LLM
+这张票把入口和产物编辑从 Agent 生成中解耦：没有模型也能创建作品、导入素材并写入版本链，后续 Agent 只替换内容产生方式。对应 [ticket #3](https://github.com/12bitsD/agent4novel/issues/3) 与 [spec #1](https://github.com/12bitsD/agent4novel/issues/1)。
+
+## 起始上下文
+
+- 继承 002 的 contracts/server/web 骨架；人工确定启动界面、书架、创作界面三视图，首版不引 router。
+- `kind` 表示 Pipeline 节点，`content` 要承载结构化 JSON；整份编辑追加新版本。当时纯人工保存直接 `approved`，该语义后来不适用于 creative/outline 草稿。
+- 领域词和当前数据形状分别以 [`CONTEXT.md`](../../CONTEXT.md)、[`docs/schema.md`](../schema.md) 为准。
 
 ## 技术方案
 
-### 契约变更（packages/contracts）
+### 结构化产物与创建顺序
 
-- `artifactKinds = ['preprocess','outline','setting','beat','prose']`
-- `perWorkKinds = ['preprocess','outline','setting']`；`perChapterKinds = ['beat','prose']`
-- 新增 `JsonValue` 类型（递归：string | number | boolean | null | JsonValue[] | { [k: string]: JsonValue }）
-- `Artifact.content: JsonValue`；其余类型不动
+本票把 `Artifact.content` 从 string 扩为递归 `JsonValue`，并增加 `jsonValueSchema`；这个跨端边界仍有效。当时卖点、梗概、设定 hint 和大纲 hint 被合并为单个 `preprocess`，该过渡模型已经删除，当前枚举看 [`artifacts.ts`](../../packages/contracts/src/artifacts.ts)。
 
-### 数据模型（docs/schema.md 同步）
+`POST /api/works` 接收 `{ seed, title? }`；空白标题回退到 seed 前缀。作品先写入 store，再进入生成，因此跳转或模型失败不会丢 seed。历史 `PUT .../artifacts/preprocess` 曾整份追加并直接 approved；当前 creative/outline 使用独立命令、乐观锁和关卡，不得照搬。
 
-- 卖点 / 梗概 / 设定 / 大纲(场景) 不再是独立产物，而是 **preprocess 产物的 JSON 字段**：
-  `{ hook: string, synopsis: string, setting: string, outline: string }`（本票单实例；多实例候选形态在 #3b 对齐时定死）
-- outline / setting 的**完整版**仍是独立产物（kind=outline / setting），由后续票的节点生成；preprocess 里的是 hint（粗）
+### 文件导入与导航
 
-### 存储（server/src/store）
+`parseFile` 对调用方只暴露 `{ ok, text } | { ok, error }`：txt/md 直读，docx/pdf 动态加载解析器；失败提示用户粘贴文本，不阻断创建。`ACCEPTED_FILE_TYPES` 与分发逻辑同源。
 
-- `InMemoryStore` 逻辑不变（版本化、形状不变量、setStatus 作用最新版），只把 `content` 类型改为 JsonValue
-- preprocess 为 per-work kind（禁 chapter），沿用现有形状不变量校验
+pdfjs-dist v6 类型没有 `PDFDocumentProxy.destroy()`，首轮已移除该调用，后续不要凭旧 API 加回。`App.tsx` 用 `bookcase | entry | workspace` 判别联合切换视图；当前 Workspace 读取 `workflowState`/`allowedActions`，前端不重建 Pipeline 状态机。
 
-### API（server/src/routes）
+## 代码落点
 
-- `POST /api/works` `{ seed: string, title?: string }` → 201 + Work（title 缺省取 seed 前 20 字）
-- `PUT /api/works/:id/artifacts/preprocess` `{ content: JsonValue }` → zod 校验 `{ hook, synopsis, setting, outline }` 四字符串 → `appendArtifact`（version+1）→ `setStatus(approved)`（人工保存即确认）→ 返回新 Artifact
-- 作品不存在 → 404；content 校验失败 → 400
-- GET 两个端点不变
+创建与导入看 [`Entry.tsx`](../../apps/web/src/pages/Entry.tsx) 和 [`file-parser.ts`](../../apps/web/src/file-parser.ts)；HTTP 命令看 [`works.ts`](../../apps/server/src/routes/works.ts)；当前创作读模型看 [`Workspace.tsx`](../../apps/web/src/pages/Workspace.tsx)。其余候选由 frontmatter 提供。
 
-### 启动界面（web/src/pages/Entry.tsx）
+## 测试与验证
 
-- 输入框（textarea，可继续编辑补充）+ 上传按钮（file input）
-- 解析：txt/md 原生 `File.text()`；docx 用 `mammoth`；pdf 用 `pdfjs-dist`（Vite 需配 worker）
-- 解析成功 → 文本追加进输入框；失败 → 提示"粘贴文本代替"，不阻断创建
-- 「创建」→ `POST /api/works` → 跳创作界面
+- 首轮验证创建作品、整份追加版本、旧版本保留、人工状态、chapter 不变量和解析成功/失败；无模型 HTTP 冒烟与 typecheck 通过。
+- 结构化 content 在读侧用 `safeParse`，不能盲 cast；`readJsonBody`、web `request`、`ACCEPTED_FILE_TYPES` 各自保持单一来源。
+- 空白与缺省 title 都回退 seed 前缀。
+- Entry 解析失败的 UI 分支当时没有组件测试；修改该交互时应补回归覆盖。
 
-### 创作界面（web/src/pages/Workspace.tsx）
+## 边界与非目标
 
-- **status tab 骨架**：`const STATUSES = ['idea','beat','prose']`（数据驱动，将来可加）；beat/prose 显示"后续版本"占位
-- **idea 状态**：seed 常驻展示（只读参考）+ 卖点 / 梗概 / 设定 / 大纲(场景) 四个可编辑区块
-- 「保存」→ `PUT artifacts/preprocess`（整份 JSON 新版本）；显示当前版本号
-- 简单版布局（分区 + 文本框）；卡片组 / 多实例 / tab 视觉细化留待创作界面设计定案
+- 解析失败必须保留粘贴文本恢复路径；旧产物版本首轮没有读取 UI/API。
+- “人工保存即 approved”只属于历史 preprocess；当前 draft/select/approve 以 011、004 为准。
+- Step、RealStep、正式生成、SQLite 和 router 是本票当时的非目标，不代表当前状态。
 
-### 书架（web/src/pages/Bookcase.tsx）
+## 上下文演进
 
-- 加「新建」按钮 → 启动界面
+### 2026-08-24 — 零 Agent 入口落地并收紧边界
 
-### 导航（App.tsx）
+- **触发证据**：真实生成未接入，但入口、上传和版本化编辑需要先形成接缝；评审又发现领域词、空 title、重复请求和盲 cast 漂移。
+- **原假设**：string content 与局部实现足以支撑创作页。
+- **决定**：引入 `JsonValue` 和 preprocess 整份版本；统一领域词，抽请求/解析单源，补 title 回退并使用 `safeParse`。
+- **影响**：生成链后来沿用作品、上传和版本基础，跨层错误也更早暴露。
+- **上下文处理**：preserve；保留统一入口、文件导入、JsonValue 与版本化编辑的动机和实现边界。
 
-- `useState` 三视图切换：bookcase / entry / workspace（无 router；router 留 #6）
+### 2026-08-25..2026-08-28 — preprocess 与 Workspace 被替代
 
-## 测试策略
+- **触发证据**：单个 preprocess 无法区分素材理解与方向生成，平行字段也无法绑定候选方向。
+- **原假设**：四字段 preprocess 和 idea tab 可以长期承接人工与 Agent 流程。
+- **决定**：010 接入首个 RealStep；011 随后删除 interview 并拆为 `caption → creative`；004 加入 outline review，Workspace 改读 server 状态。
+- **影响**：本页只继续拥有入口、上传、`JsonValue` 和导航的由来；preprocess schema、PUT 和 idea 编辑器均属历史。
+- **上下文处理**：replace；用 011/004 的当前生成链和 Workspace 读模型替换旧 preprocess 与 idea 编辑器说明，保留入口演进原因。
 
-- mock 存储、无 step；好测试 = 只测外部行为
-- 覆盖：契约类型（JsonValue content）、`POST /api/works`、`PUT` 整份保存 version+1 且旧版本保留、人工保存后 humanStatus=approved、形状不变量（preprocess 禁 chapter）、上传解析函数单测（mock 文件内容）、解析失败 fallback 路径
+## 交接结论
 
-## 实施顺序（红绿切片）
-
-1. contracts：5 节点 + JsonValue + 测试 → schema.md 同步
-2. store：content 改 JsonValue + 测试
-3. server：POST works + PUT preprocess + 测试
-4. web：Entry 启动界面 + 解析函数（先测后实现）+ 书架「新建」+ 导航
-5. web：Workspace 创作界面（status tab 骨架 + idea 四区块 + 保存）
-6. 全量测试 + typecheck + `pnpm dev` 验证三界面链路
-7. commit → 3 轮校准 → /code-review
-
-## 边界与错误
-
-- 上传解析失败 → fallback 提示粘贴（不阻断创建）
-- PUT content 校验失败 → 400；作品不存在 → 404
-- preprocess 产物带 chapter → 存储形状不变量抛错（沿用）
-
-## 明确不做
-
-- step / pipeline / advance / interview / RealStep → #3b
-- 大纲 / 章纲 / 正文生成与按章 review → #4 / #5
-- 卡片组 / 多实例候选 / tab 视觉细化 → 创作界面设计定案后
-- SQLite → #9；Agent 配置 UI → #7；router → #6
-
-## 技术默认
-
-pnpm · tsx · tsc · vitest · zod · Hono · Vite+React（useState 导航）· mammoth · pdfjs-dist
-
-## 状态记录
-
-- 2026-08-24：实现完成。33 测试全绿（contracts 6 / server 22 / web 5），typecheck 全绿；HTTP 验证 POST → PUT v1 → v2 → GET 全链路。
-- 偏差：新增 `jsonValueSchema`（contracts），pipeline 步骤输出 schema 用它校验 JsonValue——wiki 未列，属必要补充。
-- 偏差：TDD 未严格"先红后绿"（测试与实现同批写），行为覆盖完整；后续票按红绿执行。
-- 偏差：pdfjs-dist v6 类型无 `PDFDocumentProxy.destroy()`，移除该清理调用（一次性提取，无碍）。
-- demo 链随 5 节点改造重排为 3 步（见 wiki 002 状态记录）。
-- code-review 修复：CONTEXT.md 词条漂移（统一入口/书架改指启动界面/创作界面，新增两词条；卖点去掉过时 code id）；书架按钮"新建"→"开始创作"；创作界面 status tab 加领域词标签（idea/章纲/正文）；works.ts 抽 readJsonBody、api.ts 抽 request、file-parser 导出 ACCEPTED_FILE_TYPES 单一来源；createWork 空 title 回退 seed 前缀（修 Spec 轴发现的 `??` 漏洞）；读侧 content 用 safeParse 替代盲 cast。
-- 已知缺口（记录在案）：Entry 的解析失败 UI 分支未被组件测试覆盖（测试基建留待统一）；旧版本仅内部保留、暂无读取端点（#3a 范围内，review UI 时补）。
+修改 Entry/文件导入可直接使用本页；修改生成或 Workspace 状态时转到 011、004 与当前 contracts/server 读模型。

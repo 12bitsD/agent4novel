@@ -7,7 +7,7 @@ How the engineering skills should consume this repo's domain documentation when 
 - **`CONTEXT.md`** at the repo root, or
 - **`CONTEXT-MAP.md`** at the repo root if it exists — it points at one `CONTEXT.md` per context. Read each one relevant to the topic.
 - **`docs/adr/`** — read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
-- **`docs/wiki/`** — per-ticket technical plans (purpose + design + status log). Before implementing, reviewing, or debugging a ticket, read the wiki doc linked from the ticket body, if one exists. If the wiki drifts from the code, trust the code and update the wiki. See `docs/wiki/README.md` for the loop.
+- **`docs/wiki/`** — per-ticket engineering context (original purpose + technical/code landing + reasons for changes + handoff boundary). Before planning, implementing, reviewing, or debugging existing behavior, follow `.claude/skills/agent4novel-wiki/SKILL.md` to locate and selectively read the relevant context. Verify current executable behavior in code and tests; preserve the intent and evolution history when repairing drift. See `docs/wiki/README.md` for the document contract.
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 

@@ -1,47 +1,132 @@
-# Project Wiki — 技术方案与实现记录
+# Project Wiki — 按 Ticket 继承的工程上下文
 
-给 agent 消费的"每票实现文档"：**实现目的 + 技术方案 + 状态记录**。它是 HOW 的唯一来源，与其他文档严格分工（防重复）：
+本 Wiki 让后续 Agent 继承每张 ticket 的工程心智模型：**原本为什么设计、实际落了什么代码、后来为什么改变，以及下一步可以继续假定什么**。每张 ticket 仍是一篇独立上下文节点；代码和测试负责证明当前行为，Wiki 负责保存代码本身无法说明的意图与演进原因。
 
-| 文档 | 管什么 | wiki 与它的关系 |
+核心读者是规划、实现、调试和评审本项目的 Agent。默认先按 `.claude/skills/agent4novel-wiki/SKILL.md` 检索并读取 `Agent Context`，只有任务需要时才展开技术方案或历史。
+
+## 信息边界
+
+同一事实只保留一个权威来源，Wiki 通过链接继承，不复制整份内容。
+
+| 来源 | 权威内容 | Wiki 如何使用 |
 |---|---|---|
-| spec（issue #1） | WHAT（做什么、为什么） | wiki 只讲 HOW，不重述产品理由 |
-| `CONTEXT.md` | 领域词汇 | wiki 只用它的词，不重新定义、不造新词 |
-| `docs/adr/` | 不可逆决策 | wiki 引用；实现中新出现的不可逆决策**另立 ADR**，wiki 只链接 |
-| `docs/research/` | 选型依据 | wiki 只引用结论，不抄论证 |
-| ticket（GitHub issue） | 验收标准 + 阻塞关系 | wiki 开头"实现目的"是 ticket 的一句话摘要 + 链接，不复制全文 |
+| GitHub issue | WHAT、验收标准、阻塞关系 | 摘要目的并链接，不复制正文 |
+| `CONTEXT.md` | 领域词汇 | 使用其术语，不重新定义 |
+| `docs/schema.md` | 当前数据模型 | 记录某票如何改变模型，当前形态直接链接 schema |
+| `docs/adr/` | 不可逆架构决策 | 引用；新决策另立 ADR |
+| `docs/research/` | 调研证据 | 引用结论和证据，不复制论证 |
+| 代码与测试 | 当前可执行行为 | Wiki 提供入口、symbol 和设计理由；发生冲突时先验证代码 |
+| `docs/wiki/` | 每票的目的、方案、代码落点、变化原因和交接边界 | 保存工程上下文继承链 |
 
-## 命名与位置
+## 命名与关系
 
-`docs/wiki/NNNN-<slug>.md`，NNNN = GitHub issue 号。ticket 正文放一行 `## 技术方案 (wiki)` 链接指过来。
+文件名使用 `docs/wiki/NNN-<slug>.md`。`NNN` 是至少三位、左侧补零的 GitHub issue 号，例如 issue `#4` 对应 `004-*.md`；超过三位时保留完整数字。
 
-## 文档模板（每份 wiki 固定结构）
+每篇只描述一张 ticket。跨票演进通过两种关系表达：
 
-1. **实现目的** — 这张票端到端交付什么、为什么存在（2–3 句）
-2. **决策基线** — 引用已对齐的决策（ADR / research / grill 结论），不重新论证
-3. **技术方案** — 模块、接口、数据模型、API、UI（HOW）
-4. **测试策略** — seam、fake、覆盖点
-5. **实施顺序** — 红绿切片
-6. **边界与错误** — 失败模式与处理
-7. **明确不做** — 本票范围外
-8. **状态记录** — 实现中每一次重要决定 / 偏差 / 踩坑，按时间追加
+- `inherits`：本票开始时直接继承、理解本票时可能需要追溯的上下文。
+- `changed_by`：后续 ticket 改变或扩展了本票的部分结论；具体范围必须在 `Agent Context` 和“上下文演进”中说明。页面是否仍可用于当前任务只看 `context_state`，不能从这个关系字段推断。
 
-## 标准 loop（每张票都走）
+## Frontmatter 契约
 
-1. **对齐**（grill）→ 结论进"决策基线"
-2. **写技术方案** → 存到这里 → ticket 里加链接
-3. **TDD 实现**，边做边更新"状态记录"
-4. **code-review / debug 消费本文档**：先读 wiki，再读代码
-5. **收尾**：终态与未决问题写进"状态记录"
+Frontmatter 是快速路由入口。字段顺序固定，数组保持单行，确保 `rg` 不解析 Markdown 正文也能筛选候选页。
 
-## 消费规则（agent）
+```yaml
+---
+wiki_id: "016"
+ticket: 16
+ticket_state: done
+context_state: current
+summary: "统一模型运行配置、provider、凭据与超时边界"
+topics: ["model-runtime", "provider", "credentials", "timeout"]
+code_paths: ["apps/server/src/steps/llm.ts", "apps/server/src/config/**"]
+symbols: ["ModelRuntime", "A4N_MODEL"]
+inherits: ["014"]
+changed_by: []
+read_when: ["configure-model", "add-provider", "diagnose-llm"]
+last_context_reviewed: "2026-09-04"
+---
+```
 
-- implement 前：读 ticket → 读其 wiki 文档
-- debug / code-review：先读"状态记录"+"技术方案"，再读代码；发现 wiki 与代码漂移，**以代码为准并把 wiki 改对**
-- 用 `CONTEXT.md` 的词汇写 wiki，不造新词
+字段值遵循以下约束：
+
+| 字段 | 约束 |
+|---|---|
+| `wiki_id` | 与文件名前缀一致的字符串 |
+| `ticket` | GitHub issue 整数 |
+| `ticket_state` | `planned`、`active` 或 `done` |
+| `context_state` | `current`、`mixed` 或 `historical` |
+| `summary` | 一行说明本票最终留下的能力 |
+| `topics` | 稳定主题 slug，不写临时任务描述 |
+| `code_paths` | 代码入口或 glob；只列高信号路径 |
+| `symbols` | 类型、函数、命令、错误码或配置名 |
+| `inherits` | 直接前置 Wiki ID，不展开整条祖先链 |
+| `changed_by` | 改变或扩展本票上下文的后续 Wiki ID；不表示整页失效 |
+| `read_when` | Agent 任务触发词 slug |
+| `last_context_reviewed` | 最近一次人工或 Agent 审核上下文的日期；不等于代码已验证日期 |
+
+`context_state` 与 ticket 是否完成是两回事：
+
+- `current`：声明范围内的上下文仍可用于理解当前实现。
+- `mixed`：仍有当前价值，但部分结论已被后续 ticket 改变；顶部必须点明边界。
+- `historical`：只用于追溯目的、方案或变化原因，不能作为当前实现说明。
+
+## 正文模板
+
+所有新建或改造后的页面使用相同一级结构，让 Agent 可以按 heading 读取局部内容。
+
+```markdown
+# NNN — 标题
+
+## Agent Context
+
+- **读取时机**：什么任务、路径、symbol 或错误应读本页。
+- **原始目的**：为什么启动本票。
+- **实际落地**：最终形成的能力。
+- **当前价值**：今天仍应继承的上下文。
+- **后续变化**：哪些结论被谁改变。
+- **代码入口**：优先阅读的文件和 symbol。
+
+## 设计目的
+## 起始上下文
+## 技术方案
+## 代码落点
+## 测试与验证
+## 边界与非目标
+## 上下文演进
+## 交接结论
+```
+
+“技术方案”解释结构、接口和取舍；“代码落点”只做导航，不大段复制可从代码直接看到的内容。“交接结论”明确下一位 Agent 可以假定什么、不能假定什么，以及应继续读哪张 ticket。
+
+## 记录设计变化
+
+有解释价值的变化按事件记录。普通格式调整、文件移动或机械测试数字可以压缩进一个落地事件。
+
+```markdown
+### YYYY-MM-DD — 变化标题
+
+- **触发证据**：什么事实暴露了原方案的问题。
+- **原假设**：此前为什么认为原方案可行。
+- **决定**：改成什么，以及为什么。
+- **影响**：代码、契约、后续 ticket 或操作方式受到什么影响。
+- **上下文处理**：`preserve`、`compact` 或 `replace`，并说明保留尺度。
+```
+
+同一变化跨越多天时使用 `YYYY-MM-DD..YYYY-MM-DD — 变化标题`，不要改用自然语言日期范围或其他分隔符。
+
+Agent 默认自主判断保留、压缩或替换；可能损失原始目的、设计理由、失败经验、人工裁决，或改变知识归属时，按项目 Wiki Skill 请求 Human 确认。
+
+具体创建、实现回写、设计变化、漂移修复、关系维护与最小读取步骤只在项目 Wiki Skill 中定义，避免两套流程漂移。
 
 ## Index
 
-- [002 脚手架 + 存储 + workflow 骨架 + 书架](./002-scaffold-storage-runner-bookcase.md) — issue [#2](https://github.com/12bitsD/agent4novel/issues/2) ✅
-- [003 统一入口 + 创作界面 idea 状态（#3a）](./003-unified-entry-idea-workspace.md) — issue [#3](https://github.com/12bitsD/agent4novel/issues/3) ✅
-- [010 预处理 RealStep + interview + outline/setting 形态对齐（#3b）](./010-preprocess-realstep-interview.md) — issue [#10](https://github.com/12bitsD/agent4novel/issues/10) ✅（产物形态被 #3c 重构，见 wiki 011）
-- [011 预处理重构：Caption + Creative 方向包 + 比较界面（#3c）](./011-caption-creative-directions.md) — issue [#11](https://github.com/12bitsD/agent4novel/issues/11) ✅
+| Wiki | Ticket | 上下文状态 | 主要范围 |
+|---|---:|---|---|
+| [002 脚手架、存储、workflow 与书架](./002-scaffold-storage-runner-bookcase.md) | [#2](https://github.com/12bitsD/agent4novel/issues/2) | mixed | monorepo、store、基础 pipeline、书架 |
+| [003 统一入口与 idea 工作区](./003-unified-entry-idea-workspace.md) | [#3](https://github.com/12bitsD/agent4novel/issues/3) | mixed | 创建作品、文件导入、早期编辑链路 |
+| [004 大纲弧线与剧情点](./004-outline-arcs-segments.md) | [#4](https://github.com/12bitsD/agent4novel/issues/4) | current | outline 契约、关卡、编辑界面 |
+| [010 预处理 RealStep 与 interview](./010-preprocess-realstep-interview.md) | [#10](https://github.com/12bitsD/agent4novel/issues/10) | historical | 已被替代的 preprocess 方案及其遗留机制 |
+| [011 Caption 与 Creative 方向包](./011-caption-creative-directions.md) | [#11](https://github.com/12bitsD/agent4novel/issues/11) | mixed | 提炼稿、创意稿、选择关卡、读模型 |
+| [014 Agent CLI 与遥测](./014-agent-cli-telemetry.md) | [#14](https://github.com/12bitsD/agent4novel/issues/14) | mixed | CLI、smoke、LLM telemetry |
+| [016 模型运行配置](./016-model-runtime-provider-config.md) | [#16](https://github.com/12bitsD/agent4novel/issues/16) | current | provider、凭据、timeout、ModelRuntime |

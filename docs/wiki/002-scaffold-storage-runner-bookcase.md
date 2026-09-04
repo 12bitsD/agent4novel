@@ -1,192 +1,97 @@
-# 002 — 脚手架 + 存储 + workflow 骨架 + 书架
+---
+wiki_id: "002"
+ticket: 2
+ticket_state: done
+context_state: mixed
+summary: "记录项目最初的可运行骨架，以及至今仍有效的存储、Step 和 Pipeline 边界；具体产物契约与运行链已由后续 wiki 演进。"
+topics: ["scaffold", "storage", "step-contract", "pipeline", "workflow-gates", "bookcase"]
+code_paths: ["packages/contracts/src/artifacts.ts", "packages/contracts/src/step.ts", "apps/server/src/store/work-store.ts", "apps/server/src/store/in-memory-store.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts", "apps/web/src/pages/Bookcase.tsx"]
+symbols: ["Artifact", "Work", "WorkStore", "InMemoryStore", "Step", "runStep", "Pipeline"]
+inherits: []
+changed_by: ["003", "010", "011", "014", "016"]
+read_when: ["understand-project-foundation", "change-storage-contract", "change-step-contract", "change-pipeline-gates", "trace-bookcase-origin"]
+last_context_reviewed: "2026-09-04"
+---
 
-> Ticket: [#2](https://github.com/12bitsD/agent4novel/issues/2) · Spec: [#1](https://github.com/12bitsD/agent4novel/issues/1) · 状态：已实现
+# 002 — 脚手架、存储、Pipeline 骨架与书架
 
-## 实现目的
+## Agent Context
 
-交付一条最小可运行、可验证的全链路：数据模型文档 → 存储接口(mock) → 步骤契约 → 流水线 runner → Hono API → 书架页。完成后一条命令启动、浏览器打开能看到书架列出示例作品；runner 的顺序与关卡由 Vitest 覆盖，全程不调真 LLM。它是后续 #3–#5 每个写作步骤的"水管"——水管不通，水（LLM 产物）进不来。
+- **读取时机**：理解项目纵向骨架，或修改存储、`Step`、Pipeline 关卡和书架读模型时读取。
+- **原始目的**：用 fake 数据和 fake step 打通 contracts → store → Pipeline → Hono API → React 书架。
+- **实际落地**：monorepo、首版产物契约、`WorkStore`/`InMemoryStore`、可注入 Pipeline、两类关卡、作品 API 和书架均完成。
+- **当前价值**：存储与步骤是 seam、Pipeline 是深模块、产物追加版本、输入输出在边界校验等原则仍有效。
+- **后续变化**：003 加入口；010/011 接入并重构生成链；014 加 CLI/遥测；016 接管 provider。本页的首版枚举和 demo 链不是当前契约。
+- **代码入口**：[`step.ts`](../../packages/contracts/src/step.ts)、[`work-store.ts`](../../apps/server/src/store/work-store.ts)、[`pipeline.ts`](../../apps/server/src/pipeline/pipeline.ts)。
 
-## 决策基线
+## 设计目的
 
-- 编排 = AI SDK v7 + 薄 DIY workflow：[ADR-0001](../adr/0001-orchestration-ai-sdk-thin-workflow.md)
-- 存储 = SQLite 为最终目标、mock 先行、prompt/skill 为文件：[ADR-0002](../adr/0002-storage-sqlite-skills-as-files.md)
-- 选型依据：[research](../research/agent-tech-stack.md)（AI SDK / Vite+React / Hono / SQLite / SKILL.md）
-- 两个 real seam：**存储**（InMemoryStore / SQLiteStore）、**步骤**（FakeStep / RealStep）；Pipeline 是深模块，不是 swap seam
-- 步骤契约 = `run(input, config)`，声明 input/output schema 并校验；config 为每步 Agent 配置（本票传默认，完整配置在 #7）
-- 领域词汇一律用 [CONTEXT.md](../../CONTEXT.md) 的定义
+这张票交付一条不依赖真实 LLM 的最小可运行链路。后续写作节点只需实现 `Step` 并扩展 Pipeline definition，不应重复建设存储、关卡和 HTTP 骨架。对应 [ticket #2](https://github.com/12bitsD/agent4novel/issues/2) 与 [spec #1](https://github.com/12bitsD/agent4novel/issues/1)。
+
+## 起始上下文
+
+- 编排采用 AI SDK + 薄 TypeScript workflow，见 [ADR-0001](../adr/0001-orchestration-ai-sdk-thin-workflow.md)；Pipeline 集中规则，不充当可替换 seam。
+- 存储最终方向为 SQLite，但首轮用内存实现验证接口；prompt/skill 使用文件，见 [ADR-0002](../adr/0002-storage-sqlite-skills-as-files.md)。领域词和当前模型分别以 [`CONTEXT.md`](../../CONTEXT.md)、[`docs/schema.md`](../schema.md) 为准。
 
 ## 技术方案
 
-### 仓库结构
+### 模块边界
 
-```
-agent4novel/
-├── pnpm-workspace.yaml
-├── package.json                 # 根：private，workspaces，dev/test/typecheck 脚本
-├── tsconfig.base.json
-├── docs/schema.md               # 数据模型（本票产出）
-├── packages/contracts/          # @agent4novel/contracts
-│   └── src/{artifacts.ts, step.ts, index.ts}
-├── apps/server/                 # @agent4novel/server（Hono, 8787）
-│   └── src/{index.ts, app.ts, routes/works.ts,
-│            store/{work-store.ts, in-memory-store.ts},
-│            pipeline/pipeline.ts}
-└── apps/web/                    # @agent4novel/web（Vite+React, 5173, /api 代理 → 8787）
-    └── src/{main.tsx, App.tsx, api.ts, pages/Bookcase.tsx}
-```
+只有两类实现是替换点：`WorkStore`（首轮 `InMemoryStore`）和 `Step`（`FakeStep`/RealStep）。Pipeline 接收 store、steps、definition 和 `resolveConfig`，集中拥有顺序、依赖、关卡与推进语义，不自行创建依赖。
 
-### 数据模型（docs/schema.md 要点）
+### Step、存储与版本
 
-标识符映射（代码英文 id ↔ 领域中文词）：
+`Step` 声明 `inputSchema`、`outputSchema` 和 `run(input, config)`；`runStep` 在调用前后分别解析输入与输出。prompt、skill 和模型调用留在具体 Step 内，`AgentConfig` 作为显式策略输入。
 
-| 领域词 | 代码 id | 形状 |
-|---|---|---|
-| 脑洞 | `seed`（Work 字段） | 每作品一份 |
-| 卖点 | `hook` | 每作品一份 |
-| 梗概 | `synopsis` | 每作品一份 |
-| 大纲 | `outline` | 每作品一份 |
-| 设定 | `setting` | 每作品一份 |
-| 章纲 | `beat` | 每作品×每章一份 |
-| 正文 | `prose` | 每作品×每章一份 |
+`InMemoryStore` 按 `(workId, kind, chapter)` 保存版本数组，写入只追加，详情读取各 bucket 最新版本。必须守住：
 
-实体：
+- per-work 产物不得带 `chapter`；per-chapter 产物必须带 `chapter`。
+- `setStatus` 只作用于最新版。
+- `getWork` 返回 `WorkDetail | undefined`，不是首版注释曾写的 `Work`。
 
-- `Work = { id, title, seed, config: AgentConfig, createdAt }`
-- `Artifact = { id, workId, kind, chapter?, version, content, status, createdAt }`
-  - `chapter` 仅 `beat`/`prose` 有，其余为 `undefined`
-  - `status ∈ { pending, approved }`；`appendArtifact` 追加新版本（version+1），旧版本保留
-  - 不变量：per-work kind 禁止带 chapter；per-chapter kind 必须带 chapter
+当前 `ArtifactKind` 直接查看 [`artifacts.ts`](../../packages/contracts/src/artifacts.ts)；本票最初的 kind 和后来的 `preprocess` 快照都不是当前契约。
 
-### 模块
+### Pipeline、API 与书架
 
-**Step 契约（contracts）**
+状态由已有产物与人工状态推导。`advance` 运行下一步、追加产物并按 definition 停在关卡；首版同时实现 `gateAfter` 与 `gateBefore`，专门证明两个方向都由状态机强制执行。当前链路与装配以 [`start.ts`](../../apps/server/src/start.ts) 为准。
 
-```ts
-import { z } from 'zod'
+首轮 API 只提供作品列表/详情并注入示例作品；书架通过 `/api` 代理读取摘要。创建与创作界面由 003 加入。
 
-export const agentConfigSchema = z.object({
-  model: z.string().optional(),
-  systemPrompt: z.string().optional(),
-  skills: z.array(z.string()).optional(),   // SKILL.md 引用
-  tools: z.array(z.string()).optional(),    // 如 ['webSearch']
-})
-export type AgentConfig = z.infer<typeof agentConfigSchema>
+## 代码落点
 
-export interface Step<In = unknown, Out = unknown> {
-  id: string
-  inputSchema: z.ZodType<In>
-  outputSchema: z.ZodType<Out>
-  run(input: In, config: AgentConfig): Promise<Out>
-}
+契约边界看 [`step.ts`](../../packages/contracts/src/step.ts)，存储 seam 看 [`work-store.ts`](../../apps/server/src/store/work-store.ts)，集中编排看 [`pipeline.ts`](../../apps/server/src/pipeline/pipeline.ts)；其余候选路径由 frontmatter 的 `code_paths` 提供。
 
-export async function runStep(step: Step, input: unknown, config: AgentConfig) {
-  const parsed = step.inputSchema.parse(input)
-  const out = await step.run(parsed, config)
-  return step.outputSchema.parse(out)   // 输入输出都校验
-}
-```
+## 测试与验证
 
-`Step` 对外只有一个入口 `run(input, config)`；拼 prompt、加载 skill、tool-call、web search、校验输出全在实现内部。**config 是显式输入**（用户风格/文风/题材是外部配置），Step 只藏机制、不藏风格。
+- `runStep` 必须拒绝非法输入和输出。
+- store 覆盖版本递增、最新版状态和 chapter 不变量。
+- Pipeline 覆盖顺序、关卡阻断、通过后解封、终态幂等及非法 definition。
+- 落地时测试、typecheck 和本地 server/web/proxy 冒烟通过；当时未严格保留每个红绿瞬间，后续票改用更小切片。
 
-**WorkStore（server/src/store）**
+## 边界与非目标
 
-```ts
-export interface WorkStore {
-  createWork(input: { seed: string; title?: string }): Work
-  listWorks(): WorkSummary[]          // { id, title, seedPreview, chapterCount }
-  getWork(id: string): WorkDetail | undefined   // Work + 各产物最新版本
-  appendArtifact(workId, kind, content, opts?: { chapter?: number }): Artifact
-  setStatus(workId, kind, status, opts?: { chapter?: number }): void  // 作用最新版
-}
-```
+- 终态 `advance` 幂等；遇 pending gate 拒绝且无副作用。
+- 不存在产物、违反 chapter 不变量、重复/未注册 step 必须响亮失败。
+- 本票不实现真实 LLM、SQLite、创作界面或 router；这是历史范围。当前内存 store 仍随 server 重启丢失。
 
-`InMemoryStore` 用 `Map`，按 `(workId, kind, chapter)` 存版本数组，`getWork` 折叠到最新版本。
+## 上下文演进
 
-**Pipeline（server/src/pipeline）**
+### 2026-08-22 — 首个纵向骨架落地
 
-```ts
-export type PipelineState = {
-  workId: string
-  stage: string
-  nextStepId: string | null                     // null = 完本
-  pendingGate?: { kind: ArtifactKind; chapter?: number }
-}
+- **触发证据**：后续写作步骤都需要同一条可启动、可验证的基础链路。
+- **原假设**：两步 demo 足以验证 Pipeline。
+- **决定**：使用四个 `FakeStep` 覆盖 `gateAfter` 与 `gateBefore`，并注入 store 和 steps。
+- **影响**：关卡机制与写作节点解耦，后续扩链无需重写 runner。
+- **上下文处理**：preserve；保留 WorkStore/Step 接缝、Pipeline 深模块与关卡解耦的初始理由，供后续扩链继续约束实现。
 
-export interface Pipeline {
-  getState(workId): PipelineState
-  advance(workId): StepResult                    // pendingGate 存在时拒绝、无副作用
-  approve(workId, kind, chapter?): void
-}
+### 2026-08-24..2026-08-29 — 结构化产物与真实运行链演进
 
-type PipelineDefinition = Array<{
-  stepId: string
-  outputKind: ArtifactKind
-  gateBefore?: { kind: ArtifactKind }   // 运行前该产物须 approved
-  gateAfter?: { kind: ArtifactKind }    // 运行后产物置 pending，等 approve
-}>
-```
+- **触发证据**：人工编辑需要结构化内容；preprocess 又混合了素材理解与方向生成，真实模型还需要可观测、可配置入口。
+- **原假设**：string content、单个 preprocess 和 fake-only demo 足以承接后续流程。
+- **决定**：003 引入 `JsonValue`；011 拆为 `caption → creative`；014 增加 CLI/遥测；016 收敛 ModelRuntime/provider。
+- **影响**：本页只继续拥有底层模块边界；当前 artifact、definition、API 和运行命令由后续文档与代码拥有。
+- **上下文处理**：replace；用后续 Wiki 与当前代码入口替换旧 artifact、definition、API 和运行说明，同时保留底层模块边界的由来。
 
-构造时注入 `{ store, steps, definition, resolveConfig }`（接受依赖，不自己 new）。状态机由"现有产物 + status"算出下一步；`advance` 跑 nextStep → `appendArtifact` 落库 → 按 `gateAfter` 置 pending 或 approved。**关卡逻辑只活在这一个模块**（Locality）。本票放一条 demo 链（4 个 FakeStep + 1 个 `gateAfter` + 1 个 `gateBefore`）证明机制——比最小多几步，同时覆盖两种关卡方向；完整六步链在 #3–#5 扩展 `definition`，runner 不改。
+## 交接结论
 
-### API（Hono，8787）
-
-```
-GET /api/works       → WorkSummary[]
-GET /api/works/:id   → Work | 404
-```
-
-启动时 seed 2–3 个示例作品进 mock store。
-
-### Web（书架，5173）
-
-- `api.ts` fetch `/api/works`（Vite 代理 `/api` → 8787）
-- `Bookcase.tsx`：卡片列出作品（标题 + 脑洞摘要），点击 → 占位详情视图（useState 切视图，不引 router；router 留给 #6）
-
-## 测试策略
-
-- **好测试标准**：只测外部行为——顺序、关卡强制、持久化、schema 校验；不测 prompt 文本 / LLM 内部。
-- **FakeStep**：固定输出，但仍走 outputSchema 校验，保证测试逼真。
-- 覆盖点：
-  - contracts：`runStep` 对非法输入 / 输出抛错
-  - store：create/list/get、append 版本自增、setStatus 作用最新版、per-work / per-chapter 形状不变量
-  - pipeline：advance 按序、gateAfter 拦住下一步、approve 解封、终态 nextStepId=null、schema 不匹配被拒
-
-## 实施顺序（红绿切片）
-
-1. 脚手架：`pnpm-workspace.yaml` + 根 `package.json` + `tsconfig.base` + 三包骨架，`pnpm install`
-2. contracts：类型 + zod + `runStep`，先写测试（红→绿）
-3. `docs/schema.md` 落数据模型
-4. store：接口 + `InMemoryStore`，先写测试（红→绿）
-5. pipeline：状态机 + 关卡，先写测试（红→绿）
-6. server：Hono app + routes + seed + 冒烟测试
-7. web：书架 + 占位详情 + `api.ts`
-8. 根 `dev` 脚本并发起 server+web，验证书架出数据
-9. 全量测试 + typecheck → commit → `/code-review`
-
-## 边界与错误
-
-- advance 于终态 → 返回 `nextStepId: null`（幂等，不抛）
-- advance 遇 pendingGate → 拒绝、无副作用、返回 state
-- approve 不存在的产物 → 抛错
-- `appendArtifact` 违反形状不变量 → 抛错
-- 步骤注册重复 id → 构造时抛错
-- `getWork` 不存在 → `undefined` → API 404
-
-## 明确不做
-
-- 真 LLM 步骤（RealStep）→ #3 起
-- 完整 Agent 配置（三维度 + skill 上传 + 全局/单作品覆盖）→ #7（config 参数本票就位）
-- SQLite 适配器 → #9
-- 创作页 / 统一入口 → #3；详情页分层管理 → #6；坏例 → #8；路由 → #6
-
-## 技术默认
-
-pnpm · tsx（server dev）· tsc（typecheck）· vitest · zod · Hono · Vite+React（useState 视图切换）
-
-## 状态记录
-
-- 2026-08-22：实现完成。20 个测试全绿（contracts 3 / server 17），typecheck 全绿，`pnpm dev` 验证 server/web/proxy 通。
-- 偏差：demo 链做成 4 步（含 gateAfter + gateBefore 两种关卡方向），非 wiki 原写的 2 步——超集，不违反 ticket。
-- 偏差：TDD 未严格"先红后绿"（测试与实现同批写），行为覆盖完整；后续票按红绿切片执行。
-- 修正：`getWork` 返回类型是 `WorkDetail`（Work + 最新产物），非 `Work`。
-- 2026-08-24（#3a 改造）：`ArtifactKind` 6→5（preprocess/outline/setting/beat/prose），demo 链重排为 3 步（preprocess → outline(gateAfter) → setting(gateBefore)）。
+修改底层架构时保留三项约束：`WorkStore` 与 `Step` 是 seam，Pipeline 是集中规则的深模块，跨模块数据必须过 schema。当前工作流、CLI 和 provider 分别继续读 011、004、014、016。
