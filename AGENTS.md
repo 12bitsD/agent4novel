@@ -1,5 +1,9 @@
 ## Agent skills
 
+### Ticket completion
+
+Before planning, implementing, reviewing a candidate or attestation, completing, publishing, or merging a ticket, read `docs/agents/ticket-completion-checklist.md` completely. It is the canonical gate from initial scope and TDD planning through review, PR/merge, and remote verification.
+
 ### Wiki context
 
 Before planning, implementing, debugging, or reviewing existing behavior, read `.claude/skills/agent4novel-wiki/SKILL.md`. It is the project-level workflow for finding the minimum relevant ticket context and preserving design intent, code landing, and reasons for later changes when updating `docs/wiki/`.

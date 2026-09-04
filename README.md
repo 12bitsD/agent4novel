@@ -115,12 +115,13 @@ The docs in this repo are written for agents first — and read fine by humans:
 | [docs/schema.md](./docs/schema.md) | Data model, the single source of truth |
 | [docs/adr/](./docs/adr/) | Irreversible decisions (orchestration, storage, skill files) |
 | [docs/wiki/](./docs/wiki/) | Per-ticket engineering context: design intent, code landing, and reasons for change |
+| [Ticket completion checklist](./docs/agents/ticket-completion-checklist.md) | Mandatory review, documentation, direct-push or PR/merge, and GitHub verification gate for every ticket |
 | [docs/research/](./docs/research/) | Selection research (stack, LLM provider strategy) |
 | [docs/handoff.md](./docs/handoff.md) | Session handoff snapshot (where we are, what's next) |
 
 ## Development process
 
-Every ticket runs the same loop: grill-to-align → wiki context node → TDD red/green slices → context handoff → two-axis code review. See [docs/wiki/README.md](./docs/wiki/README.md).
+Every ticket runs the same loop: grill and align scope → establish its Wiki context → plan → implement with TDD → run local gates → update knowledge → run three self-calibration passes → run Standards/Spec review → deliver by direct push or PR/merge → verify remotely. The [Ticket completion checklist](./docs/agents/ticket-completion-checklist.md) is the mandatory, single source of truth for that gate; the [Wiki contract](./docs/wiki/README.md) defines the per-ticket evidence format.
 
 ## Roadmap
 

@@ -44,6 +44,7 @@ The current pipeline definition wires `caption` (提炼稿, auto-approved) → `
 - `CONTEXT.md` — domain glossary. Use its exact terms (脑洞, 卖点, 梗概, 大纲, 章纲, 正文, 设定, 关卡…); each entry lists forbidden synonyms — don't introduce them.
 - `docs/wiki/NNN-<slug>.md` — per-ticket engineering context: original purpose, technical/code landing, reasons for changes, and the handoff boundary. Use the Wiki skill for selective reading and updates; verify current executable behavior in code and tests.
 - `docs/adr/` — irreversible decisions; new ones become new ADRs, wiki only links.
+- `docs/agents/ticket-completion-checklist.md` — canonical gate from ticket scope and TDD planning through review, PR/merge, and remote verification. Read it before starting, reviewing a candidate or attestation, or completing a ticket.
 - Issues are managed via `gh` CLI with five canonical triage labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`); see `docs/agents/`.
 
 ## Language

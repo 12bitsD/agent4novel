@@ -1,7 +1,7 @@
 # Handoff — agent4novel 会话接力快照
 
 > 用途：context compaction / 新会话接力。每个里程碑收尾时刷新本文件（最后更新：2026-09-04，#4 + #14 + #16 已落地，下一票 #13）。
-> 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
+> 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
 
@@ -9,8 +9,8 @@
 
 ## 开发流程（用户的硬规矩，每票都走）
 
-对齐（grill，用 Matt Pocock skill flow）→ 建立 wiki 上下文节点 → **先给执行计划（plan mode）** → TDD 实现（红绿切片，每 slice 一 commit，保持 test+typecheck 双绿）→ 回写代码落点与变化原因 → **3 轮自校准（读代码+wiki，核需求一致+规范遵循）** → /code-review（两轴并行 subagent）→ 修复 → commit/push。
-回复用中文；wiki/文档是 agent 消费的；决策类问题给用户 (a)/(b)/(c) 选项，最小提问。
+既有硬规则全部保留：每票 grill 对齐、实现前给执行计划、建立 Wiki 上下文、TDD 红绿切片、回写代码落点与变化原因、三轮自校准、Standards/Spec 双轴 review、修复后再交付。开始每票时完整读取并按 [Ticket 完成审核清单](./agents/ticket-completion-checklist.md) 执行；它是提交、直推或 PR/merge、远端回读顺序的唯一权威来源，逐票证据写入数字 Wiki、GitHub issue 与可回读远端状态。
+回复用中文；wiki/文档是 agent 消费的；需要 Human 裁决的决策类问题提供 (a)/(b)/(c) 选项并最小化提问。
 
 ## 已完成
 

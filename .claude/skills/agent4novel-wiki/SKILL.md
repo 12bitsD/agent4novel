@@ -9,6 +9,8 @@ description: 面向 Agent 消费和维护 docs/wiki 的每票工程上下文交�
 
 格式、字段、状态值、固定章节和模板的唯一来源是 [`docs/wiki/README.md`](../../../docs/wiki/README.md)。创建或写入前先读它；本 skill 只规定如何消费和维护，不复制 schema。
 
+开始规划、实现、审核候选/attestation 或交付一张 ticket 时，还必须先完整读取 [`docs/agents/ticket-completion-checklist.md`](../../../docs/agents/ticket-completion-checklist.md)：实现前执行其 C1/C2 前置项，候选形成后继续 C3–C7。清单回指本 skill 时只执行下方 Wiki 路由，不重复读取文件。纯只读解释、调试诊断或尚未进入 ticket 交付的探索不触发完成清单。
+
 ## 权威边界
 
 先按问题类型选择来源，不把一个来源的内容搬去另一个：
@@ -99,7 +101,7 @@ heading-bounded 命令会额外显示下一条二级标题作为停止边界；�
 
 ### Implementation landing
 
-代码落地后，用代码、测试和实际验证刷新当前技术状态、路由元信息与 `Agent Context`。有可复用的偏差、失败实验或新决定时追加变化事件；纯机械落地不要制造流水账。
+代码落地后继续执行 Ticket 完成审核清单的 C3–C7；它是 review、知识回写、提交、推送、PR/merge 和远端确认顺序的唯一来源，本 skill 不复制这些步骤。用代码、测试和实际验证刷新当前技术状态、路由元信息与 `Agent Context`，并按 README 在“测试与验证”中留下完成审核证据。有可复用的偏差、失败实验或新决定时追加变化事件；纯机械落地不要制造流水账。
 
 ### Design change
 
@@ -155,5 +157,6 @@ sed -n '1,27p' docs/wiki/016-model-runtime-provider-config.md
 - `Agent Context` 与当前代码事实、页面范围和下一跳一致；
 - frontmatter 能被原始线索重新 `rg` 命中；
 - 每个实质变化都有完整事件，旧内容有 preserve/compact/replace 结论；
+- 若本次是 Implementation landing，已执行 Ticket 完成审核清单，且本票“测试与验证”留下 README 规定的完成审核证据；
 - Human-in-loop 例外已获确认；
 - diff 只包含获准的 wiki 维护范围，没有重复其他权威来源。

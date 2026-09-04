@@ -119,6 +119,25 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 
 具体创建、实现回写、设计变化、漂移修复、关系维护与最小读取步骤只在项目 Wiki Skill 中定义，避免两套流程漂移。
 
+## 完成审核证据
+
+每张 ticket 的完整完成流程只在 [Ticket 完成审核清单](../agents/ticket-completion-checklist.md) 中维护。数字 Wiki 不复制清单；在“测试与验证”末尾按以下格式保存发布前证据。review 前可以先写已取得的部分，其余标为待完成；发布前必须由最终 attestation 收口。
+
+```markdown
+### 完成审核证据
+
+- **清单与候选**：清单 blob 标识、固定点 SHA、双轴候选 T0、pre-attestation tree（T1）、staged manifest；最终 tree（T2）不在其自身内容中记录。
+- **逐项判定**：C1–C5 各节及 C6.1–C6.4；每个 `PASS` 条目列出 ID 和证据引用，一份证据可覆盖多个明确 ID；所有 `N/A`、`FAIL` 与例外列出 ID、原因与风险。C6.5–C6.7 及最终 `C6 = PASS` 留给 GitHub 完成评论。
+- **验收与 TDD**：issue #NN；逐条 AC 的代码或人工验证入口；RED/GREEN 或替代验证证据。
+- **本地门禁**：最终候选执行的命令、结果、日期与关键警告；secret/安全检查结论。
+- **双轴 review**：相互隔离的 Standards 与 Spec 结论；发现及其处理。
+- **修复与回归**：修复项、补充证据、重跑范围和最终结果。
+- **知识维护**：Wiki/schema/CONTEXT/ADR/research/README/handoff/运行 skill 的更新项或 `N/A（原因）`。
+- **发布前裁决**：独立 reviewer 对 T1 的 `PASS`/`FAIL` attestation、剩余风险与待办。
+```
+
+证据记录发布前事实；T0 → T1 与 T1 → T2 的受控证据收口按清单 C6.4/C6.6 比较。后者及 C6.7 的结果不再写回同一候选，而在 GitHub 完成评论中汇总。commit、push、PR/merge、CI 与关闭方式/条件也写入该评论，实际关闭结果以随后回读的 live issue state 为准。这样无需为补记远端结果再创建一轮文档提交与审核。`N/A` 必须附原因与风险，未执行的检查不能写成通过。
+
 ## Index
 
 | Wiki | Ticket | 上下文状态 | 主要范围 |

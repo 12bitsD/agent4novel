@@ -115,12 +115,13 @@ pnpm build
 | [docs/schema.md](./docs/schema.md) | 数据模型的唯一来源 |
 | [docs/adr/](./docs/adr/) | 不可逆决策（编排、存储、skill 文件） |
 | [docs/wiki/](./docs/wiki/) | 每张票的工程上下文：设计目的、代码落点与变化原因 |
+| [Ticket 完成审核清单](./docs/agents/ticket-completion-checklist.md) | 每票必须执行的 review、文档、直推或 PR/merge 与 GitHub 核验闸门 |
 | [docs/research/](./docs/research/) | 选型调研（技术栈、LLM provider 策略） |
 | [docs/handoff.md](./docs/handoff.md) | 会话接力快照（当前进展与下一步） |
 
 ## 开发流程
 
-每张 ticket 走同一个 loop：grill 对齐 → wiki 上下文节点 → TDD 红绿切片 → 上下文交接 → 双轴 code review。详见 [docs/wiki/README.md](./docs/wiki/README.md)。
+每张 ticket 走同一个 loop：每票 grill 并对齐范围 → 建立 Wiki 上下文 → 给出计划 → TDD 实现 → 本地门禁 → 回写知识 → 三轮自校准 → Standards/Spec 双轴 review → 直推或 PR/merge → 远端回读。[Ticket 完成审核清单](./docs/agents/ticket-completion-checklist.md) 是这套闸门必须执行的唯一来源；逐票证据格式见 [Wiki 契约](./docs/wiki/README.md)。
 
 ## 路线图
 
