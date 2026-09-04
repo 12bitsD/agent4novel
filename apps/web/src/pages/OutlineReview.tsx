@@ -37,6 +37,7 @@ export default function OutlineReview(props: {
   /** outline-approved 态:只读展示 */
   readonly: boolean
   onChanged: () => void
+  onApproved?: () => void
 }) {
   const { workId, pack, readonly, onChanged } = props
   const [s, setS] = useState<ReviewState>(() => initReview(props.content, props.headVersion))
@@ -64,7 +65,7 @@ export default function OutlineReview(props: {
   }
 
   const doApprove = async () => {
-    if (!window.confirm('通过这份大纲?通过后全书结构锁定,后续按它生成章纲。')) return
+    if (!window.confirm('通过这份大纲？它将作为设定与后续章节生成的依据。')) return
     setError(null)
     try {
       // 有脏编辑先保存(让通过落在最新内容上),再 approve
@@ -79,7 +80,8 @@ export default function OutlineReview(props: {
       setS(next)
       await approveArtifact(workId, 'outline')
       setS((c) => approveSucceeded(c))
-      onChanged()
+      if (props.onApproved) props.onApproved()
+      else onChanged()
     } catch (err) {
       const code = (err as { code?: string })?.code
       setS((c) => commandFailed(c, code))

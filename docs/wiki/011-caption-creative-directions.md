@@ -8,9 +8,9 @@ topics: ["caption", "creative-directions", "pipeline-consumes", "workflow-state"
 code_paths: ["packages/contracts/src/caption.ts", "packages/contracts/src/creative.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/pipeline/consume-guards.ts", "apps/server/src/steps/caption-io.ts", "apps/server/src/steps/caption-step.ts", "apps/server/src/steps/creative-io.ts", "apps/server/src/steps/creative-step.ts", "apps/server/src/routes/works.ts", "apps/web/src/creative-compare.ts", "apps/web/src/pages/CreativePoster.tsx"]
 symbols: ["captionContentSchema", "creativeContentSchema", "DEFAULT_DIRECTION_COUNT", "Pipeline.advance", "consumeGuards", "CompareState", "advance-in-progress", "direction-not-selected", "version-conflict"]
 inherits: ["010"]
-changed_by: ["004", "016"]
+changed_by: ["004", "016", "013"]
 read_when: ["change-caption-schema", "change-creative-schema", "debug-pipeline-consumes", "change-direction-selection", "debug-creative-retry"]
-last_context_reviewed: "2026-09-04"
+last_context_reviewed: "2026-09-05"
 ---
 
 # 011 — 预处理重构：Caption + Creative 方向包 + 比较界面
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-09-04"
 - **原始目的**：把“理解素材”和“提出创作方向”拆开，消除旧 preprocess 四个平行数组之间的隐式对应。
 - **实际落地**：caption 自动通过，creative 单次生成 1–3 个方向包并停在人工选择关卡；interview 机制已删除。
 - **当前价值**：caption/creative 契约、consumes 语义、失败重入、方向稳定 ID 和比较关卡仍是当前 HOW。
-- **后续变化**：[wiki 004](./004-outline-arcs-segments.md) 扩展了 workflowState 并移除 selected；[wiki 016](./016-model-runtime-provider-config.md) 接管 provider、凭据、结构化输出降级与 timeout。
+- **后续变化**：[Wiki 004](./004-outline-arcs-segments.md) 扩展 workflowState 并移除 selected；[Wiki 016](./016-model-runtime-provider-config.md) 接管模型配置；[Wiki 013](./013-setting-generation-review.md) 为 consumes 生成增加提交时 head 条件与 Store 快照隔离，Creative select 因此改为回读 approved 响应，外部语义不变。
 - **代码入口**：[caption contract](../../packages/contracts/src/caption.ts)、[creative contract](../../packages/contracts/src/creative.ts)、[pipeline](../../apps/server/src/pipeline/pipeline.ts)、[creative routes](../../apps/server/src/routes/works.ts)、[compare state](../../apps/web/src/creative-compare.ts)。
 
 ## 设计目的
@@ -130,6 +130,14 @@ caption 与 creative 使用 generateObject 加本地 Zod 校验。错误统一�
 - 持久化事务、lease 与 schema 迁移。
 
 ## 上下文演进
+
+### 2026-09-05 — 上游快照与提交条件补强
+
+- **触发证据**：#13 生成等待期间上游可改变，旧 Store 又暴露可变引用。
+- **原假设**：await 前的 approved 检查与返回对象别名足以保持生成和选定语义。
+- **决定**：Store 返回隔离快照；Pipeline 追加输出时再次检查 consumes 的 head，Creative select 回读已通过产物。
+- **影响**：正常 caption／creative 行为不变；过时生成输出不落库，竞态失败恢复规则见 Wiki 013。
+- **上下文处理**：preserve 本票方向设计与失败经验；replace 一致性实现边界，下一跳为 Wiki 013。
 
 ### 2026-08-27 — preprocess 被 caption + creative 替换
 

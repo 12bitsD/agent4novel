@@ -28,30 +28,48 @@ const workView = {
   ],
   workflowState: 'awaiting-selection',
   allowedActions: ['select'],
+  nextStepId: null,
 }
 
+const advancedOutcome = (workId: string) => ({
+  kind: 'advanced',
+  stepId: 'creative',
+  state: { workId, stage: 'awaiting-approval', nextStepId: null, pendingGate: { kind: 'creative' } },
+  telemetry: [],
+})
+
 describe('cli client/commands(#14)', () => {
+  it('get rejects a response that does not satisfy the shared WorkView contract', async () => {
+    const { fn } = fakeFetch({ 'GET /api/works/w1': { body: { id: 'w1', artifacts: [] } } })
+    const client = createClient({ baseUrl: 'http://x', fetch: fn })
+    await expect(client.getWork('w1')).rejects.toMatchObject({ code: 'invalid-response' })
+  })
+  it('advance rejects incomplete outcome envelopes', async () => {
+    const { fn } = fakeFetch({ 'POST /api/works/w1/advance': { body: { kind: 'advanced', stepId: 'setting' } } })
+    const client = createClient({ baseUrl: 'http://x', fetch: fn })
+    await expect(client.advance('w1')).rejects.toMatchObject({ code: 'invalid-response' })
+  })
   it('普通请求默认 300s 超时，只有 advance 默认等待 1820s', async () => {
-    const signalTimeouts = new WeakMap<AbortSignal, number>()
-    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockImplementation((milliseconds) => {
-      const signal = new AbortController().signal
-      signalTimeouts.set(signal, milliseconds)
-      return signal
-    })
+    vi.useFakeTimers()
     try {
-      const observed: number[] = []
+      const signals: AbortSignal[] = []
       const observingFetch = async (_url: string, init?: RequestInit): Promise<Response> => {
-        observed.push(signalTimeouts.get(init?.signal as AbortSignal)!)
-        return new Response('{}')
+        signals.push(init!.signal!)
+        return new Promise(() => {})
       }
       const client = createClient({ baseUrl: 'http://x', fetch: observingFetch })
-
-      await client.listWorks()
-      await client.advance('w1')
-
-      expect(observed).toEqual([300_000, 1_820_000])
+      const ordinary = client.listWorks().catch((error: unknown) => error)
+      const advancing = client.advance('w1').catch((error: unknown) => error)
+      await vi.advanceTimersByTimeAsync(299_999)
+      expect(signals.map((signal) => signal.aborted)).toEqual([false, false])
+      await vi.advanceTimersByTimeAsync(1)
+      expect(await ordinary).toMatchObject({ code: 'network-error' })
+      expect(signals.map((signal) => signal.aborted)).toEqual([true, false])
+      await vi.advanceTimersByTimeAsync(1_520_000)
+      expect(await advancing).toMatchObject({ code: 'network-error' })
+      expect(signals[1].aborted).toBe(true)
     } finally {
-      timeoutSpy.mockRestore()
+      vi.useRealTimers()
     }
   })
 
@@ -117,18 +135,18 @@ describe('cli client/commands(#14)', () => {
     expect(err).toMatchObject({ code: 'llm-unavailable', retryable: true, attemptId: 'att-1' })
   })
 
-  it('smoke 按序走完 create→advance→select→advance→approve→get', async () => {
+  it('smoke 不把仅有大纲的旧终态误报为完整设定链通过', async () => {
     const created = { id: 'w9', title: 't', seed: 's', config: {}, createdAt: 'x' }
     const afterCreate = { ...workView, id: 'w9', artifacts: workView.artifacts.map((a) => ({ ...a, workId: 'w9' })) }
     const { fn, calls } = fakeFetch({
       'POST /api/works': { status: 201, body: created },
-      'POST /api/works/w9/advance': { body: { kind: 'advanced', stepId: 'creative' } },
+      'POST /api/works/w9/advance': { body: advancedOutcome('w9') },
       'GET /api/works/w9': { body: { ...afterCreate, workflowState: 'outline-approved' } },
       'POST /api/works/w9/artifacts/creative/select': { body: { kind: 'creative', version: 4, humanStatus: 'approved' } },
       'POST /api/works/w9/approve': { body: { stage: 'complete' } },
     })
     const client = createClient({ baseUrl: 'http://x', fetch: fn })
-    const result = await cmd.smoke(client, { seed: 's' }, () => {})
+    await expect(cmd.smoke(client, { seed: 's' }, () => {})).rejects.toMatchObject({ code: 'smoke-incomplete' })
     expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
       'POST /api/works',
       'POST /api/works/w9/advance',
@@ -136,10 +154,9 @@ describe('cli client/commands(#14)', () => {
       'POST /api/works/w9/artifacts/creative/select',
       'POST /api/works/w9/advance',
       'POST /api/works/w9/approve',
+      'POST /api/works/w9/advance',
       'GET /api/works/w9',
     ])
-    expect(result.steps).toHaveLength(6)
-    expect(result.final.workflowState).toBe('outline-approved')
   })
 
   it('logs 透传遥测查询端点', async () => {

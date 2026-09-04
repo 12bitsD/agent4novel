@@ -1,8 +1,11 @@
+import { advanceOutcomeDtoSchema, apiErrorSchema, settingApproveResponseSchema, workViewSchema } from '@agent4novel/contracts'
 import type {
   Artifact,
   ArtifactKind,
   LlmTelemetry,
   OutlineDraft,
+  SettingApproveRequest,
+  ValidationIssue,
   Work,
   WorkSummary,
   WorkView,
@@ -23,6 +26,7 @@ export class CliError extends Error {
     readonly status?: number,
     readonly retryable = false,
     readonly attemptId?: string,
+    readonly issues?: ValidationIssue[],
   ) {
     super(message)
     this.name = 'CliError'
@@ -63,38 +67,60 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
     body?: unknown,
     defaultTimeoutMs = DEFAULT_CLI_TIMEOUT_MS,
   ): Promise<T> {
-    let res: Response
-    try {
-      res = await fetchImpl(`${baseUrl}${path}`, {
+    const controller = new AbortController()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort()
+        reject(new CliError('Request timed out; a submitted write may still complete on the server', 'network-error'))
+      }, timeoutOverrideMs ?? defaultTimeoutMs)
+    })
+    const perform = async (): Promise<T> => {
+      const res = await fetchImpl(`${baseUrl}${path}`, {
         method,
         headers: body === undefined ? undefined : { 'content-type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutOverrideMs ?? defaultTimeoutMs),
+        signal: controller.signal,
       })
-    } catch (err) {
-      throw new CliError(err instanceof Error ? err.message : String(err), 'network-error')
+      const data: unknown = await res.json().catch(() => null)
+      if (!res.ok) {
+        const parsed = apiErrorSchema.safeParse(data)
+        if (!parsed.success) throw new CliError('Invalid server error response', 'invalid-response', res.status)
+        const e = parsed.data
+        throw new CliError(e.message, e.code, res.status, e.retryable, e.attemptId, e.issues)
+      }
+      return data as T
     }
-    const data: unknown = await res.json().catch(() => null)
-    if (!res.ok) {
-      const e = (data ?? {}) as { code?: string; message?: string; retryable?: boolean; attemptId?: string }
-      throw new CliError(
-        e.message ?? `HTTP ${res.status}`,
-        e.code ?? 'http-error',
-        res.status,
-        e.retryable ?? false,
-        e.attemptId,
-      )
+    try {
+      return await Promise.race([perform(), deadline])
+    } catch (error) {
+      if (error instanceof CliError) throw error
+      throw new CliError('Request could not be completed; a submitted write may still complete on the server', 'network-error')
+    } finally {
+      clearTimeout(timer)
     }
-    return data as T
   }
 
   return {
     listWorks: () => call<WorkSummary[]>('GET', '/api/works'),
     createWork: (input: { seed: string; title?: string }) =>
       call<Work>('POST', '/api/works', input),
-    getWork: (workId: string) => call<WorkView>('GET', `/api/works/${workId}`),
-    advance: (workId: string) =>
-      call<unknown>('POST', `/api/works/${workId}/advance`, undefined, DEFAULT_ADVANCE_TIMEOUT_MS),
+    getWork: async (workId: string): Promise<WorkView> => {
+      const data = await call<unknown>('GET', `/api/works/${workId}`)
+      const parsed = workViewSchema.safeParse(data)
+      if (!parsed.success || parsed.data.id !== workId) {
+        throw new CliError('Invalid work response', 'invalid-response', 200)
+      }
+      return parsed.data
+    },
+    advance: async (workId: string) => {
+      const data = await call<unknown>('POST', `/api/works/${workId}/advance`, undefined, DEFAULT_ADVANCE_TIMEOUT_MS)
+      const parsed = advanceOutcomeDtoSchema.safeParse(data)
+      if (!parsed.success || parsed.data.state.workId !== workId) {
+        throw new CliError('Invalid advance response', 'invalid-response', 200)
+      }
+      return parsed.data
+    },
     select: (workId: string, directionId: string, expectedHeadVersion: number) =>
       call<Artifact>('POST', `/api/works/${workId}/artifacts/creative/select`, {
         directionId,
@@ -107,6 +133,14 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
       }),
     approve: (workId: string, kind: ArtifactKind) =>
       call<unknown>('POST', `/api/works/${workId}/approve`, { kind }),
+    approveSetting: async (workId: string, request: SettingApproveRequest) => {
+      const data = await call<unknown>('POST', `/api/works/${workId}/artifacts/setting/approve`, request)
+      const parsed = settingApproveResponseSchema.safeParse(data)
+      if (!parsed.success || parsed.data.workId !== workId) {
+        throw new CliError('Invalid setting approval response', 'invalid-response', 200)
+      }
+      return parsed.data
+    },
     // LLM 遥测回看(#14)
     getTelemetry: (workId: string) =>
       call<{ workId: string; telemetry: LlmTelemetry[] }>('GET', `/api/works/${workId}/telemetry`),

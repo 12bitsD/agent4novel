@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import type { Context } from 'hono'
 import { z } from 'zod'
 import {
@@ -8,12 +9,15 @@ import {
   outlineDraftSchema,
   perChapterKinds,
   perWorkKinds,
+  settingApproveRequestSchema,
+  settingLimits,
 } from '@agent4novel/contracts'
 import type { ApiError, ArtifactKind, OutlineContent, OutlineDraft, WorkflowState, WorkView } from '@agent4novel/contracts'
 import type { Pipeline } from '../pipeline/pipeline.js'
 import { KnownError } from '../errors.js'
 import { telemetryCursor, telemetryFor } from '../steps/telemetry.js'
 import type { WorkStore } from '../store/work-store.js'
+import { approveSetting, SettingValidationError } from '../setting-review.js'
 
 const workCreateSchema = z.object({
   seed: z.string().min(1),
@@ -108,6 +112,10 @@ function routeError(c: Context, err: unknown): Response {
         return c.json(body, 404)
       case 'advance-in-progress':
       case 'version-conflict':
+      case 'upstream-changed':
+      case 'artifact-already-approved':
+      case 'setting-gate-not-ready':
+      case 'setting-approval-required':
       case 'direction-not-selected':
         return c.json(body, 409)
       case 'llm-invalid-output':
@@ -143,6 +151,7 @@ function assertHead(
 function workflowOf(
   state: ReturnType<Pipeline['getState']>,
   failure: { stepId: string; code: string; retryable: boolean } | null,
+  completionKind: ArtifactKind | undefined,
 ): {
   workflowState: WorkflowState
   allowedActions: string[]
@@ -150,7 +159,7 @@ function workflowOf(
   switch (state.stage) {
     case 'ready':
       // 最近一次 advance 失败过 → failed(可重试,重试 = 同一 advance)
-      if (failure) return { workflowState: 'failed', allowedActions: ['generate'] }
+      if (failure) return { workflowState: 'failed', allowedActions: failure.retryable ? ['generate'] : [] }
       return { workflowState: 'ready-to-generate', allowedActions: ['generate'] }
     case 'awaiting-approval': {
       // 按关卡 kind 显式分派(新节点进来必须在此登记,否则响亮失败)
@@ -161,11 +170,13 @@ function workflowOf(
       if (gate === 'outline') {
         return { workflowState: 'awaiting-outline-review', allowedActions: ['save-draft', 'approve'] }
       }
+      if (gate === 'setting') {
+        return { workflowState: 'awaiting-setting-review', allowedActions: ['approve'] }
+      }
       throw new Error(`unknown gate kind: ${gate ?? 'none'}`)
     }
     case 'complete':
-      // complete 映射 definition 末端关卡(当前 = outline);新末端节点进来时在此更新
-      return { workflowState: 'outline-approved', allowedActions: [] }
+      return { workflowState: completionKind === 'setting' ? 'setting-approved' : 'outline-approved', allowedActions: [] }
     case 'blocked':
       return { workflowState: 'ready-to-generate', allowedActions: [] }
   }
@@ -178,6 +189,31 @@ export type WorksRoutesDeps = {
 
 export function worksRoutes({ store, pipeline }: WorksRoutesDeps): Hono {
   const app = new Hono()
+
+  app.post('/api/works/:id/artifacts/setting/approve', bodyLimit({
+    maxSize: settingLimits.bodyBytes,
+    onError: (c) => c.json(errorBody('payload-too-large', 'setting request exceeds body limit'), 413),
+  }), async (c) => {
+    const body = await readJsonBody(c)
+    if (!body.ok) return body.response
+    const parsed = settingApproveRequestSchema.safeParse(body.data)
+    if (!parsed.success) {
+      const contentError = parsed.error.issues.every((issue) => issue.path[0] === 'content')
+      return c.json({
+        ...errorBody(contentError ? 'invalid-content' : 'invalid-input', 'invalid setting request'),
+        issues: parsed.error.issues.map(({ path, code, message }) => ({ path, code, message })),
+      }, contentError ? 422 : 400)
+    }
+    try {
+      return c.json(approveSetting(store, c.req.param('id'), parsed.data))
+    } catch (err) {
+      if (err instanceof SettingValidationError) return c.json({
+        ...errorBody('invalid-content', 'invalid setting content'),
+        issues: err.issues.map(({ path, code, message }) => ({ path: ['content', ...path], code, message })),
+      }, 422)
+      return routeError(c, err instanceof KnownError ? err : new Error('setting approval failed'))
+    }
+  })
 
   app.get('/api/works', (c) => c.json(store.listWorks()))
 
@@ -199,9 +235,11 @@ export function worksRoutes({ store, pipeline }: WorksRoutesDeps): Hono {
     const workId = c.req.param('id')
     const work = store.getWork(workId)
     if (!work) return c.json(errorBody('work-not-found', 'not found'), 404)
+    const state = pipeline.getState(workId)
     const view: WorkView = {
       ...work,
-      ...workflowOf(pipeline.getState(workId), pipeline.failureOf(workId)),
+      ...workflowOf(state, pipeline.failureOf(workId), pipeline.completionKind),
+      nextStepId: state.nextStepId,
     }
     return c.json(view)
   })
@@ -253,9 +291,9 @@ export function worksRoutes({ store, pipeline }: WorksRoutesDeps): Hono {
         409,
       )
     }
-    const artifact = store.appendArtifact(workId, 'creative', { directions: [pack] })
+    store.appendArtifact(workId, 'creative', { directions: [pack] })
     store.setStatus(workId, 'creative', 'approved')
-    return c.json(artifact)
+    return c.json(store.getWork(workId)!.artifacts.find((artifact) => artifact.kind === 'creative')!)
   })
 
   // saveOutlineDraft(#4):保存大纲草稿,永远 pending;「通过」走通用 /approve

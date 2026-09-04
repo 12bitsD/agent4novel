@@ -1,77 +1,86 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="340" viewBox="0 0 1080 340" font-family="Georgia, 'Times New Roman', serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="470" viewBox="0 0 1080 470" role="img" aria-labelledby="pipeline-title pipeline-desc" font-family="Georgia, 'Times New Roman', serif">
+  <title id="pipeline-title">Current creative pipeline and planned chapter loop</title>
+  <desc id="pipeline-desc">Caption is auto-approved. The author selects one creative direction, approves the arc-and-segment outline, then edits the complete Setting locally and approves it once. The current endpoint is setting-approved. Beat and prose are planned in issue 5.</desc>
   <defs>
-    <marker id="arrowE" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#444"/>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#444444"/>
     </marker>
   </defs>
-  <rect x="0" y="0" width="1080" height="340" fill="#ffffff"/>
+  <rect x="0" y="0" width="1080" height="470" fill="#ffffff"/>
+  <text x="20" y="32" font-size="12" font-style="italic" fill="#777777">CURRENT · #13</text>
 
-  <text x="75" y="124" text-anchor="middle" font-size="12" fill="#999999">①</text>
-  <text x="205" y="124" text-anchor="middle" font-size="12" fill="#999999">②</text>
-  <text x="365" y="124" text-anchor="middle" font-size="12" fill="#999999">③</text>
-  <text x="574" y="124" text-anchor="middle" font-size="12" fill="#999999">④</text>
+  <!-- Current flow: caption → selected creative → approved outline → Setting. -->
+  <rect x="20" y="85" width="110" height="62" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
+  <text x="75" y="110" text-anchor="middle" font-size="14" fill="#111111">Unified entry</text>
+  <text x="75" y="132" text-anchor="middle" font-size="10" fill="#777777">idea / document</text>
+  <text x="215" y="68" text-anchor="middle" font-size="12" fill="#999999">①</text>
+  <rect x="155" y="85" width="120" height="62" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
+  <text x="215" y="110" text-anchor="middle" font-size="14" fill="#111111">Caption</text>
+  <text x="215" y="132" text-anchor="middle" font-size="10" fill="#777777">auto-approved</text>
+  <text x="370" y="68" text-anchor="middle" font-size="12" fill="#999999">②</text>
+  <rect x="300" y="85" width="140" height="62" rx="3" fill="#f3f3f3" stroke="#222222" stroke-width="1.2"/>
+  <text x="370" y="110" text-anchor="middle" font-size="14" fill="#111111">Creative</text>
+  <text x="370" y="132" text-anchor="middle" font-size="10" fill="#777777">direction packs</text>
+  <polygon points="485,96 505,116 485,136 465,116" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
+  <text x="485" y="121" text-anchor="middle" font-size="12" fill="#8a2d2d">H</text>
+  <text x="485" y="170" text-anchor="middle" font-size="10" fill="#8a2d2d">select one</text>
+  <text x="597.5" y="68" text-anchor="middle" font-size="12" fill="#999999">③</text>
+  <rect x="530" y="85" width="135" height="62" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
+  <text x="597.5" y="110" text-anchor="middle" font-size="14" fill="#111111">Outline</text>
+  <text x="597.5" y="132" text-anchor="middle" font-size="10" fill="#777777">arcs + segments</text>
+  <polygon points="710,96 730,116 710,136 690,116" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
+  <text x="710" y="121" text-anchor="middle" font-size="12" fill="#8a2d2d">H</text>
+  <text x="710" y="170" text-anchor="middle" font-size="10" fill="#8a2d2d">approve</text>
+  <text x="830" y="68" text-anchor="middle" font-size="12" fill="#999999">④</text>
+  <rect x="755" y="85" width="150" height="62" rx="3" fill="#f3f3f3" stroke="#222222" stroke-width="1.2"/>
+  <text x="830" y="110" text-anchor="middle" font-size="14" fill="#111111">Setting</text>
+  <text x="830" y="132" text-anchor="middle" font-size="10" fill="#777777">whole draft · local edits</text>
+  <polygon points="950,96 970,116 950,136 930,116" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
+  <text x="950" y="121" text-anchor="middle" font-size="12" fill="#8a2d2d">H</text>
+  <text x="950" y="170" text-anchor="middle" font-size="10" fill="#8a2d2d">approve once</text>
 
-  <rect x="20" y="140" width="110" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
-  <text x="75" y="162" text-anchor="middle" font-size="13" fill="#111111">Unified Entry</text>
-  <text x="75" y="181" text-anchor="middle" font-size="10" fill="#777777">idea / doc upload</text>
+  <g stroke="#444444" stroke-width="1.1" marker-end="url(#arrow)">
+    <line x1="130" y1="116" x2="151" y2="116"/>
+    <line x1="275" y1="116" x2="296" y2="116"/>
+    <line x1="440" y1="116" x2="461" y2="116"/>
+    <line x1="505" y1="116" x2="526" y2="116"/>
+    <line x1="665" y1="116" x2="686" y2="116"/>
+    <line x1="730" y1="116" x2="751" y2="116"/>
+    <line x1="905" y1="116" x2="926" y2="116"/>
+  </g>
+  <path d="M 970 116 H 1038 V 211 H 1034" fill="none" stroke="#444444" stroke-width="1.1" marker-end="url(#arrow)"/>
+  <rect x="810" y="196" width="220" height="30" rx="4" fill="#f3f3f3" stroke="#222222"/>
+  <text x="920" y="216" text-anchor="middle" font-size="11" fill="#111111">Current end · setting-approved</text>
 
-  <rect x="146" y="140" width="118" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
-  <text x="205" y="162" text-anchor="middle" font-size="13" fill="#111111">Preprocess</text>
-  <text x="205" y="181" text-anchor="middle" font-size="9.5" fill="#777777">caption → creative ×N</text>
+  <!-- Dashed continuation is future scope, not an available action. -->
+  <rect x="320" y="270" width="720" height="162" rx="10" fill="#fcfcfc" stroke="#999999" stroke-dasharray="5 4"/>
+  <text x="336" y="292" font-size="11" font-style="italic" fill="#888888">PLANNED · #5 · per-chapter loop</text>
+  <path d="M 920 226 V 251 H 305 V 344 H 341" fill="none" stroke="#888888" stroke-dasharray="4 4" marker-end="url(#arrow)"/>
+  <rect x="345" y="314" width="120" height="60" rx="3" fill="#ffffff" stroke="#999999"/>
+  <text x="405" y="338" text-anchor="middle" font-size="14" fill="#777777">Beat</text>
+  <text x="405" y="359" text-anchor="middle" font-size="9.5" fill="#888888">goal · conflict · hook</text>
+  <polygon points="505,324 525,344 505,364 485,344" fill="#ffffff" stroke="#8a2d2d"/>
+  <text x="505" y="349" text-anchor="middle" font-size="12" fill="#8a2d2d">H</text>
+  <rect x="555" y="314" width="125" height="60" rx="3" fill="#ffffff" stroke="#999999"/>
+  <text x="617.5" y="338" text-anchor="middle" font-size="14" fill="#777777">Prose</text>
+  <text x="617.5" y="359" text-anchor="middle" font-size="9" fill="#888888">2–4k Chinese characters</text>
+  <polygon points="725,324 745,344 725,364 705,344" fill="#ffffff" stroke="#8a2d2d"/>
+  <text x="725" y="349" text-anchor="middle" font-size="12" fill="#8a2d2d">H</text>
+  <rect x="795" y="314" width="150" height="60" rx="3" fill="#ffffff" stroke="#999999"/>
+  <text x="870" y="349" text-anchor="middle" font-size="14" fill="#777777">Finished book</text>
+  <g stroke="#888888" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrow)">
+    <line x1="465" y1="344" x2="481" y2="344"/>
+    <line x1="525" y1="344" x2="551" y2="344"/>
+    <line x1="680" y1="344" x2="701" y2="344"/>
+    <line x1="745" y1="344" x2="791" y2="344"/>
+    <path d="M 725 364 V 406 H 405 V 378" fill="none"/>
+  </g>
+  <text x="565" y="399" text-anchor="middle" font-size="10.5" fill="#888888">next chapter</text>
 
-  <rect x="280" y="140" width="170" height="56" rx="3" fill="#f3f3f3" stroke="#222222" stroke-width="1.2"/>
-  <text x="365" y="162" text-anchor="middle" font-size="13" fill="#111111">Creative packs</text>
-  <text x="365" y="181" text-anchor="middle" font-size="8.5" fill="#777777">direction packs · caption auto-ok</text>
-
-  <polygon points="488,146 510,168 488,190 466,168" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
-  <text x="488" y="173" text-anchor="middle" font-size="13" fill="#8a2d2d">H</text>
-  <text x="488" y="216" text-anchor="middle" font-size="9" fill="#8a2d2d">creative pick gate</text>
-
-  <rect x="526" y="140" width="96" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
-  <text x="574" y="162" text-anchor="middle" font-size="13" fill="#111111">Outline</text>
-  <text x="574" y="181" text-anchor="middle" font-size="9.5" fill="#777777">chapter skeleton</text>
-
-  <rect x="648" y="80" width="338" height="170" rx="10" fill="none" stroke="#999999" stroke-width="1" stroke-dasharray="5 4"/>
-  <text x="664" y="103" font-size="11" font-style="italic" fill="#888888">⑤ per chapter × N</text>
-
-  <rect x="664" y="140" width="88" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
-  <text x="708" y="162" text-anchor="middle" font-size="13" fill="#111111">Beat</text>
-  <text x="708" y="181" text-anchor="middle" font-size="8.5" fill="#777777">goal·conflict·hook</text>
-
-  <polygon points="786,146 804,168 786,190 768,168" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
-  <text x="786" y="173" text-anchor="middle" font-size="13" fill="#8a2d2d">H</text>
-  <text x="786" y="216" text-anchor="middle" font-size="9" fill="#8a2d2d">beat gate</text>
-
-  <rect x="820" y="140" width="96" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
-  <text x="868" y="162" text-anchor="middle" font-size="13" fill="#111111">Prose</text>
-  <text x="868" y="181" text-anchor="middle" font-size="10" fill="#777777">2–4k chars</text>
-
-  <polygon points="950,146 968,168 950,190 932,168" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
-  <text x="950" y="173" text-anchor="middle" font-size="13" fill="#8a2d2d">H</text>
-  <text x="950" y="216" text-anchor="middle" font-size="9" fill="#8a2d2d">prose gate</text>
-
-  <rect x="1004" y="140" width="64" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
-  <text x="1036" y="172" text-anchor="middle" font-size="11" fill="#111111">Finished</text>
-
-  <line x1="130" y1="168" x2="142" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
-  <line x1="264" y1="168" x2="276" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
-  <line x1="450" y1="168" x2="462" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
-  <line x1="510" y1="168" x2="522" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
-  <line x1="622" y1="168" x2="644" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
-  <line x1="752" y1="168" x2="764" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
-  <line x1="804" y1="168" x2="816" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
-  <line x1="916" y1="168" x2="928" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
-  <line x1="968" y1="168" x2="1000" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrowE)"/>
-
-  <path d="M 950 190 V 278 H 708 V 202" fill="none" stroke="#888888" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrowE)"/>
-  <text x="829" y="272" text-anchor="middle" font-size="11" fill="#888888">next chapter</text>
-
-  <rect x="20" y="300" width="18" height="13" fill="#ffffff" stroke="#222222" stroke-width="1.1"/>
-  <text x="44" y="311" font-size="11" fill="#555555">agent step</text>
-  <rect x="122" y="300" width="18" height="13" fill="#f3f3f3" stroke="#222222" stroke-width="1.1"/>
-  <text x="146" y="311" font-size="11" fill="#555555">artifact (versioned)</text>
-  <polygon points="286,299 295,306.5 286,314 277,306.5" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.2"/>
-  <text x="303" y="311" font-size="11" fill="#555555">human gate</text>
-  <line x1="420" y1="306.5" x2="450" y2="306.5" stroke="#888888" stroke-width="1" stroke-dasharray="4 4"/>
-  <text x="456" y="311" font-size="11" fill="#555555">per-chapter loop</text>
+  <line x1="20" y1="452" x2="48" y2="452" stroke="#444444"/>
+  <text x="55" y="456" font-size="11" fill="#555555">current flow</text>
+  <polygon points="198,444 206,452 198,460 190,452" fill="#ffffff" stroke="#8a2d2d"/>
+  <text x="214" y="456" font-size="11" fill="#555555">author gate</text>
+  <line x1="340" y1="452" x2="368" y2="452" stroke="#888888" stroke-dasharray="4 4"/>
+  <text x="376" y="456" font-size="11" fill="#555555">planned / chapter loop</text>
 </svg>

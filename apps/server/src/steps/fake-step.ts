@@ -3,6 +3,8 @@ import { captionStepInputSchema, captionStepOutputSchema } from './caption-io.js
 import { creativeStepInputSchema, creativeStepOutputSchema } from './creative-io.js'
 import { outlineStepInputSchema, outlineStepOutputSchema } from './outline-io.js'
 import { DEFAULT_DIRECTION_COUNT } from './creative-step.js'
+import { settingStepInputSchema, settingStepOutputSchema } from './setting-io.js'
+import { assignSettingIds } from '../setting-content.js'
 
 // 演示模式(无 DEEPSEEK_API_KEY):固定输出,仍走完整 schema 校验链路
 
@@ -85,6 +87,22 @@ export function createFakeOutlineStep(): ArtifactStep {
           }),
         },
       }
+    },
+  }
+}
+
+export function createFakeSettingStep(): ArtifactStep {
+  return {
+    id: 'setting', inputSchema: settingStepInputSchema, outputSchema: settingStepOutputSchema,
+    async run(input) {
+      const { upstream } = settingStepInputSchema.parse(input)
+      const direction = upstream.creative.directions[0]!
+      return { content: assignSettingIds({
+        overview: `(演示)${direction.synopsis}`,
+        world: [{ title: '故事世界', content: `(演示)基于「${input.seed.slice(0, 80)}」展开，世界规则在整部作品中保持一致。` }],
+        characters: [{ title: '主角', content: `(演示)围绕「${direction.hook}」行动，在关键选择中成长。` }],
+        factions: [], relationships: [], extensions: [],
+      }) }
     },
   }
 }

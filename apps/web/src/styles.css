@@ -110,3 +110,35 @@ button {
   font-family: inherit;
   color: var(--ink);
 }
+
+.setting-review { margin: 24px 0; }
+.setting-review-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+.setting-review-header h2 { margin: 8px 0 12px; font-size: 28px; letter-spacing: -.04em; }
+.setting-eyebrow { color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .12em; margin: 0; }
+.setting-muted { color: var(--ink-2); line-height: 1.7; font-size: 14px; }
+.setting-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.setting-section { margin: 28px 0; }
+.setting-section h3 { font-size: 18px; margin: 0 0 16px; }
+.setting-card { margin: 12px 0; }
+.setting-card h4 { margin: 0 0 12px; font-size: 16px; }
+.setting-extension { border-left: 2px solid var(--line); padding-left: 18px; margin: 20px 0; }
+.setting-field { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; font-size: 13px; color: var(--ink-2); }
+.setting-field textarea { line-height: 1.7; resize: vertical; min-height: 100px; }
+.setting-field [aria-invalid='true'] { border-color: var(--danger) !important; }
+.setting-field-error { display: block; color: var(--danger); font-size: 13px; margin: 4px 0; }
+.setting-notice { padding: 14px 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--warn-bg); color: var(--warn-ink); margin: 20px 0; line-height: 1.6; }
+.setting-recovery { margin: 16px 0; }
+.setting-markdown { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.8; font-size: 15px; }
+.setting-markdown p { margin: 0 0 12px; }
+.setting-markdown p:last-child { margin-bottom: 0; }
+.setting-markdown blockquote { margin: 12px 0; padding: 8px 16px; border-left: 3px solid var(--accent); background: var(--bg-sunken); color: var(--ink-2); }
+.setting-markdown ul, .setting-markdown ol { padding-left: 26px; margin: 12px 0; }
+.setting-review button:disabled, .setting-review select:disabled { cursor: not-allowed !important; opacity: .5; }
+.setting-review :focus-visible, .setting-modal :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.setting-modal-backdrop { position: fixed; inset: 0; z-index: 100; background: color-mix(in srgb, var(--ink) 32%, transparent); backdrop-filter: blur(5px); display: grid; place-items: center; padding: 24px; }
+.setting-modal { position: relative; background: var(--bg-raised); border: 1px solid var(--line); border-radius: 20px; padding: 32px; width: min(440px, 100%); box-sizing: border-box; box-shadow: var(--shadow-pill); }
+.setting-modal h2 { font-size: 24px; letter-spacing: -.03em; margin: 20px 0 12px; }
+.setting-modal p { color: var(--ink-2); line-height: 1.8; margin-bottom: 28px; }
+.setting-modal .setting-actions { justify-content: flex-end; }
+.setting-modal-close { position: absolute; right: 14px; top: 12px; border: 0; background: transparent; color: var(--ink-2); font-size: 24px; cursor: pointer; }
+.setting-modal-mark { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; background: var(--warn-bg); color: var(--warn-ink); font-size: 24px; font-weight: 600; }

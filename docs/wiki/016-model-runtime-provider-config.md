@@ -8,9 +8,9 @@ topics: ["model-runtime", "provider-config", "credentials", "base-url-security",
 code_paths: ["apps/server/src/index.ts", "apps/server/src/steps/llm.ts", "apps/server/src/steps/llm-call.ts", "apps/server/src/config/local-env.ts", "apps/server/src/start.ts", "apps/cli/src/client.ts", ".env.example"]
 symbols: ["ModelRuntime", "SupportedModelId", "ModelConfigError", "createModelRuntime", "modelRuntime", "callLlm", "DEFAULT_CLI_TIMEOUT_MS", "DEFAULT_ADVANCE_TIMEOUT_MS", "A4N_LLM_TIMEOUT_MS", "A4N_CLI_TIMEOUT_MS", "llm-timeout"]
 inherits: ["014"]
-changed_by: []
+changed_by: ["013"]
 read_when: ["configure-model-provider", "add-model-provider", "debug-llm-runtime", "change-llm-timeout", "audit-credential-safety"]
-last_context_reviewed: "2026-09-04"
+last_context_reviewed: "2026-09-05"
 ---
 
 # 016 — 模型运行配置：统一多 Provider、凭据与超时
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-09-04"
 - **原始目的**：把散落且 DeepSeek-only 的运行时选择收敛到 ModelRuntime，使 Pipeline 与 RealStep 无需感知 provider。
 - **实际落地**：DeepSeek 与 LongCat 2.0 共用 registry；server 安全加载本地配置，统一校验 URL、模型、credential、单次 LLM timeout 和本地 Zod 边界。
 - **当前价值**：本文是 provider 配置、运行时行为、错误语义与验证状态的当前唯一 HOW。
-- **后续变化**：CLI 命令、telemetry 账本与 smoke 仍由 [wiki 014](./014-agent-cli-telemetry.md) 拥有；本文记录的 work ID 都是历史进程快照，不代表当前仍存活。
+- **后续变化**：CLI／telemetry／smoke 仍由 [Wiki 014](./014-agent-cli-telemetry.md) 拥有；[Wiki 013](./013-setting-generation-review.md) 新增 Setting，显式禁用该步骤的 SDK 重试并记录新实测。本文 work ID 均为历史进程快照，不代表当前仍存活。
 - **代码入口**：[ModelRuntime](../../apps/server/src/steps/llm.ts)、[LLM call](../../apps/server/src/steps/llm-call.ts)、[local env loader](../../apps/server/src/config/local-env.ts)、[server assembly](../../apps/server/src/start.ts)、[CLI timeout](../../apps/cli/src/client.ts)。
 
 ## 设计目的
@@ -102,6 +102,8 @@ Pipeline 不做 provider 自动重试，也不做跨 provider failover：
 - 已完成且已落库的上游 Step 不重跑。
 - POST /advance 可能 HTTP 200 但 JSON kind=failed；只看 exit code 会漏报失败。
 
+这不等于 SDK 内部请求重试为零。#13 核对已安装 SDK 后发现其默认重试次数为 2；Setting 显式传 maxRetries=0，其他步骤保留 SDK 默认值。一次 generateObject 的总等待仍受本页 LLM timeout 限制；具体证据与 Setting 验证见 Wiki 013。
+
 ## 代码落点
 
 | 责任 | 权威入口 |
@@ -139,6 +141,14 @@ ModelRuntime 测试以合成 key 与 fake fetch 覆盖选择、缺 key、非法 
 - 不做持久化 store、后台 job、队列或异步 advance。
 
 ## 上下文演进
+
+### 2026-09-05 — 区分 Pipeline 与 SDK 请求重试
+
+- **触发证据**：#13 一次生成要求下，安装 SDK 的默认 maxRetries 为 2。
+- **原假设**：“Pipeline 不自动重试”容易被误读成底层 HTTP 也只尝试一次。
+- **决定**：仅 Setting 显式覆盖为 0；不改变其他步骤或 provider 配置。
+- **影响**：运行 skill 与 Wiki 013 同步区分调用层次；旧三步实测仍只证明当时观察到的结果。
+- **上下文处理**：preserve 原 timeout 配置与失败证据；replace 重试层次的歧义说明，不变更配置 HOW 归属。
 
 ### 2026-08-29 — DeepSeek-only 配置收敛为 ModelRuntime
 

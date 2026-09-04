@@ -8,9 +8,9 @@ topics: ["outline", "story-arcs", "story-segments", "workflow-gates", "outline-r
 code_paths: ["packages/contracts/src/outline.ts", "packages/contracts/src/artifacts.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/steps/outline-io.ts", "apps/server/src/steps/outline-step.ts", "apps/server/src/routes/works.ts", "apps/server/src/start.ts", "apps/server/test/pipeline.test.ts", "apps/web/src/outline-review.ts", "apps/web/src/pages/OutlineReview.tsx"]
 symbols: ["outlineContentSchema", "outlineDraftSchema", "createOutlineStep", "PipelineDefinitionEntry", "workflowOf", "normalizeOutlineIds", "ReviewState", "advance-in-progress", "version-conflict"]
 inherits: ["011"]
-changed_by: ["016"]
+changed_by: ["016", "013"]
 read_when: ["change-outline-schema", "change-outline-generation", "debug-outline-gate", "change-outline-editor"]
-last_context_reviewed: "2026-09-04"
+last_context_reviewed: "2026-09-05"
 ---
 
 # 004 — 大纲生成：弧线 + 剧情点两层结构
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-09-04"
 - **原始目的**：用可审阅的全书结构替代“每章一句话”的分章大纲，并为后续章纲切片提供稳定输入。
 - **实际落地**：outline 成为 caption → creative → outline 链路的第三步，生成后停在人工关卡；作者可编辑草稿并单独通过。
 - **当前价值**：本文是弧线、剧情点、outline 关卡与编辑行为的当前 HOW；已有 ID 稳定，但批量新增存在重复 ID 的已知限制。
-- **后续变化**：模型 provider、凭据、timeout 与 LongCat 验证由 [wiki 016](./016-model-runtime-provider-config.md) 接管；本文中的模型实测只作演进证据。
+- **后续变化**：模型配置由 [Wiki 016](./016-model-runtime-provider-config.md) 接管；[Wiki 013](./013-setting-generation-review.md) 在大纲后追加 Setting，Web 大纲通过动作成功后续跑一次 advance，生产链不再以 outline-approved 结束。大纲保存／通过本身的两步语义不变。
 - **代码入口**：[outline contract](../../packages/contracts/src/outline.ts)、[pipeline](../../apps/server/src/pipeline/pipeline.ts)、[server assembly](../../apps/server/src/start.ts)、[works routes](../../apps/server/src/routes/works.ts)、[review state](../../apps/web/src/outline-review.ts)。
 
 ## 设计目的
@@ -34,6 +34,8 @@ last_context_reviewed: "2026-09-04"
 | 剧情点 segment | 弧线内一次可执行的情节推进 | title / summary / outcome | 作者局部编辑、后续章纲切片 |
 
 关键人类决策：resolution 写清收束后的局势，outcome 写清本段造成的变化；两者是长线一致性锚点。人物仅在文本中提名，结构化引用归设定层；场景、钩子、爽点和章节数量归后续章纲。
+
+上段保留 #4 的职责分配背景；后来 #13 的 Human 对齐选择通用文本卡片，不实现关系端点或结构化引用，当前设定范围以 Wiki 013 为准。
 
 ## 起始上下文
 
@@ -50,6 +52,8 @@ last_context_reviewed: "2026-09-04"
 OutlineContent 存储 arcs：每份 3–8 条弧线，每条 2–8 个剧情点。标题最长 30 字符，文本 trim、非空且有上限，所有对象 strict。OutlineDraft 允许新增项暂缺 ID，OutlineContent 要求 ID 完整；数量边界只由 outlineArcCount 与 outlineSegmentCount 定义。
 
 ### Pipeline 与关卡
+
+下列三步装配和状态表保留 #4 交付时的基线；当前四步末态、nextStepId 与 Setting 关卡以 [Wiki 013](./013-setting-generation-review.md#服务端读模型与页面衔接) 为准，旧三步定义仍在兼容测试中使用。
 
 运行时按 caption（自动通过）→ creative（消费 caption，人工选定）→ outline（消费 creative，人工审阅）装配。creative 消费守卫要求最新版本 approved 且恰好一个方向；选定后 Web 再调用 advance，生成 outline 并停在 awaiting-outline-review。
 
@@ -119,6 +123,14 @@ OutlineReview 采用纯状态映射加 React 视图：
 - outline fan-out 或多方案生成。
 
 ## 上下文演进
+
+### 2026-09-05 — 大纲后衔接完整设定
+
+- **触发证据**：#13 生产定义追加 Setting，OutlineReview 的通过成功回调连接下一次 advance。
+- **原假设**：大纲通过是当前生产链终点。
+- **决定**：保留 Outline 保存／通过协议；新读模型由 nextStepId 表达下一步，旧三步末态留作兼容。
+- **影响**：当前流程与上游再次编辑的静态 Setting 限制见 Wiki 013，不把 #4 历史状态表当成完整现行工作流。
+- **上下文处理**：preserve 两层大纲的原始理由与历史验证；replace 当前衔接说明，下一跳为 Wiki 013。
 
 ### 2026-08-28 — 从分章摘要改为两层大纲
 

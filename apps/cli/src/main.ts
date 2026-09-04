@@ -10,11 +10,12 @@ import * as cmd from './commands.js'
 const USAGE = `agent4novel cli — 命令:
   list                                  作品列表
   create --seed <text> | --seed-file <f> [--title <t>]
-  get <workId> [--kind caption|creative|outline]
+  get <workId> [--kind caption|creative|outline|setting]
   advance <workId>                      推进流水线(同步长请求,默认等待 1820s)
   select <workId> [directionId]         选定创意方向(缺省取第一个)
   save-outline <workId> --file <f>      保存大纲草稿(f 为大纲 content JSON)
   approve <workId> <kind>               通过产物(如 outline)
+  approve-setting <workId> --file <f>   编辑并通过设定(f 为完整 content + expectedHeadVersion 请求)
   logs <workId>                         LLM 遥测回看(latency/tokens/finishReason/hash)
   smoke --seed <text> | --seed-file <f> [--title <t>]   一键全链路探针
 全局: --url <baseUrl>                  默认 $A4N_BASE_URL 或 http://localhost:8787
@@ -89,6 +90,23 @@ async function main(): Promise<void> {
       if (!pos[0]) throw new CliError('missing workId', 'usage')
       result = await cmd.approve(client, pos[0], requireKind(pos[1]))
       break
+    case 'approve-setting': {
+      if (!pos[0] || !flags.file) throw new CliError('missing workId or --file', 'usage')
+      let source: string
+      try {
+        source = readFileSync(flags.file, 'utf8')
+      } catch {
+        throw new CliError('Unable to read the setting request file', 'usage')
+      }
+      let input: unknown
+      try {
+        input = JSON.parse(source)
+      } catch {
+        throw new CliError('Setting request file must contain valid JSON', 'invalid-input')
+      }
+      result = await cmd.approveSetting(client, pos[0], input)
+      break
+    }
     case 'logs':
       if (!pos[0]) throw new CliError('missing workId', 'usage')
       result = await cmd.logs(client, pos[0])
@@ -106,7 +124,7 @@ async function main(): Promise<void> {
 
 main().catch((err: unknown) => {
   if (err instanceof CliError) {
-    console.error(JSON.stringify({ code: err.code, message: err.message, retryable: err.retryable, ...(err.attemptId ? { attemptId: err.attemptId } : {}) }))
+    console.error(JSON.stringify({ code: err.code, message: err.message, retryable: err.retryable, ...(err.attemptId ? { attemptId: err.attemptId } : {}), ...(err.issues ? { issues: err.issues } : {}) }))
   } else {
     console.error(JSON.stringify({ code: 'internal', message: err instanceof Error ? err.message : String(err) }))
   }

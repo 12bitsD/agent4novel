@@ -1,6 +1,33 @@
 import type { Artifact, ArtifactKind, HumanStatus, JsonValue, Work, WorkDetail, WorkSummary } from '@agent4novel/contracts'
 
+export type ArtifactPrecondition = {
+  kind: ArtifactKind
+  chapter?: number
+  // null requires no bucket; otherwise all three head fields must match.
+  head: null | {
+    artifactId: string
+    version: number
+    humanStatus: HumanStatus
+  }
+}
+
+export type AppendOptions = {
+  chapter?: number
+  preconditions?: readonly ArtifactPrecondition[]
+}
+
+export type FinalizeArtifactInput = {
+  workId: string
+  kind: ArtifactKind
+  chapter?: number
+  expectedArtifactId: string
+  expectedHeadVersion: number
+  content: JsonValue
+  preconditions?: readonly ArtifactPrecondition[]
+}
+
 export interface WorkStore {
+  // Inputs and returned snapshots must not expose mutable store-owned references.
   createWork(input: { seed: string; title?: string }): Work
   listWorks(): WorkSummary[]
   getWork(id: string): WorkDetail | undefined
@@ -8,8 +35,10 @@ export interface WorkStore {
     workId: string,
     kind: ArtifactKind,
     content: JsonValue,
-    opts?: { chapter?: number },
+    opts?: AppendOptions,
   ): Artifact
+  // Atomically replace a pending head's content and approve it without a new version.
+  finalizeArtifact(input: FinalizeArtifactInput): Artifact
   setStatus(
     workId: string,
     kind: ArtifactKind,

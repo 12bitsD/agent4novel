@@ -8,9 +8,9 @@ topics: ["agent-cli", "llm-telemetry", "workflow-smoke", "optimistic-locking", "
 code_paths: ["apps/cli/src/client.ts", "apps/cli/src/commands.ts", "apps/cli/src/main.ts", "packages/contracts/src/telemetry.ts", "apps/server/src/steps/telemetry.ts", "apps/server/src/steps/llm-call.ts", "apps/server/src/routes/works.ts", ".claude/skills/agent4novel-drive/SKILL.md"]
 symbols: ["createClient", "CliError", "smoke", "LlmTelemetry", "recordTelemetry", "telemetryCursor", "telemetryFor", "callLlm"]
 inherits: ["004", "011"]
-changed_by: ["016"]
+changed_by: ["016", "013"]
 read_when: ["drive-workflow-from-cli", "debug-llm-failure", "change-cli-command", "change-telemetry", "run-end-to-end-smoke"]
-last_context_reviewed: "2026-09-04"
+last_context_reviewed: "2026-09-05"
 ---
 
 # 014 — Agent 可用性基建：CLI + 遥测内联 + 项目级 Skill
@@ -19,9 +19,9 @@ last_context_reviewed: "2026-09-04"
 
 - **读取时机**：用命令行驱动作品、修改 CLI、分析 LLM 失败、扩展遥测或维护 smoke 探针时读取。
 - **原始目的**：消除 Agent 手拼 curl 和手记 expectedHeadVersion 的易错操作，并让一次 advance 同时返回结果与诊断。
-- **实际落地**：a4n 提供 9 个 JSON 命令；LLM 成败都写入进程内账本，advance 内联本次遥测，logs 支持跨次回看。
+- **实际落地**：a4n 提供 JSON 命令；#13 新增 approve-setting，并将 smoke 延伸至设定通过。LLM 成败写入进程内账本，advance 内联本次遥测，logs 支持跨次回看。
 - **当前价值**：本文继续拥有 CLI 命令语义、遥测契约、smoke 流程和 outline 截断的排障经验。
-- **后续变化**：[wiki 016](./016-model-runtime-provider-config.md) 已接管 provider、凭据、Base URL、结构化输出协议与两层 timeout；不要从本文推导当前模型配置。
+- **后续变化**：[Wiki 016](./016-model-runtime-provider-config.md) 接管模型配置与 timeout 默认值；[Wiki 013](./013-setting-generation-review.md) 拥有 Setting 完整显式版本请求与结果对账规则，不沿用 Outline 自动补版本。
 - **代码入口**：[CLI commands](../../apps/cli/src/commands.ts)、[CLI client](../../apps/cli/src/client.ts)、[telemetry ledger](../../apps/server/src/steps/telemetry.ts)、[LLM call](../../apps/server/src/steps/llm-call.ts)、[drive skill](../../.claude/skills/agent4novel-drive/SKILL.md)。
 
 ## 设计目的
@@ -54,9 +54,9 @@ Agent 操作面必须满足三个条件：命令可组合、输出可解析、�
 ./apps/cli/bin/a4n <command>
 ~~~
 
-九个命令分别是 list、create、get、advance、select、save-outline、approve、logs、smoke。select/save-outline 自动读当前快照并回填 head version；smoke 串起完整三步链。pnpm -s cli 等价，但必须带 -s 以免横幅污染 stdout；地址与 timeout 见 [wiki 016](./016-model-runtime-provider-config.md)。
+命令为 list、create、get、advance、select、save-outline、approve、approve-setting、logs、smoke。select/save-outline 自动回填 head version；approve-setting 文件必须显式携带完整 content 与读取时 expectedHeadVersion，最多自动回读一次，不自动重写。pnpm -s cli 等价，但必须带 -s 以免横幅污染 stdout；地址与 timeout 默认值见 [Wiki 016](./016-model-runtime-provider-config.md)，Setting 恢复规则见 [Wiki 013](./013-setting-generation-review.md#提交结果确认)。
 
-CliError 保留 server 返回的 code、status、retryable 与 attemptId。命令函数只返回可 JSON 序列化值，main 统一负责打印与 exit code。
+CliError 保留 server 返回的 code、status、retryable、attemptId 与可选 issues。命令函数只返回可 JSON 序列化值，main 统一负责打印与 exit code。CLI 主动 deadline 覆盖 fetch 和响应体，默认数值未变；超时不代表服务器回滚。
 
 ### 遥测账本
 
@@ -86,7 +86,7 @@ server stdout 的 llm.error 另含 textChars、最多 200 字符的 textTail 和
 
 ### Smoke 探针
 
-smoke 执行 create → advance（caption + creative）→ select 首个方向 → advance（outline）→ approve → get。成功后 stdout 给出 steps 与 final，stderr 报进度；失败时不会返回部分 steps，应据 stderr 用单条命令和 logs 检查已有状态。
+smoke 执行 create → advance（caption + creative）→ select 首个方向 → advance（outline）→ approve outline → advance（setting）→ get setting → 修改总览并 approve-setting → get final，核对 setting-approved 与修改内容。成功后 stdout 给出 steps 与 final，stderr 报进度；HTTP 200 的 failed outcome 同样停止探针，失败时不会返回部分 steps，应据 stderr 用单条命令和 logs 检查已有状态。
 
 ## 代码落点
 
@@ -106,11 +106,19 @@ CLI 测试以注入 fetch 覆盖 REST 映射、自动回填版本、首方向缺
 ## 边界与非目标
 
 - telemetry 与作品不持久化；账本最多 1000 条，重启或淘汰后不可查。
-- smoke 自动选首方向并通过大纲，只验证链路，不代表人工质量验收。
+- smoke 自动选首方向并通过大纲、修改并通过设定，只验证链路，不代表人工质量验收。
 - advance 是同步长请求；没有后台 job、SSE、Web telemetry 或跨进程聚合。
 - provider、credential、Base URL、wire protocol 和 timeout 默认值归 wiki 016。
 
 ## 上下文演进
+
+### 2026-09-05 — 完整设定命令与 smoke 新终点
+
+- **触发证据**：#13 将生产链扩展至 Setting，内容与状态需一次原子定稿。
+- **原假设**：全部人工命令都能自动补最新版本，smoke 到大纲即完成。
+- **决定**：新增显式版本的 approve-setting，共享 DTO 与提交 matcher；smoke 编辑设定后通过并回读，HTTP 200 failed 同样中止。
+- **影响**：CLI 主动 deadline 覆盖响应体，原超时数值保持；不猜测已通过内容是否来自旧进程提交。
+- **上下文处理**：preserve 原 CLI 与遥测目的、截断失败史；replace 当前命令和 smoke 说明，专用恢复语义链接 Wiki 013。
 
 ### 2026-08-28 — CLI 取代手拼 curl
 

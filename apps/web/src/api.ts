@@ -1,19 +1,15 @@
 import type {
   Artifact,
   ArtifactKind,
+  AdvanceOutcomeDto,
   CreativeContent,
   OutlineDraft,
   Work,
   WorkSummary,
   WorkView,
 } from '@agent4novel/contracts'
-
-// advance 的可穷举结果(#3c,与 server pipeline.ts 同形)
-export type AdvanceOutcomeDto =
-  | { kind: 'advanced'; stepId: string }
-  | { kind: 'awaiting-approval' }
-  | { kind: 'complete' }
-  | { kind: 'failed'; stepId: string; code: string; retryable: boolean; attemptId?: string }
+import { advanceOutcomeDtoSchema, workViewSchema } from '@agent4novel/contracts'
+export type { AdvanceOutcomeDto } from '@agent4novel/contracts'
 
 export type AppConfig = { demo: boolean }
 
@@ -45,8 +41,8 @@ export function listWorks(): Promise<WorkSummary[]> {
   return request<WorkSummary[]>('/api/works')
 }
 
-export function getWork(id: string): Promise<WorkView> {
-  return request<WorkView>(`/api/works/${id}`)
+export async function getWork(id: string): Promise<WorkView> {
+  return workViewSchema.parse(await request<unknown>(`/api/works/${encodeURIComponent(id)}`))
 }
 
 export function createWork(input: { seed: string; title?: string }): Promise<Work> {
@@ -78,8 +74,8 @@ export function selectCreativeDirection(
   })
 }
 
-export function advance(workId: string): Promise<AdvanceOutcomeDto> {
-  return post<AdvanceOutcomeDto>(`/api/works/${workId}/advance`)
+export async function advance(workId: string): Promise<AdvanceOutcomeDto> {
+  return advanceOutcomeDtoSchema.parse(await post<unknown>(`/api/works/${workId}/advance`))
 }
 
 // saveOutlineDraft(#4):保存大纲草稿(新项无 id,server 补注入),永远 pending;乐观锁同上

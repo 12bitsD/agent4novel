@@ -65,6 +65,29 @@ function makePipeline() {
 }
 
 describe('Pipeline(#3c 链式 advance)', () => {
+  it('does not commit output generated from an upstream replaced while the step runs', async () => {
+    const store = new InMemoryStore()
+    let release!: () => void
+    const paused = new Promise<void>((resolve) => { release = resolve })
+    const creative = fakeStep('creative', { made: 'creative' })
+    creative.run = async () => { await paused; return { content: { made: 'stale' } } }
+    const pipeline = new Pipeline({
+      store,
+      steps: new Map([['caption', fakeStep('caption', 'caption')], ['creative', creative]]),
+      definition: definition.slice(0, 2),
+      resolveConfig: () => ({}),
+    })
+    const work = store.createWork({ seed: 'race' })
+    store.appendArtifact(work.id, 'caption', 'old caption')
+    store.setStatus(work.id, 'caption', 'approved')
+    const advancing = pipeline.advance(work.id)
+    store.appendArtifact(work.id, 'caption', 'new caption')
+    store.setStatus(work.id, 'caption', 'approved')
+    release()
+    expect(await advancing).toMatchObject({ kind: 'failed', code: 'upstream-changed' })
+    expect(store.getWork(work.id)!.artifacts.some((a) => a.kind === 'creative')).toBe(false)
+  })
+
   it('initial state is ready at the first step', () => {
     const { store, pipeline } = makePipeline()
     const w = store.createWork({ seed: 'x' })

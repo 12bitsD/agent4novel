@@ -17,7 +17,7 @@ export default function App() {
     )
   }
   if (view.name === 'workspace') {
-    return <Workspace workId={view.workId} onBack={() => setView({ name: 'bookcase' })} />
+    return <Workspace key={view.workId} workId={view.workId} onBack={() => setView({ name: 'bookcase' })} />
   }
   return (
     <Bookcase

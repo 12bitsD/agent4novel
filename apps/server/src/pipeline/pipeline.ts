@@ -6,9 +6,12 @@ import type {
   JsonValue,
   Step,
   WorkDetail,
+  AdvanceOutcome,
+  PipelineState,
 } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
-import type { WorkStore } from '../store/work-store.js'
+import type { ArtifactPrecondition, WorkStore } from '../store/work-store.js'
+export type { AdvanceOutcome, GateRef, PipelineStage, PipelineState } from '@agent4novel/contracts'
 
 // 步骤输入(#3c):pipeline 组装上下文 { workId, seed, upstream }。
 // seed 是所有步骤的固有输入(不可变即 snapshot);upstream = consumes 声明的上游产物内容,
@@ -20,30 +23,6 @@ export type PipelineInput = {
 }
 export type PipelineOutput = { content: JsonValue }
 export type ArtifactStep = Step<PipelineInput, PipelineOutput>
-
-export type GateRef = { kind: ArtifactKind; chapter?: number }
-export type PipelineStage = 'ready' | 'blocked' | 'awaiting-approval' | 'complete'
-
-export type PipelineState = {
-  workId: string
-  stage: PipelineStage
-  nextStepId: string | null
-  pendingGate?: GateRef
-}
-
-// advance 的可穷举结果(#3c):推进到下一个关卡为止;failed 带 stepId/code/retryable 供 web 重试
-export type AdvanceOutcome =
-  | { kind: 'advanced'; stepId: string; state: PipelineState }
-  | { kind: 'awaiting-approval'; state: PipelineState }
-  | { kind: 'complete'; state: PipelineState }
-  | {
-      kind: 'failed'
-      stepId: string
-      code: string
-      retryable: boolean
-      attemptId?: string
-      state: PipelineState
-    }
 
 export type PipelineDefinitionEntry = {
   stepId: string
@@ -177,16 +156,18 @@ export class Pipeline {
           await this.runEntry(workId, entry)
         } catch (err) {
           const known = err instanceof KnownError ? err : null
+          // 丢弃旧输入上的生成结果后可手动重试；尚未通过的上游仍由 getState 阻挡。
+          const retryable = known?.code === 'upstream-changed' || (known?.retryable ?? true)
           this.lastFailure.set(workId, {
             stepId: entry.stepId,
             code: known?.code ?? 'llm-unavailable',
-            retryable: known?.retryable ?? true,
+            retryable,
           })
           return {
             kind: 'failed',
             stepId: entry.stepId,
             code: known?.code ?? 'llm-unavailable',
-            retryable: known?.retryable ?? true,
+            retryable,
             attemptId: known?.attemptId,
             state: this.getState(workId),
           }
@@ -204,7 +185,12 @@ export class Pipeline {
     }
   }
 
-  // 读模型用:最近一次失败(无 → null)。审批等人工动作也会清掉它
+  // 读模型按定义末端区分三步兼容链与四步设定链。
+  get completionKind(): ArtifactKind | undefined {
+    return this.definition.at(-1)?.outputKind
+  }
+
+  // 读模型用:最近一次失败(无 → null)。审批等人工动作也会清掉它。
   failureOf(workId: string): { stepId: string; code: string; retryable: boolean } | null {
     return this.lastFailure.get(workId) ?? null
   }
@@ -225,16 +211,21 @@ export class Pipeline {
     const work = this.store.getWork(workId)!
     const config = this.resolveConfig(work, entry.stepId)
     const upstream: Record<string, JsonValue> = {}
+    const preconditions: ArtifactPrecondition[] = [{ kind: entry.outputKind, head: null }]
     for (const dep of entry.consumes ?? []) {
       const a = work.artifacts.find((x) => x.kind === dep)
       if (a) {
         const guard = this.consumeGuards[dep]
         if (guard) guard(a.content) // 守卫抛错(如 direction-not-selected)→ 由 advance 收敛为 failed
         upstream[dep] = a.content
+        preconditions.push({
+          kind: dep,
+          head: { artifactId: a.id, version: a.version, humanStatus: 'approved' },
+        })
       }
     }
     const output = await runStep(step, { workId, seed: work.seed, upstream }, config)
-    const artifact = this.store.appendArtifact(workId, entry.outputKind, output.content)
+    const artifact = this.store.appendArtifact(workId, entry.outputKind, output.content, { preconditions })
     if (!entry.gateAfter) {
       this.store.setStatus(workId, entry.outputKind, 'approved')
     }
@@ -258,6 +249,9 @@ export class Pipeline {
   }
 
   approve(workId: string, kind: ArtifactKind, chapter?: number): void {
+    if (kind === 'setting') {
+      throw new KnownError('setting-approval-required', 'setting must use its full-content approval command')
+    }
     this.store.setStatus(workId, kind, 'approved', chapter !== undefined ? { chapter } : undefined)
     this.lastFailure.delete(workId)
   }

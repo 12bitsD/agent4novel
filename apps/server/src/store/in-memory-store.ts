@@ -9,9 +9,18 @@ import type {
   WorkSummary,
 } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
-import type { WorkStore } from './work-store.js'
+import type { AppendOptions, ArtifactPrecondition, FinalizeArtifactInput, WorkStore } from './work-store.js'
 
 type Bucket = { kind: ArtifactKind; chapter?: number; versions: Artifact[] }
+
+function assertBucketAddress(kind: ArtifactKind, chapter?: number): void {
+  if (perChapterKinds.includes(kind) && chapter === undefined) {
+    throw new Error(`kind "${kind}" requires a chapter`)
+  }
+  if (perWorkKinds.includes(kind) && chapter !== undefined) {
+    throw new Error(`kind "${kind}" must not have a chapter`)
+  }
+}
 
 export class InMemoryStore implements WorkStore {
   private works = new Map<string, Work>()
@@ -27,18 +36,44 @@ export class InMemoryStore implements WorkStore {
     return this.buckets.get(workId)?.find((b) => b.kind === kind && b.chapter === chapter)
   }
 
+  private assertPreconditions(
+    workId: string,
+    kind: ArtifactKind,
+    chapter: number | undefined,
+    preconditions: readonly ArtifactPrecondition[] = [],
+  ): void {
+    for (const condition of preconditions) {
+      assertBucketAddress(condition.kind, condition.chapter)
+      const bucket = this.findBucket(workId, condition.kind, condition.chapter)
+      const head = bucket?.versions.at(-1)
+      const matches = condition.head === null
+        ? bucket === undefined
+        : head?.id === condition.head.artifactId
+          && head.version === condition.head.version
+          && head.humanStatus === condition.head.humanStatus
+      if (!matches) {
+        const isTarget = condition.kind === kind && condition.chapter === chapter
+        throw new KnownError(
+          isTarget ? 'version-conflict' : 'upstream-changed',
+          `artifact precondition changed: ${workId}/${condition.kind}`,
+        )
+      }
+    }
+  }
+
   createWork(input: { seed: string; title?: string }): Work {
     const title = input.title?.trim() || undefined
     const work: Work = {
       id: this.nextId('work'),
       title: title ?? input.seed.slice(0, 20),
       seed: input.seed,
-      config: { ...emptyAgentConfig },
+      config: structuredClone(emptyAgentConfig),
       createdAt: new Date().toISOString(),
     }
+    const snapshot = structuredClone(work)
     this.works.set(work.id, work)
     this.buckets.set(work.id, [])
-    return work
+    return snapshot
   }
 
   listWorks(): WorkSummary[] {
@@ -60,40 +95,62 @@ export class InMemoryStore implements WorkStore {
     const artifacts = (this.buckets.get(id) ?? [])
       .map((b) => b.versions[b.versions.length - 1])
       .filter((a): a is Artifact => a !== undefined)
-    return { ...work, artifacts }
+    return structuredClone({ ...work, artifacts })
   }
 
   appendArtifact(
     workId: string,
     kind: ArtifactKind,
     content: JsonValue,
-    opts?: { chapter?: number },
+    opts?: AppendOptions,
   ): Artifact {
     if (!this.works.has(workId)) throw new KnownError('work-not-found', `work not found: ${workId}`)
-    const chapter = opts?.chapter
-    if (perChapterKinds.includes(kind) && chapter === undefined) {
-      throw new Error(`kind "${kind}" requires a chapter`)
-    }
-    if (perWorkKinds.includes(kind) && chapter !== undefined) {
-      throw new Error(`kind "${kind}" must not have a chapter`)
-    }
-    let bucket = this.findBucket(workId, kind, chapter)
-    if (!bucket) {
-      bucket = { kind, chapter, versions: [] }
-      this.buckets.get(workId)!.push(bucket)
-    }
+    const options = structuredClone(opts)
+    const chapter = options?.chapter
+    assertBucketAddress(kind, chapter)
+    const storedContent = structuredClone(content)
+    this.assertPreconditions(workId, kind, chapter, options?.preconditions)
+    const bucket = this.findBucket(workId, kind, chapter)
     const artifact: Artifact = {
       id: this.nextId('artifact'),
       workId,
       kind,
       chapter,
-      version: bucket.versions.length + 1,
-      content,
+      version: (bucket?.versions.length ?? 0) + 1,
+      content: storedContent,
       humanStatus: 'pending',
       createdAt: new Date().toISOString(),
     }
-    bucket.versions.push(artifact)
-    return artifact
+    const snapshot = structuredClone(artifact)
+    const candidate: Bucket = { kind, chapter, versions: [...(bucket?.versions ?? []), artifact] }
+    const previous = this.buckets.get(workId)!
+    const next = bucket
+      ? previous.map((entry) => entry === bucket ? candidate : entry)
+      : [...previous, candidate]
+    this.buckets.set(workId, next)
+    return snapshot
+  }
+
+  finalizeArtifact(input: FinalizeArtifactInput): Artifact {
+    const request = structuredClone(input)
+    const { workId, kind, chapter } = request
+    if (!this.works.has(workId)) throw new KnownError('work-not-found', `work not found: ${workId}`)
+    assertBucketAddress(kind, chapter)
+    const bucket = this.findBucket(workId, kind, chapter)
+    const head = bucket?.versions.at(-1)
+    if (!bucket || !head || head.id !== request.expectedArtifactId || head.version !== request.expectedHeadVersion) {
+      throw new KnownError('version-conflict', `artifact head changed: ${workId}/${kind}`)
+    }
+    if (head.humanStatus === 'approved') {
+      throw new KnownError('artifact-already-approved', `artifact already approved: ${workId}/${kind}`)
+    }
+    this.assertPreconditions(workId, kind, chapter, request.preconditions)
+    const artifact: Artifact = { ...head, content: request.content, humanStatus: 'approved' }
+    const snapshot = structuredClone(artifact)
+    const candidate: Bucket = { ...bucket, versions: [...bucket.versions.slice(0, -1), artifact] }
+    const next = this.buckets.get(workId)!.map((entry) => entry === bucket ? candidate : entry)
+    this.buckets.set(workId, next)
+    return snapshot
   }
 
   setStatus(
@@ -102,6 +159,9 @@ export class InMemoryStore implements WorkStore {
     status: HumanStatus,
     opts?: { chapter?: number },
   ): void {
+    if (kind === 'setting') {
+      throw new KnownError('setting-approval-required', 'setting requires the dedicated finalization command')
+    }
     const bucket = this.findBucket(workId, kind, opts?.chapter)
     if (!bucket || bucket.versions.length === 0) {
       throw new KnownError(

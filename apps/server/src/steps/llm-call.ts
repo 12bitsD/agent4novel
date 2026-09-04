@@ -41,6 +41,8 @@ export async function callLlm<T>(args: {
   attemptId: string
   /** 默认 8000;长产物步骤(如 outline)实测会撞顶截断(#14 排查),可上调 */
   maxOutputTokens?: number
+  /** 仅整份设定明确关闭 SDK 重试；其他步骤保留现有 SDK 默认行为。 */
+  maxRetries?: number
 }): Promise<T> {
   const model = args.config.model ?? modelRuntime.defaultModelId
   const started = Date.now()
@@ -59,6 +61,7 @@ export async function callLlm<T>(args: {
       system: args.system,
       prompt: args.prompt,
       maxOutputTokens: args.maxOutputTokens ?? 8000,
+      ...(args.maxRetries !== undefined ? { maxRetries: args.maxRetries } : {}),
       abortSignal: AbortSignal.timeout(modelRuntime.requestTimeoutMs),
     })
     const telemetry = {

@@ -1,84 +1,86 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="340" viewBox="0 0 1080 340" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="470" viewBox="0 0 1080 470" role="img" aria-labelledby="pipeline-title pipeline-desc" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', serif">
+  <title id="pipeline-title">当前创作流水线与规划中的按章循环</title>
+  <desc id="pipeline-desc">提炼稿自动通过；作者选定一个创意方向，通过弧线与剧情点大纲，再在本页编辑完整设定并一次通过。当前终点为 setting-approved。章纲与正文属于规划中的 #5。</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#444"/>
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#444444"/>
     </marker>
   </defs>
-  <rect x="0" y="0" width="1080" height="340" fill="#ffffff"/>
+  <rect x="0" y="0" width="1080" height="470" fill="#ffffff"/>
+  <text x="20" y="32" font-size="12" font-style="italic" fill="#777777">当前流程 · #13</text>
 
-  <!-- stage numbers -->
-  <text x="72" y="124" text-anchor="middle" font-size="12" fill="#999">①</text>
-  <text x="217" y="124" text-anchor="middle" font-size="12" fill="#999">②</text>
-  <text x="385" y="124" text-anchor="middle" font-size="12" fill="#999">③</text>
-  <text x="586" y="124" text-anchor="middle" font-size="12" fill="#999">④</text>
+  <!-- Current flow: caption → selected creative → approved outline → Setting. -->
+  <rect x="20" y="85" width="110" height="62" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
+  <text x="75" y="110" text-anchor="middle" font-size="14" fill="#111111">统一入口</text>
+  <text x="75" y="132" text-anchor="middle" font-size="10" fill="#777777">脑洞 / 上传文档</text>
+  <text x="215" y="68" text-anchor="middle" font-size="12" fill="#999999">①</text>
+  <rect x="155" y="85" width="120" height="62" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
+  <text x="215" y="110" text-anchor="middle" font-size="14" fill="#111111">提炼稿</text>
+  <text x="215" y="132" text-anchor="middle" font-size="10" fill="#777777">caption · 自动通过</text>
+  <text x="370" y="68" text-anchor="middle" font-size="12" fill="#999999">②</text>
+  <rect x="300" y="85" width="140" height="62" rx="3" fill="#f3f3f3" stroke="#222222" stroke-width="1.2"/>
+  <text x="370" y="110" text-anchor="middle" font-size="14" fill="#111111">创意稿</text>
+  <text x="370" y="132" text-anchor="middle" font-size="10" fill="#777777">creative · 方向包</text>
+  <polygon points="485,96 505,116 485,136 465,116" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
+  <text x="485" y="121" text-anchor="middle" font-size="12" fill="#8a2d2d">审</text>
+  <text x="485" y="170" text-anchor="middle" font-size="10" fill="#8a2d2d">选定一个方向</text>
+  <text x="597.5" y="68" text-anchor="middle" font-size="12" fill="#999999">③</text>
+  <rect x="530" y="85" width="135" height="62" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
+  <text x="597.5" y="110" text-anchor="middle" font-size="14" fill="#111111">大纲</text>
+  <text x="597.5" y="132" text-anchor="middle" font-size="10" fill="#777777">弧线 + 剧情点</text>
+  <polygon points="710,96 730,116 710,136 690,116" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
+  <text x="710" y="121" text-anchor="middle" font-size="12" fill="#8a2d2d">审</text>
+  <text x="710" y="170" text-anchor="middle" font-size="10" fill="#8a2d2d">通过</text>
+  <text x="830" y="68" text-anchor="middle" font-size="12" fill="#999999">④</text>
+  <rect x="755" y="85" width="150" height="62" rx="3" fill="#f3f3f3" stroke="#222222" stroke-width="1.2"/>
+  <text x="830" y="110" text-anchor="middle" font-size="14" fill="#111111">完整设定</text>
+  <text x="830" y="132" text-anchor="middle" font-size="10" fill="#777777">整份生成 · 本页编辑</text>
+  <polygon points="950,96 970,116 950,136 930,116" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
+  <text x="950" y="121" text-anchor="middle" font-size="12" fill="#8a2d2d">审</text>
+  <text x="950" y="170" text-anchor="middle" font-size="10" fill="#8a2d2d">一次通过</text>
 
-  <!-- nodes -->
-  <rect x="20" y="140" width="104" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
-  <text x="72" y="162" text-anchor="middle" font-size="15" fill="#111111">统一入口</text>
-  <text x="72" y="181" text-anchor="middle" font-size="10.5" fill="#777777">脑洞 / 上传文档</text>
+  <g stroke="#444444" stroke-width="1.1" marker-end="url(#arrow)">
+    <line x1="130" y1="116" x2="151" y2="116"/>
+    <line x1="275" y1="116" x2="296" y2="116"/>
+    <line x1="440" y1="116" x2="461" y2="116"/>
+    <line x1="505" y1="116" x2="526" y2="116"/>
+    <line x1="665" y1="116" x2="686" y2="116"/>
+    <line x1="730" y1="116" x2="751" y2="116"/>
+    <line x1="905" y1="116" x2="926" y2="116"/>
+  </g>
+  <path d="M 970 116 H 1038 V 211 H 1034" fill="none" stroke="#444444" stroke-width="1.1" marker-end="url(#arrow)"/>
+  <rect x="810" y="196" width="220" height="30" rx="4" fill="#f3f3f3" stroke="#222222"/>
+  <text x="920" y="216" text-anchor="middle" font-size="11" fill="#111111">当前终点 · setting-approved</text>
 
-  <rect x="158" y="140" width="118" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
-  <text x="217" y="162" text-anchor="middle" font-size="15" fill="#111111">预处理</text>
-  <text x="217" y="181" text-anchor="middle" font-size="10" fill="#777777">提炼 → 创意 ×N</text>
+  <!-- Dashed continuation is future scope, not an available action. -->
+  <rect x="320" y="270" width="720" height="162" rx="10" fill="#fcfcfc" stroke="#999999" stroke-dasharray="5 4"/>
+  <text x="336" y="292" font-size="11" font-style="italic" fill="#888888">规划 #5 · 每章循环</text>
+  <path d="M 920 226 V 251 H 305 V 344 H 341" fill="none" stroke="#888888" stroke-dasharray="4 4" marker-end="url(#arrow)"/>
+  <rect x="345" y="314" width="120" height="60" rx="3" fill="#ffffff" stroke="#999999"/>
+  <text x="405" y="338" text-anchor="middle" font-size="14" fill="#777777">章纲</text>
+  <text x="405" y="359" text-anchor="middle" font-size="9.5" fill="#888888">目标 · 冲突 · 钩子</text>
+  <polygon points="505,324 525,344 505,364 485,344" fill="#ffffff" stroke="#8a2d2d"/>
+  <text x="505" y="349" text-anchor="middle" font-size="12" fill="#8a2d2d">审</text>
+  <rect x="555" y="314" width="125" height="60" rx="3" fill="#ffffff" stroke="#999999"/>
+  <text x="617.5" y="338" text-anchor="middle" font-size="14" fill="#777777">正文</text>
+  <text x="617.5" y="359" text-anchor="middle" font-size="9" fill="#888888">每章约 2000–4000 字</text>
+  <polygon points="725,324 745,344 725,364 705,344" fill="#ffffff" stroke="#8a2d2d"/>
+  <text x="725" y="349" text-anchor="middle" font-size="12" fill="#8a2d2d">审</text>
+  <rect x="795" y="314" width="150" height="60" rx="3" fill="#ffffff" stroke="#999999"/>
+  <text x="870" y="349" text-anchor="middle" font-size="14" fill="#777777">完本</text>
+  <g stroke="#888888" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrow)">
+    <line x1="465" y1="344" x2="481" y2="344"/>
+    <line x1="525" y1="344" x2="551" y2="344"/>
+    <line x1="680" y1="344" x2="701" y2="344"/>
+    <line x1="745" y1="344" x2="791" y2="344"/>
+    <path d="M 725 364 V 406 H 405 V 378" fill="none"/>
+  </g>
+  <text x="565" y="399" text-anchor="middle" font-size="10.5" fill="#888888">下一章</text>
 
-  <rect x="310" y="140" width="150" height="56" rx="3" fill="#f3f3f3" stroke="#222222" stroke-width="1.2"/>
-  <text x="385" y="162" text-anchor="middle" font-size="15" fill="#111111">创意稿</text>
-  <text x="385" y="181" text-anchor="middle" font-size="10.5" fill="#777777">方向包 · 提炼稿自动通过</text>
-
-  <!-- gate 1 -->
-  <polygon points="500,146 522,168 500,190 478,168" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
-  <text x="500" y="173" text-anchor="middle" font-size="13" fill="#8a2d2d">审</text>
-  <text x="500" y="216" text-anchor="middle" font-size="10" fill="#8a2d2d">创意比较选定</text>
-
-  <rect x="540" y="140" width="92" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
-  <text x="586" y="162" text-anchor="middle" font-size="15" fill="#111111">大纲</text>
-  <text x="586" y="181" text-anchor="middle" font-size="10.5" fill="#777777">分章 · 每章一句</text>
-
-  <!-- chapter loop -->
-  <rect x="656" y="80" width="330" height="170" rx="10" fill="none" stroke="#999999" stroke-width="1" stroke-dasharray="5 4"/>
-  <text x="672" y="103" font-size="11" font-style="italic" fill="#888888">⑤ 每章循环 × N</text>
-
-  <rect x="672" y="140" width="84" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
-  <text x="714" y="162" text-anchor="middle" font-size="15" fill="#111111">章纲</text>
-  <text x="714" y="181" text-anchor="middle" font-size="10" fill="#777777">目标·冲突·钩子</text>
-
-  <polygon points="792,146 814,168 792,190 770,168" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
-  <text x="792" y="173" text-anchor="middle" font-size="13" fill="#8a2d2d">审</text>
-  <text x="792" y="216" text-anchor="middle" font-size="10" fill="#8a2d2d">章纲关卡</text>
-
-  <rect x="828" y="140" width="84" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
-  <text x="870" y="162" text-anchor="middle" font-size="15" fill="#111111">正文</text>
-  <text x="870" y="181" text-anchor="middle" font-size="10" fill="#777777">2000–4000 字</text>
-
-  <polygon points="950,146 972,168 950,190 928,168" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
-  <text x="950" y="173" text-anchor="middle" font-size="13" fill="#8a2d2d">审</text>
-  <text x="950" y="216" text-anchor="middle" font-size="10" fill="#8a2d2d">正文关卡</text>
-
-  <rect x="1000" y="140" width="60" height="56" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
-  <text x="1030" y="173" text-anchor="middle" font-size="15" fill="#111111">完本</text>
-
-  <!-- arrows -->
-  <line x1="124" y1="168" x2="154" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrow)"/>
-  <line x1="276" y1="168" x2="306" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrow)"/>
-  <line x1="460" y1="168" x2="474" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrow)"/>
-  <line x1="522" y1="168" x2="536" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrow)"/>
-  <line x1="632" y1="168" x2="668" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrow)"/>
-  <line x1="756" y1="168" x2="768" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrow)"/>
-  <line x1="814" y1="168" x2="826" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrow)"/>
-  <line x1="912" y1="168" x2="926" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrow)"/>
-  <line x1="972" y1="168" x2="996" y2="168" stroke="#444444" stroke-width="1.1" marker-end="url(#arrow)"/>
-
-  <!-- next chapter dashed return -->
-  <path d="M 950 190 V 278 H 714 V 202" fill="none" stroke="#888888" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrow)"/>
-  <text x="832" y="272" text-anchor="middle" font-size="11" fill="#888888">下一章</text>
-
-  <!-- legend -->
-  <rect x="20" y="300" width="18" height="13" fill="#ffffff" stroke="#222222" stroke-width="1.1"/>
-  <text x="44" y="311" font-size="11" fill="#555555">agent 步骤</text>
-  <rect x="122" y="300" width="18" height="13" fill="#f3f3f3" stroke="#222222" stroke-width="1.1"/>
-  <text x="146" y="311" font-size="11" fill="#555555">产物（版本化）</text>
-  <polygon points="229,299 238,306.5 229,314 220,306.5" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.2"/>
-  <text x="246" y="311" font-size="11" fill="#555555">人工关卡（把关）</text>
-  <line x1="386" y1="306.5" x2="416" y2="306.5" stroke="#888888" stroke-width="1" stroke-dasharray="4 4"/>
-  <text x="422" y="311" font-size="11" fill="#555555">按章循环</text>
+  <line x1="20" y1="452" x2="48" y2="452" stroke="#444444"/>
+  <text x="55" y="456" font-size="11" fill="#555555">当前流程</text>
+  <polygon points="198,444 206,452 198,460 190,452" fill="#ffffff" stroke="#8a2d2d"/>
+  <text x="214" y="456" font-size="11" fill="#555555">作者关卡</text>
+  <line x1="340" y1="452" x2="368" y2="452" stroke="#888888" stroke-dasharray="4 4"/>
+  <text x="376" y="456" font-size="11" fill="#555555">规划 / 按章循环</text>
 </svg>

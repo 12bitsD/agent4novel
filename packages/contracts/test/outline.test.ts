@@ -93,13 +93,15 @@ describe('outlineContentSchema(大纲)', () => {
   })
 })
 
-describe('workflowStates(#4 读模型 5 态)', () => {
-  it('is exactly the 5 states, selected removed', () => {
+describe('workflowStates(#13 扩展并保留旧大纲末态)', () => {
+  it('includes Setting review and completion while keeping selected removed', () => {
     expect([...workflowStates]).toEqual([
       'ready-to-generate',
       'awaiting-selection',
       'awaiting-outline-review',
       'outline-approved',
+      'awaiting-setting-review',
+      'setting-approved',
       'failed',
     ])
   })

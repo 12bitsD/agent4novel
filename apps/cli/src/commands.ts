@@ -1,4 +1,7 @@
 import type { ArtifactKind, CreativeContent, OutlineDraft, WorkView } from '@agent4novel/contracts'
+import {
+  matchesSettingSubmission, settingApproveRequestSchema, settingApproveResponseSchema, settingArtifactSchema,
+} from '@agent4novel/contracts'
 import { CliError } from './client.js'
 import type { Client } from './client.js'
 
@@ -53,7 +56,48 @@ export async function saveOutline(client: Client, workId: string, content: Outli
 }
 
 export async function approve(client: Client, workId: string, kind: ArtifactKind) {
+  if (kind === 'setting') {
+    throw new CliError('Use approve-setting <workId> --file <request.json> to submit edited content and expectedHeadVersion', 'setting-approval-required')
+  }
   return client.approve(workId, kind)
+}
+
+export async function approveSetting(client: Client, workId: string, input: unknown) {
+  const request = settingApproveRequestSchema.safeParse(input)
+  if (!request.success) throw new CliError('Invalid setting approval request; expected content and expectedHeadVersion', 'invalid-input')
+  const work = await client.getWork(workId)
+  const baseline = settingArtifactSchema.safeParse(work.artifacts.find((artifact) => artifact.kind === 'setting'))
+  if (!baseline.success) throw new CliError('No setting artifact', 'artifact-not-found', 404)
+  if (baseline.data.humanStatus === 'approved') {
+    throw new CliError('Setting is already approved; use get --kind setting to inspect it. This invocation cannot confirm an earlier submission', 'artifact-already-approved', 409)
+  }
+  if (baseline.data.version !== request.data.expectedHeadVersion) {
+    throw new CliError('The request file version does not match the current setting; it was not replaced or submitted', 'version-conflict', 409)
+  }
+  let failure: unknown
+  try {
+    const candidate = await client.approveSetting(workId, request.data)
+    if (!matchesSettingSubmission(baseline.data, request.data, candidate)) {
+      throw new CliError('Setting response does not match this submission', 'invalid-response', 200)
+    }
+    return candidate
+  } catch (error) {
+    failure = error
+  }
+  const error = failure instanceof CliError ? failure : undefined
+  const rejected = error?.status !== undefined
+    && error.status >= 400 && error.status < 500 && error.code !== 'invalid-response'
+  if (rejected && error?.status !== 409) throw failure
+
+  // One read can confirm the desired result; it never proves a timed-out POST was cancelled.
+  const latest = await client.getWork(workId).catch(() => undefined)
+  const candidate = settingApproveResponseSchema.safeParse(latest?.artifacts.find((artifact) => artifact.kind === 'setting'))
+  if (candidate.success) {
+    if (matchesSettingSubmission(baseline.data, request.data, candidate.data)) return candidate.data
+    throw new CliError('Setting was approved with different content; keep the request file and read the current setting', 'setting-conflict', 409)
+  }
+  if (rejected) throw failure
+  throw new CliError('Setting approval result is unknown; keep the request file and inspect the current setting before continuing', 'setting-result-unknown')
 }
 
 // LLM 遥测回看(#14):advance 响应里已内联本次的;这个命令用于事后/跨次分析
@@ -67,7 +111,7 @@ export type SmokeResult = {
   final: WorkView
 }
 
-// 一键全链路探针:create → advance → select(第一方向) → advance → approve outline → 终态快照
+// 一键全链路探针包含真实的页内编辑等价操作，最后必须确认设定定稿。
 export async function smoke(
   client: Client,
   args: { seed: string; title?: string },
@@ -83,10 +127,35 @@ export async function smoke(
   }
 
   const work = await run('create', () => client.createWork(args), (w) => w.id)
-  await run('advance#1(caption+creative)', () => client.advance(work.id), (o) => JSON.stringify(o))
+  const advanceSmoke = async () => {
+    const outcome = await client.advance(work.id)
+    if (outcome.kind === 'failed') {
+      throw new CliError(`Smoke stopped at ${outcome.stepId}`, outcome.code, 200, outcome.retryable, outcome.attemptId)
+    }
+    return outcome
+  }
+  await run('advance#1(caption+creative)', advanceSmoke, (o) => JSON.stringify(o))
   await run('select(first direction)', () => select(client, work.id), (a) => `v${a.version} ${a.humanStatus}`)
-  await run('advance#2(outline)', () => client.advance(work.id), (o) => JSON.stringify(o))
+  await run('advance#2(outline)', advanceSmoke, (o) => JSON.stringify(o))
   await run('approve(outline)', () => client.approve(work.id, 'outline'), (o) => JSON.stringify(o))
+  await run('advance#3(setting)', advanceSmoke, (o) => JSON.stringify(o))
+  const pending = await run('get(setting)', async () => {
+    const current = await client.getWork(work.id)
+    const parsed = settingArtifactSchema.safeParse(current.artifacts.find((artifact) => artifact.kind === 'setting'))
+    if (!parsed.success || parsed.data.humanStatus !== 'pending') {
+      throw new CliError('Smoke requires a pending setting before review', 'smoke-incomplete')
+    }
+    return parsed.data
+  }, (artifact) => `v${artifact.version} pending`)
+  const request = {
+    content: { ...pending.content, overview: `${pending.content.overview}\n\n作者确认：这是本次 smoke 的设定定稿。` },
+    expectedHeadVersion: pending.version,
+  }
+  await run('approve-setting(edited)', () => approveSetting(client, work.id, request), (artifact) => `v${artifact.version} approved`)
   const final = await run('get(final)', () => client.getWork(work.id), (w) => w.workflowState)
+  const candidate = final.artifacts.find((artifact) => artifact.kind === 'setting')
+  if (final.workflowState !== 'setting-approved' || !matchesSettingSubmission(pending, request, candidate)) {
+    throw new CliError('Smoke did not reach the expected approved setting', 'smoke-incomplete')
+  }
   return { workId: work.id, steps, final }
 }
