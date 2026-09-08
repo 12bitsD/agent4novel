@@ -8,9 +8,9 @@ topics: ["model-runtime", "provider-config", "credentials", "base-url-security",
 code_paths: ["apps/server/src/index.ts", "apps/server/src/steps/llm.ts", "apps/server/src/steps/llm-call.ts", "apps/server/src/config/local-env.ts", "apps/server/src/start.ts", "apps/cli/src/client.ts", ".env.example"]
 symbols: ["ModelRuntime", "SupportedModelId", "ModelConfigError", "createModelRuntime", "modelRuntime", "callLlm", "DEFAULT_CLI_TIMEOUT_MS", "DEFAULT_ADVANCE_TIMEOUT_MS", "A4N_LLM_TIMEOUT_MS", "A4N_CLI_TIMEOUT_MS", "llm-timeout"]
 inherits: ["014"]
-changed_by: ["013"]
+changed_by: ["013", "005"]
 read_when: ["configure-model-provider", "add-model-provider", "debug-llm-runtime", "change-llm-timeout", "audit-credential-safety"]
-last_context_reviewed: "2026-09-05"
+last_context_reviewed: "2026-09-08"
 ---
 
 # 016 — 模型运行配置：统一多 Provider、凭据与超时
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-09-05"
 - **原始目的**：把散落且 DeepSeek-only 的运行时选择收敛到 ModelRuntime，使 Pipeline 与 RealStep 无需感知 provider。
 - **实际落地**：DeepSeek 与 LongCat 2.0 共用 registry；server 安全加载本地配置，统一校验 URL、模型、credential、单次 LLM timeout 和本地 Zod 边界。
 - **当前价值**：本文是 provider 配置、运行时行为、错误语义与验证状态的当前唯一 HOW。
-- **后续变化**：CLI／telemetry／smoke 仍由 [Wiki 014](./014-agent-cli-telemetry.md) 拥有；[Wiki 013](./013-setting-generation-review.md) 新增 Setting，显式禁用该步骤的 SDK 重试并记录新实测。本文 work ID 均为历史进程快照，不代表当前仍存活。
+- **后续变化**：CLI／telemetry／smoke 仍由 [Wiki 014](./014-agent-cli-telemetry.md) 拥有；[Wiki 013](./013-setting-generation-review.md) 新增 Setting，显式禁用该步骤的 SDK 重试并记录新实测。[Wiki 005](./005-beat-generation-review.md) 增加 Beat 独立预算、零 SDK 重试和共享安全错误分类。本文 work ID 均为历史进程快照，不代表当前仍存活。
 - **代码入口**：[ModelRuntime](../../apps/server/src/steps/llm.ts)、[LLM call](../../apps/server/src/steps/llm-call.ts)、[local env loader](../../apps/server/src/config/local-env.ts)、[server assembly](../../apps/server/src/start.ts)、[CLI timeout](../../apps/cli/src/client.ts)。
 
 ## 设计目的
@@ -53,7 +53,7 @@ shell/CI 与 server 入口加载的 .env.local 进入 ModelRuntime，再由 regi
 | LONGCAT_BASE_URL | LongCat OpenAI-compatible base | https://api.longcat.chat/openai/v1 |
 | A4N_LLM_TIMEOUT_MS | server 单次 provider 调用上限 | 代码默认 120000；整数 1000..900000；.env.example 为 LongCat 建议值 300000 |
 | A4N_BASE_URL | CLI 到 agent4novel server 的地址 | 默认 http://localhost:8787；不是 provider URL |
-| A4N_CLI_TIMEOUT_MS | CLI HTTP 请求等待上限的全局覆盖 | 未覆盖时普通请求默认 300000、advance 默认 1820000；整数 1000..3600000；--timeout-ms 优先 |
+| A4N_CLI_TIMEOUT_MS | CLI HTTP 请求等待上限的全局覆盖 | 未覆盖时普通 300000、advance 1820000、Beat 通过 30000／再生 920000／恢复 GET 10000；整数 1000..3600000；--timeout-ms 优先 |
 
 .env.local 只由 server 入口加载。CLI 是独立进程，不自动从该文件读取 A4N_BASE_URL 或 A4N_CLI_TIMEOUT_MS；需要在 CLI 所在 shell 设置或传 flag。
 
@@ -93,7 +93,7 @@ LongCat 的官方材料另有 Responses 支持信息，但当前 @ai-sdk/openai-
 
 ### 两层 timeout 与重试
 
-A4N_LLM_TIMEOUT_MS 控制一次 generateObject；A4N_CLI_TIMEOUT_MS 或 --timeout-ms 统一覆盖 CLI 等待 server HTTP 请求的上限。没有显式覆盖时，普通请求保持 300000ms；一次 advance 可能串行执行多个自动通过步骤，所以它单独按 2 × 900000 加 20000 返回余量设置为 1820000ms。server 与 CLI timeout 不能混用。
+A4N_LLM_TIMEOUT_MS 控制一次 generateObject；A4N_CLI_TIMEOUT_MS 或 --timeout-ms 统一覆盖 CLI 等待 server HTTP 请求的上限。没有显式覆盖时，普通请求保持 300000ms；一次 advance 可能串行执行多个自动通过步骤，所以它单独按 2 × 900000 加 20000 返回余量设置为 1820000ms。Beat 命令的默认完整期限为通过 30000ms、再生 920000ms，恢复 GET 10000ms；显式全局 CLI 覆盖仍优先。server 与 CLI timeout 不能混用。
 
 Pipeline 不做 provider 自动重试，也不做跨 provider failover：
 
@@ -102,7 +102,7 @@ Pipeline 不做 provider 自动重试，也不做跨 provider failover：
 - 已完成且已落库的上游 Step 不重跑。
 - POST /advance 可能 HTTP 200 但 JSON kind=failed；只看 exit code 会漏报失败。
 
-这不等于 SDK 内部请求重试为零。#13 核对已安装 SDK 后发现其默认重试次数为 2；Setting 显式传 maxRetries=0，其他步骤保留 SDK 默认值。一次 generateObject 的总等待仍受本页 LLM timeout 限制；具体证据与 Setting 验证见 Wiki 013。
+这不等于 SDK 内部请求重试为零。#13 核对已安装 SDK 后发现其默认重试次数为 2；Setting 与 Beat 显式传 maxRetries=0，其他步骤保留 SDK 默认值。一次 generateObject 的总等待仍受本页 LLM timeout 限制；具体证据与 Setting 验证见 Wiki 013。
 
 ## 代码落点
 
@@ -141,6 +141,14 @@ ModelRuntime 测试以合成 key 与 fake fetch 覆盖选择、缺 key、非法 
 - 不做持久化 store、后台 job、队列或异步 advance。
 
 ## 上下文演进
+
+### 2026-09-08 — Beat 接入共享模型与错误边界
+
+- **触发证据**：#5 真实 Beat 三类合成样例及再生已运行；共享 helper 脱敏测试覆盖原始 text/cause/provider message。
+- **原假设**：只有 Setting 需要零重试，CLI 普通和 advance 两档足够。
+- **决定**：Beat 同样禁用 SDK 重试；增加通过／再生／恢复读取期限；共享错误只返回安全分类与关联信息。
+- **影响**：配置 ownership 不变；新实测与生产 live 上游 Creative 失败的边界见 Wiki 005，CLI HOW 见 Wiki 014。
+- **上下文处理**：preserve 旧 provider 与失败实验；replace 当前重试、CLI 期限和后续关系，不把历史样例当作当前存活作品。
 
 ### 2026-09-05 — 区分 Pipeline 与 SDK 请求重试
 

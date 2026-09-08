@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。每个里程碑收尾时刷新本文件（最后更新：2026-09-05，#13 已实现；发布门禁及远端状态见 Wiki 013 与 issue 完成评论）。
+> 用途：context compaction / 新会话接力。每个里程碑收尾时刷新本文件（最后更新：2026-09-08，#5 已完成五步链路接线，正在验证与交付收口；#13 发布证据仍看 Wiki 013 与 issue 完成评论）。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -21,19 +21,20 @@
 - **#4** 大纲生成（wiki 004 ✅）：**推翻「分章每章一句话」**，大纲 = 弧线（冲突生命周期：标题/核心冲突/冲突发展/矛盾解决）+ 剧情点（标题/概要/落点）两层，与章节解耦；选定创意稿后 web 自动续跑 advance；保存 = pending + 通用 /approve 通过；读模型 5 态（selected 移除，加 awaiting-outline-review/outline-approved）
 - **#14** Agent 可用性基建（wiki 014 ✅）：`apps/cli`（9 命令，`bin/a4n` 直跑 stdout 纯 JSON，headVersion 自动回填，smoke 探针）；LLM 遥测进程内账本，advance 响应内联 telemetry + `GET /works/:id/telemetry` 回看；systemHash 让 prompt 版本可追；**outline 失败根因根治**（8000 截断 → outline 上限 16000 + SKILL 篇幅纪律）；项目级 skill `.claude/skills/agent4novel-drive`
 - **#16** 可配置 ModelRuntime + LongCat provider（[wiki 016](./wiki/016-model-runtime-provider-config.md) ✅）：RealStep 内统一 provider 路由、server-only 本地配置与请求超时；接入 LongCat OpenAI-compatible Chat Completions。2026-08-29 已完成独立生产 Step 真机验证，并留下完整 CLI smoke 的失败与重入结论；所有 work ID 都来自已结束的内存进程，当前不可继续使用，证据边界只看 wiki 016 与 LongCat research。
-- **#13** 完整设定（[Wiki 013](./wiki/013-setting-generation-review.md)）：大纲通过后一次生成；六字段通用卡片、有限 Markdown、页内编辑、专用命令同 id/version 原子通过，不追加 V2。Store 读写快照隔离、生成提交条件、Web 未知结果恢复和 CLI 完整请求已落地。当前生产末端为 `setting-approved`，具体交付证据只看本票 Wiki 和完成评论。
+- **#13** 完整设定（[Wiki 013](./wiki/013-setting-generation-review.md)）：大纲通过后一次生成；六字段通用卡片、有限 Markdown、页内编辑、专用命令同 id/version 原子通过，不追加 V2。Store 读写快照隔离、生成提交条件、Web 未知结果恢复和 CLI 完整请求已落地。本票原末端 `setting-approved` 已由 #5 延伸至 `beat-approved`，具体交付证据只看本票 Wiki 和完成评论。
 
 ## 关键架构与契约（不能丢）
 
+- **#5 当前阶段**：第一章章纲已接入生产第五步，支持本页编辑、整份再生和同版本通过；UUID 身份、Beat CLI、请求关联诊断已落地。方案、AC/TDD 与交付证据只看 [Wiki 005](./wiki/005-beat-generation-review.md)，契约见 [schema](./schema.md#beat5-当前契约)。
 - **workflow 骨架 + 步骤内 agent**；Step 零感知 kind，输出 `{content}` 装整个 JSON；kind = 节点名；pipeline 管解析/组装/持久化，是深模块不是 swap seam。
 - **两个真 seam**：store（InMemoryStore / #9 做 SQLiteStore）、step（FakeStep / RealStep）。
 - **模型路由边界**：ModelRuntime 位于 RealStep 内部，不是第三个 Pipeline 注入 seam；已注册 provider 通过模型 ID 切换，新增 provider 需要对应 adapter、registry 注册与 key 契约。完整 HOW 只看 [wiki 016](./wiki/016-model-runtime-provider-config.md)。
-- **6 节点 kind**：caption/creative/outline/setting 每作品一份；beat/prose 每作品×每章（尚未接入生产链）。Artifact.content: JsonValue；humanStatus: pending | approved；appendArtifact 版本 +1。Setting 专用 finalize 是同版本内容与状态原子定稿的例外，禁止通用 setStatus 改 Setting。
+- **6 节点 kind**：caption/creative/outline/setting 每作品一份；beat/prose 每作品×每章（当前仅 beat#1 接入生产，prose 尚未接入）。Artifact.content: JsonValue；humanStatus: pending | approved；appendArtifact 版本 +1。Setting/Beat 专用 finalize 是同版本内容与状态原子定稿的例外，禁止通用 setStatus 改 Setting/Beat。
 - **creative 保存语义**（#3c 起，取代「人工保存即通过」）：`PUT /artifacts/creative` = saveCreativeDraft，存全部方向、永远 pending、带 `expectedHeadVersion` 乐观锁；`POST /artifacts/creative/select` = selectCreativeDirection，落**单方向**新版本 + approved。`directionId` 由 server 注入（`${workId}-dir-N`），web 永不生成、编辑不可改。
 - **pipeline（#3c）**：definition 加 `consumes`（只指前序 outputKind，启动校验唯一/禁环）；`PipelineInput = {workId, seed, upstream}`，upstream 读**最新版且必须 approved**；`advance()` 链式推进到下一个关卡（上限 = definition 长度），per-work 互斥锁（finally 释放，冲突 → 409 `advance-in-progress`），返回可穷举 outcome `advanced | awaiting-approval | complete | failed(stepId, code, retryable, attemptId)`；interview 机制零残留。
-- **读模型**：`GET /works/:id` 同快照附带 `workflowState`、`nextStepId` 与 `allowedActions`；新增 awaiting-setting-review/setting-approved，outline-approved 仅用于旧三步定义。`generating` 是 Web 本地瞬态，不入契约。按 `pendingGate.kind` 分派，Web 不重建关卡状态机。公开 WorkView／advance DTO 已集中到 contracts。
-- **LLM 调用**：`steps/llm-call.ts` 统一 generateObject + zod + maxOutputTokens（outline/setting 16000，其余默认 8000）+ 可配置超时 + 类型化错误；advance 仍为 HTTP 200 + failed outcome，不按 HTTP 成功判断生成成功。原始素材 >100K 字符截断，结构化上游不静默截断。Setting 显式 SDK maxRetries=0，其他步骤保留 SDK 默认值；Pipeline 本身不自动重试。ModelRuntime 配置唯一 HOW 见 [Wiki 016](./wiki/016-model-runtime-provider-config.md)。每次模型调用记录进程内 telemetry，advance 内联、logs 回看；systemHash 标识 prompt。
-- **CLI**：`./apps/cli/bin/a4n <cmd>`（stdout 纯 JSON）或 `pnpm -s cli`；select/save-outline 自动回填 expectedHeadVersion，approve-setting 的文件必须显式包含完整 content + 读取时版本，不自动改版本。smoke 已扩展至修改并通过 Setting，是每次测试标准动作之一，不等于人工质量验收。
+- **读模型**：`GET /works/:id` 同快照附带 `workflowState`、`nextStepId` 与 `allowedActions`；新增 awaiting-beat-review/beat-approved；outline-approved/setting-approved 仅用于旧三步／四步定义。`generating` 是 Web 本地瞬态，不入契约。按 `pendingGate.kind` 分派，Web 不重建关卡状态机。公开 WorkView／advance DTO 已集中到 contracts。
+- **LLM 调用**：`steps/llm-call.ts` 统一 generateObject + zod + maxOutputTokens（outline/setting 16000，其余默认 8000）+ 可配置超时 + 类型化错误；advance 仍为 HTTP 200 + failed outcome，不按 HTTP 成功判断生成成功。原始素材 >100K 字符截断，结构化上游不静默截断。Setting/Beat 显式 SDK maxRetries=0，其他步骤保留 SDK 默认值；Pipeline 本身不自动重试。ModelRuntime 配置唯一 HOW 见 [Wiki 016](./wiki/016-model-runtime-provider-config.md)。每次模型调用记录进程内 telemetry，advance 内联、logs 回看；systemHash 标识 prompt。
+- **CLI**：`./apps/cli/bin/a4n <cmd>`（stdout 纯 JSON）或 `pnpm -s cli`；select/save-outline 自动回填 expectedHeadVersion，approve-setting 的文件必须显式包含完整 content + 读取时版本，不自动改版本。Beat 两命令还需显式 chapter、expectedArtifactId 和版本，提供 command 写入结果与安全恢复动作。smoke 已扩展至修改并通过 Setting/Beat，是每次测试标准动作之一，不等于人工质量验收。
 - **错误**：HTTP 统一 `{code, retryable, attemptId?, message, issues?}`；Setting 字段错误 issues 只含 path/code/message。明确 4xx 均在写前，传输/5xx/非法成功响应可能已写入，必须按 Wiki 013 的冻结提交与回读规则处理。
 - **web 设计系统**（#3c）：`apps/web/src/styles.css` 唯一全局面，亮暗双主题 CSS 变量（prefers-color-scheme + data-theme 预留）；多巴胺在点缀层（主 CTA 珊瑚 accent，方向 tab 珊瑚/紫/青轮转，chip 用强调色），底色纸白/墨黑极简；**内联样式只许 var(--*)，禁硬编码色值**。创意海报风险面抽纯函数 `web/src/creative-compare.ts`（tab↔directionId、保存全部、选定、409 保 dirty），vitest 覆盖，无浏览器 E2E。
 - 栈：pnpm workspaces + TS E2E、Vite+React(5173 /api proxy)、Hono(8787)、zod、Vitest、tsx、AI SDK v7 + `@ai-sdk/deepseek` + `@ai-sdk/openai-compatible`。Setting 使用 mdast-util-from-markdown + 自有允许列表 React renderer；测试计数与最终命令证据只记本票 Wiki。
@@ -41,7 +42,7 @@
 ## 词汇红线（CONTEXT.md 单源）
 
 - 关卡 Avoid「审核、**确认**」→ UI 用「通过」「待把关」。
-- 大纲 = **弧线（冲突生命周期）+ 剧情点（情节步骤）两层，与章节解耦**（#4 grill 推翻「分章每章一句话」）；场景/冲突/钩子归 beat（章纲）层。
+- 大纲 = **弧线（冲突生命周期）+ 剧情点（情节步骤）两层，与章节解耦**（#4 grill 推翻「分章每章一句话」）；章纲 = 章标题、本章目标、有序写作安排、章末落点与承接，不强制场景／冲突／钩子字段，词义只看 CONTEXT。
 - 预处理 = caption（提炼稿）→ creative（创意稿）两步；提炼稿 Avoid「摘要、解析结果」，创意稿 Avoid「brief、方案」。
 - 创意稿的「一句话钩子」字段叫 `hook`；爽点清单叫 `payoffs`；「卖点」作领域词时对应这两者，不再是独立数组。
 
@@ -53,7 +54,7 @@
 - vi.mock 提升：mock 引用必须经 `vi.hoisted` 定义。
 - contracts `export *` 双文件同名导出会被静默排除（inputStages 迁入 caption.ts 时踩过）→ 迁移期用显式 re-export。
 - AI SDK 错误按 `err.name` 分类：NoObjectGeneratedError → 模型输出非法；TimeoutError/AbortError → 超时。**v7 真机实测错误名带 `AI_` 前缀**（`AI_NoObjectGeneratedError`)，匹配要用 `includes`。
-- **outline 在 v4-flash 的失败有两种模式**（#14 遥测实证）：截断（finishReason=length 撞 8000 上限 → 已修 16000）与 schema 偏差（finishReason=stop 但不过校验，llm.error 已记 causeMessage 守株待兔）。修截断要同时收 prompt 篇幅（SKILL.md 纪律），否则拿质量换稳定。
+- **outline 在 v4-flash 的失败有两种模式**（#14 遥测实证）：截断（finishReason=length 撞 8000 上限 → 已修 16000）与 schema 偏差（finishReason=stop 但不过校验，当时保留 causeMessage 辅助诊断；#5 已改为安全分类，不再输出原始错误）。修截断要同时收 prompt 篇幅（SKILL.md 纪律），否则拿质量换稳定。
 - **pnpm run 横幅污染 stdout**（`> pkg script …` 两行）：Agent 管道消费会炸 JSON 解析。要么 `./apps/cli/bin/a4n` 直跑，要么 `pnpm -s cli`。
 - heredoc/perl 里带反引号的模板字符串会被 shell 吃掉——改代码用 Edit 工具，别用 perl -pi。
 
@@ -63,12 +64,17 @@
 - LongCat 文档未保证 JSON Schema structured output；当前走 `json_object` + 本地 zod 校验。历史三步证据见 Wiki 016，Setting 新样例见 Wiki 013；成功样例不是上游协议保证。
 - `Work.config.model` 已作为内部覆盖接缝接入 Pipeline，但目前没有公开 UI/API；全局启动配置见 [wiki 016](./wiki/016-model-runtime-provider-config.md)。
 - 版本回看 UI（后悔药）没有入口，留 #6；重新生成（带补充想法）/渐进展示/分段提炼留 #12。
+- #5 专属版本比较归 #20，正文后回流与章节重生归 #21；本期只允许通过前整份章纲再生。上条 #6/#12 是旧的通用优化分工，不覆盖这次已确认拆分。
+- #5 已修复序号身份复用、共享原始错误日志和首次 Web advance 无限等待，并增加定向回归。完整 production live smoke 两次卡在 Creative（截断／schema），不属于 Beat 成功证据；独立 Beat live 样例与限制见 Wiki 005。
 - 「演示模式」是 UI 词非领域词，未进 CONTEXT.md。
 
 ## 下一步
 
-**先回读 #13 的完成审核证据与 GitHub live 状态**，不把实现或技术评审等同于远端交付。后续维护必须继承条件写入、快照隔离、冻结提交与回读对账，不能照搬 Outline 的保存／通过流程。内容形态在 [schema](./schema.md#setting13-已确认设计)，设计原因和验证在 [Wiki 013](./wiki/013-setting-generation-review.md)。
-后续队列：[**#19 契约治理**](https://github.com/12bitsD/agent4novel/issues/19) → #9 SQLite（提前到 #5 前）→ #5 章纲/正文关卡（输入 = 剧情点切片 + 章数规划 + 已通过 Setting）→ #6 → #7 → #8。设定通过后修改归 [#17](https://github.com/12bitsD/agent4novel/issues/17)，冲突澄清归 [#18](https://github.com/12bitsD/agent4novel/issues/18)；#13 不提供这两个能力。契约归属见 [管理原则](./agents/contract-governance.md)。#12 仍承接既有 creative 优化项；#15 的 Hono RPC 迁移仍在服务定型后进行。
+交付 Agent 按 [Wiki 005 完成审核证据](./wiki/005-beat-generation-review.md#完成审核证据) 的剩余项继续，完成独立评审、候选裁决与 PR 交付，不直接开始 #22。#5 当前 OPEN，assignee 12bitsD、ready-for-agent、Project Backlog；#4/#13 依赖均 CLOSED。固定点 70b43968de24ecf21e596bff35988feff62b73a9，source branch 为 codex/issue-5-beat-review，目标 main；merge 仍需作者确认。最终远端状态以 PR/issue 回读为准。
+
+后续队列：**#5 第一章章纲 → #22 第一章正文 → #19 契约治理 → #9 SQLite → #6 后续章推进**，#7/#8 继续按各自依赖处理。作者已明确先完成产物再治理与持久化；旧的“先 #19/#9 再 #5，章纲与正文合票”理由与替代决定保留在 [Wiki 005 上下文演进](./wiki/005-beat-generation-review.md#上下文演进)。顺序不是新建硬依赖。
+
+继续继承条件写入、快照隔离、冻结提交与回读对账，不能照搬 Outline 保存／通过流程。设定后编辑归 #17、冲突澄清归 #18、章纲比较归 #20、章节重生归 #21。#12 仍承接既有 creative 优化，#15 在服务定型后做 Hono RPC；契约归属见 [管理原则](./agents/contract-governance.md)。
 
 ## 环境
 

@@ -102,6 +102,8 @@ describe('workflowStates(#13 扩展并保留旧大纲末态)', () => {
       'outline-approved',
       'awaiting-setting-review',
       'setting-approved',
+      'awaiting-beat-review',
+      'beat-approved',
       'failed',
     ])
   })

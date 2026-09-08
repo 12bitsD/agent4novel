@@ -309,7 +309,7 @@ describe('Pipeline(#3c 链式 advance)', () => {
     const { consumeGuards } = await import('../src/pipeline/consume-guards.js')
     const store = new InMemoryStore()
     const steps = new Map<string, ArtifactStep>([
-      ['caption', fakeStep('caption', { made: 'caption' })],
+      ['caption', fakeStep('caption', { inputStage: '脑洞', summary: '提炼稿', elements: [{ kind: '设定', content: '雾城' }], gaps: [] })],
       ['creative', fakeStep('creative', { made: 'creative' })],
       ['outline', fakeStep('outline', 'ok')],
     ])

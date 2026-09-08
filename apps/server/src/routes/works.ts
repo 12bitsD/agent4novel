@@ -11,13 +11,20 @@ import {
   perWorkKinds,
   settingApproveRequestSchema,
   settingLimits,
+  beatApproveRequestSchema, beatRequestHeadSchema, beatLimits, beatCommandResponseSchema, beatCommandErrorSchema,
+  beatRegenerateRequestSchema,
+  diagnosticQuerySchema,
+  workViewSchema,
 } from '@agent4novel/contracts'
 import type { ApiError, ArtifactKind, OutlineContent, OutlineDraft, WorkflowState, WorkView } from '@agent4novel/contracts'
 import type { Pipeline } from '../pipeline/pipeline.js'
 import { KnownError } from '../errors.js'
-import { telemetryCursor, telemetryFor } from '../steps/telemetry.js'
+import { diagnosticsFor, withRequest, currentRequest, recordCommand } from '../steps/telemetry.js'
 import type { WorkStore } from '../store/work-store.js'
 import { approveSetting, SettingValidationError } from '../setting-review.js'
+import { approveBeat } from '../beat-review.js'
+import { observeBeat, BeatCommandError, beatFailureCode } from '../beat-command.js'
+import { safeLog } from '../safe-log.js'
 
 const workCreateSchema = z.object({
   seed: z.string().min(1),
@@ -116,6 +123,8 @@ function routeError(c: Context, err: unknown): Response {
       case 'artifact-already-approved':
       case 'setting-gate-not-ready':
       case 'setting-approval-required':
+      case 'beat-approval-required':
+      case 'beat-gate-not-ready':
       case 'direction-not-selected':
         return c.json(body, 409)
       case 'llm-invalid-output':
@@ -124,6 +133,8 @@ function routeError(c: Context, err: unknown): Response {
         return c.json(body, 504)
       case 'llm-unavailable':
         return c.json(body, 503)
+      case 'input-budget-exceeded':
+        return c.json(body, 422)
     }
   }
   return c.json(errorBody('internal', msg), 500)
@@ -173,10 +184,13 @@ function workflowOf(
       if (gate === 'setting') {
         return { workflowState: 'awaiting-setting-review', allowedActions: ['approve'] }
       }
+      if (gate === 'beat') {
+        return { workflowState: 'awaiting-beat-review', allowedActions: ['approve', 'regenerate'] }
+      }
       throw new Error(`unknown gate kind: ${gate ?? 'none'}`)
     }
     case 'complete':
-      return { workflowState: completionKind === 'setting' ? 'setting-approved' : 'outline-approved', allowedActions: [] }
+      return { workflowState: completionKind === 'beat' ? 'beat-approved' : completionKind === 'setting' ? 'setting-approved' : 'outline-approved', allowedActions: [] }
     case 'blocked':
       return { workflowState: 'ready-to-generate', allowedActions: [] }
   }
@@ -185,10 +199,65 @@ function workflowOf(
 export type WorksRoutesDeps = {
   store: WorkStore
   pipeline: Pipeline
+  meta?: { demo: boolean }
 }
 
-export function worksRoutes({ store, pipeline }: WorksRoutesDeps): Hono {
+export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
   const app = new Hono()
+
+  app.use('/api/works/:id/artifacts/beat/*', async (_c, next) => withRequest(crypto.randomUUID(), meta?.demo ?? true, next))
+  const rejectBeatRequest = (c: Context, code: 'bad-json' | 'invalid-input' | 'unsupported-chapter' | 'payload-too-large') => {
+    const scope = currentRequest()!
+    const failure = beatCommandErrorSchema.parse({
+      code, message: code, retryable: false,
+      command: { kind: 'request-rejected', requestId: scope.requestId, operation: c.req.path.endsWith('/regenerate') ? 'regenerate-beat' : 'approve-beat',
+        executionMode: scope.executionMode, latencyMs: Date.now() - scope.startedAt, writeOutcome: 'not-committed', failureStage: 'request', attemptIds: [] },
+    })
+    const workId = c.req.param('id')
+    if (workId) recordCommand(workId, failure.command, code)
+    return c.json(failure, code === 'payload-too-large' ? 413 : 400)
+  }
+  for (const operation of ['approve', 'regenerate'] as const) app.post(`/api/works/:id/artifacts/beat/${operation}`, bodyLimit({
+    maxSize: beatLimits.bodyBytes, onError: c => rejectBeatRequest(c, 'payload-too-large'),
+  }), async c => {
+    let body: unknown
+    try { body = await c.req.json() } catch { return rejectBeatRequest(c, 'bad-json') }
+    const head = beatRequestHeadSchema.passthrough().safeParse(body)
+    if (!head.success) {
+      const unsupported = head.error.issues.some(issue => issue.path[0] === 'chapter')
+      return rejectBeatRequest(c, unsupported ? 'unsupported-chapter' : 'invalid-input')
+    }
+    const parsed = (operation === 'approve' ? beatApproveRequestSchema : beatRegenerateRequestSchema).safeParse(body)
+    if (!parsed.success && parsed.error.issues.some(issue => issue.path[0] !== 'content' && issue.path[0] !== 'instructions')) return rejectBeatRequest(c, 'invalid-input')
+    const workId = c.req.param('id')
+    try {
+      if (!parsed.success) await observeBeat(workId, operation === 'approve' ? 'approve-beat' : 'regenerate-beat', { artifactId: head.data.expectedArtifactId, version: head.data.expectedHeadVersion }, execution => {
+        execution.stage = 'input'
+        throw parsed.error
+      })
+      if (!parsed.success) throw new Error('unreachable')
+      const result = operation === 'approve'
+        ? await approveBeat(store, workId, beatApproveRequestSchema.parse(parsed.data))
+        : await pipeline.regenerateBeat(workId, beatRegenerateRequestSchema.parse(parsed.data))
+      const state = pipeline.getState(workId)
+      return c.json(beatCommandResponseSchema.parse({ ...result,
+        workflow: { ...workflowOf(state, pipeline.failureOf(workId), pipeline.completionKind), nextStepId: state.nextStepId },
+        telemetry: currentRequest()!.telemetry,
+      }))
+    } catch (err) {
+      if (!(err instanceof BeatCommandError)) return c.json(errorBody('internal-error', 'beat response unavailable'), 500)
+      const known = err.cause instanceof KnownError ? err.cause : undefined
+      const invalid = err.cause instanceof z.ZodError ? err.cause : undefined
+      const code = beatFailureCode(err.cause, err.command.failureStage ?? 'response')
+      const status = code === 'invalid-content' || code === 'input-budget-exceeded' ? 422 : code === 'work-not-found' || code === 'artifact-not-found' ? 404
+        : code === 'llm-invalid-output' ? 502 : code === 'llm-unavailable' ? 503 : code === 'llm-timeout' ? 504 : known ? 409 : 500
+      return c.json(beatCommandErrorSchema.parse({
+        code, message: code, retryable: known?.retryable ?? false, command: err.command, telemetry: currentRequest()!.telemetry,
+        ...(known?.inputBudget ? { inputBudget: known.inputBudget } : {}),
+        ...(invalid && code === 'invalid-content' ? { issues: invalid.issues.slice(0, 128).map(issue => ({ path: issue.path[0] === 'content' || issue.path[0] === 'instructions' ? issue.path : ['content', ...issue.path], code: issue.code, message: 'invalid field' })) } : {}),
+      }), status)
+    }
+  })
 
   app.post('/api/works/:id/artifacts/setting/approve', bodyLimit({
     maxSize: settingLimits.bodyBytes,
@@ -241,7 +310,9 @@ export function worksRoutes({ store, pipeline }: WorksRoutesDeps): Hono {
       ...workflowOf(state, pipeline.failureOf(workId), pipeline.completionKind),
       nextStepId: state.nextStepId,
     }
-    return c.json(view)
+    const parsed = workViewSchema.safeParse(view)
+    if (!parsed.success) return c.json(errorBody('internal-error', 'invalid work snapshot'), 500)
+    return c.json(parsed.data)
   })
 
   // saveCreativeDraft:存全部方向,永远 pending(不再是「人工保存即通过」)
@@ -325,22 +396,19 @@ export function worksRoutes({ store, pipeline }: WorksRoutesDeps): Hono {
     const workId = c.req.param('id')
     const requestId = crypto.randomUUID()
     const started = Date.now()
-    const cursor = telemetryCursor()
     try {
-      const outcome = await pipeline.advance(workId)
-      console.log(
-        JSON.stringify({
+      const { outcome, telemetry } = await withRequest(requestId, meta?.demo ?? true, async scope => ({ outcome: await pipeline.advance(workId), telemetry: scope.telemetry }))
+      safeLog({
           event: 'pipeline.advance',
           requestId,
           workId,
           outcome: outcome.kind,
           latencyMs: Date.now() - started,
-        }),
-      )
-      return c.json({ ...outcome, telemetry: telemetryFor(workId, cursor) })
+        })
+      return c.json({ ...outcome, telemetry })
     } catch (err) {
       if (err instanceof KnownError && err.code === 'advance-in-progress') {
-        console.log(JSON.stringify({ event: 'pipeline.lock-conflict', requestId, workId }))
+        safeLog({ event: 'pipeline.lock-conflict', requestId, workId })
       }
       return routeError(c, err)
     }
@@ -350,7 +418,11 @@ export function worksRoutes({ store, pipeline }: WorksRoutesDeps): Hono {
   app.get('/api/works/:id/telemetry', (c) => {
     const workId = c.req.param('id')
     if (!store.getWork(workId)) return c.json(errorBody('work-not-found', 'not found'), 404)
-    return c.json({ workId, telemetry: telemetryFor(workId) })
+    const raw = c.req.queries()
+    if (Object.values(raw).some(values => values.length !== 1)) return c.json(errorBody('invalid-input', 'invalid diagnostic query'), 400)
+    const query = diagnosticQuerySchema.safeParse(c.req.query())
+    if (!query.success) return c.json(errorBody('invalid-input', 'invalid diagnostic query'), 400)
+    return c.json(diagnosticsFor(workId, query.data))
   })
 
   app.post('/api/works/:id/approve', async (c) => {

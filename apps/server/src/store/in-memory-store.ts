@@ -1,4 +1,5 @@
 import { emptyAgentConfig, perChapterKinds, perWorkKinds } from '@agent4novel/contracts'
+import { randomUUID } from 'node:crypto'
 import type {
   Artifact,
   ArtifactKind,
@@ -14,8 +15,8 @@ import type { AppendOptions, ArtifactPrecondition, FinalizeArtifactInput, WorkSt
 type Bucket = { kind: ArtifactKind; chapter?: number; versions: Artifact[] }
 
 function assertBucketAddress(kind: ArtifactKind, chapter?: number): void {
-  if (perChapterKinds.includes(kind) && chapter === undefined) {
-    throw new Error(`kind "${kind}" requires a chapter`)
+  if (perChapterKinds.includes(kind) && (chapter === undefined || !Number.isSafeInteger(chapter) || chapter <= 0)) {
+    throw new Error(`kind "${kind}" requires a chapter (positive safe integer)`)
   }
   if (perWorkKinds.includes(kind) && chapter !== undefined) {
     throw new Error(`kind "${kind}" must not have a chapter`)
@@ -25,11 +26,8 @@ function assertBucketAddress(kind: ArtifactKind, chapter?: number): void {
 export class InMemoryStore implements WorkStore {
   private works = new Map<string, Work>()
   private buckets = new Map<string, Bucket[]>()
-  private seq = 0
-
   private nextId(prefix: string): string {
-    this.seq += 1
-    return `${prefix}-${this.seq}`
+    return `${prefix}-${randomUUID()}`
   }
 
   private findBucket(workId: string, kind: ArtifactKind, chapter?: number): Bucket | undefined {
@@ -159,6 +157,7 @@ export class InMemoryStore implements WorkStore {
     status: HumanStatus,
     opts?: { chapter?: number },
   ): void {
+    if (kind === 'beat') throw new KnownError('beat-approval-required', 'beat requires the dedicated finalization command')
     if (kind === 'setting') {
       throw new KnownError('setting-approval-required', 'setting requires the dedicated finalization command')
     }

@@ -2,6 +2,7 @@ import type { ApiError, SettingArtifact, SettingApproveRequest, WorkView } from 
 import { apiErrorSchema, settingApproveResponseSchema, workViewSchema } from '@agent4novel/contracts'
 import type { SettingReviewState } from './setting-review.js'
 import { reduceSettingReview } from './setting-review.js'
+import { withDeadline } from './request-deadline.js'
 
 class SettingRequestError extends Error {
   constructor(readonly status: number, readonly details: ApiError) { super(details.message) }
@@ -33,16 +34,6 @@ export async function finishSettingApproval(state: SettingReviewState): Promise<
     if (error instanceof SettingRequestError && error.status === 409) return confirmSettingApproval(next)
   }
   return next.phase === 'reconciling' ? confirmSettingApproval(next) : { state: next }
-}
-
-async function withDeadline<T>(ms: number, task: (signal: AbortSignal) => Promise<T>): Promise<T> {
-  const controller = new AbortController()
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const deadline = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => { reject(new Error('请求超时，结果尚未确认')); controller.abort() }, ms)
-  })
-  try { return await Promise.race([task(controller.signal), deadline]) }
-  finally { clearTimeout(timer) }
 }
 
 export async function postSettingApproval(workId: string, request: SettingApproveRequest): Promise<SettingArtifact> {

@@ -7,7 +7,7 @@ function fakeFetch(routes: Record<string, { status?: number; body: unknown }>) {
   const calls: { method: string; path: string; body?: unknown }[] = []
   const fn = async (url: string, init?: RequestInit): Promise<Response> => {
     const u = new URL(url)
-    const key = `${init?.method ?? 'GET'} ${u.pathname}`
+    const key = `${init?.method ?? 'GET'} ${u.pathname}${u.search}`
     calls.push({ method: init?.method ?? 'GET', path: u.pathname, body: init?.body ? JSON.parse(init.body as string) : undefined })
     const r = routes[key]
     if (!r) return new Response(JSON.stringify({ code: 'not-found', message: key }), { status: 404 })
@@ -139,6 +139,7 @@ describe('cli client/commands(#14)', () => {
     const created = { id: 'w9', title: 't', seed: 's', config: {}, createdAt: 'x' }
     const afterCreate = { ...workView, id: 'w9', artifacts: workView.artifacts.map((a) => ({ ...a, workId: 'w9' })) }
     const { fn, calls } = fakeFetch({
+      'GET /api/config': { body: { demo: true } },
       'POST /api/works': { status: 201, body: created },
       'POST /api/works/w9/advance': { body: advancedOutcome('w9') },
       'GET /api/works/w9': { body: { ...afterCreate, workflowState: 'outline-approved' } },
@@ -148,6 +149,7 @@ describe('cli client/commands(#14)', () => {
     const client = createClient({ baseUrl: 'http://x', fetch: fn })
     await expect(cmd.smoke(client, { seed: 's' }, () => {})).rejects.toMatchObject({ code: 'smoke-incomplete' })
     expect(calls.map((c) => `${c.method} ${c.path}`)).toEqual([
+      'GET /api/config',
       'POST /api/works',
       'POST /api/works/w9/advance',
       'GET /api/works/w9', // select 缺省方向:先取快照
@@ -161,10 +163,10 @@ describe('cli client/commands(#14)', () => {
 
   it('logs 透传遥测查询端点', async () => {
     const { fn, calls } = fakeFetch({
-      'GET /api/works/w1/telemetry': { body: { workId: 'w1', telemetry: [{ stepId: 'outline', ok: true }] } },
+      'GET /api/works/w1/telemetry': { body: { workId: 'w1', telemetry: [{ stepId: 'outline', ok: true, attemptId: 'test-1', model: 'fake', latencyMs: 0, promptChars: 1, promptHash: 'hash', systemHash: 'hash' }], commands: [], window: { processInstanceId: '11111111-1111-4111-8111-111111111111', retention: 'process-memory', llm: { capacity: 1000, oldestSeq: 1, latestSeq: 1, truncated: false }, commands: { capacity: 1000, oldestSeq: null, latestSeq: null, truncated: false } } } },
     })
     const client = createClient({ baseUrl: 'http://x', fetch: fn })
-    const r = await cmd.logs(client, 'w1')
+    const r = await cmd.logs(client, 'w1', { requestId: undefined, attemptId: undefined })
     expect(calls[0]?.path).toBe('/api/works/w1/telemetry')
     expect(r.telemetry).toHaveLength(1)
   })

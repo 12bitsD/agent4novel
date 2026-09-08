@@ -5,6 +5,8 @@ import { outlineStepInputSchema, outlineStepOutputSchema } from './outline-io.js
 import { DEFAULT_DIRECTION_COUNT } from './creative-step.js'
 import { settingStepInputSchema, settingStepOutputSchema } from './setting-io.js'
 import { assignSettingIds } from '../setting-content.js'
+import { assignBeatIds } from '../beat-content.js'
+import { beatStepInputSchema, beatStepOutputSchema } from './beat-io.js'
 
 // 演示模式(无 DEEPSEEK_API_KEY):固定输出,仍走完整 schema 校验链路
 
@@ -102,6 +104,27 @@ export function createFakeSettingStep(): ArtifactStep {
         world: [{ title: '故事世界', content: `(演示)基于「${input.seed.slice(0, 80)}」展开，世界规则在整部作品中保持一致。` }],
         characters: [{ title: '主角', content: `(演示)围绕「${direction.hook}」行动，在关键选择中成长。` }],
         factions: [], relationships: [], extensions: [],
+      }) }
+    },
+  }
+}
+
+export function createFakeBeatStep(): ArtifactStep {
+  return {
+    id: 'beat', inputSchema: beatStepInputSchema, outputSchema: beatStepOutputSchema,
+    async run(input) {
+      const { upstream, regeneration } = beatStepInputSchema.parse(input)
+      const segment = upstream.outline.arcs[0]!.segments[0]!
+      return { content: assignBeatIds({
+        title: '(演示)第一章：初遇变局',
+        goal: regeneration
+          ? `(演示再生)${regeneration.content.goal}\n修改意见：${regeneration.instructions || '重新安排开局'}`
+          : `(演示)围绕「${segment.title}」展开：${segment.summary}`,
+        writingPlan: [
+          { title: '建立处境', content: `- 展示故事世界中的日常。\n- 让主要人物在行动中出现。\n\n${upstream.setting.world[0]!.content}` },
+          { title: '遇到变化并选择', content: '引入打破日常的线索，让主角作出一个有代价的选择；留下后续追问。' },
+        ],
+        ending: `(演示)朝「${segment.outcome}」迈出第一步，停在主角将要行动的位置，不提前完成整条弧线。`,
       }) }
     },
   }

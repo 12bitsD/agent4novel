@@ -8,9 +8,9 @@ topics: ["setting", "setting-review", "artifact-finalization", "stable-ids", "co
 code_paths: ["packages/contracts/src/setting.ts", "packages/contracts/src/artifacts.ts", "apps/server/src/store/work-store.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts", "apps/server/src/start.ts", "apps/web/src/pages/Workspace.tsx", "apps/cli/src/commands.ts"]
 symbols: ["SettingContent", "SettingReviewDraft", "matchesSettingSubmission", "WorkStore", "finalizeArtifact", "approveSetting", "createSettingStep", "reduceSettingReview", "Pipeline.advance", "workflowOf", "expectedHeadVersion"]
 inherits: ["004", "011", "014", "016"]
-changed_by: []
+changed_by: ["005"]
 read_when: ["implement-setting", "change-setting-schema", "change-setting-review", "change-artifact-finalization", "trace-setting-decisions"]
-last_context_reviewed: "2026-09-05"
+last_context_reviewed: "2026-09-08"
 ---
 
 # 013 — 完整设定生成与一次通过
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-09-05"
 - **原始目的**：把创意稿中的设定要点扩展成作品基准，经作者把关后供章纲与正文消费；范围与 AC 以 [issue #13](https://github.com/12bitsD/agent4novel/issues/13) 为准。
 - **实际落地**：生产链为 caption → creative → outline → setting；生成 pending、页内编辑、专用命令同版本原子通过、approved 只读已实现。2026-09-05 按技术方案完成 TDD 切片，交付门禁状态见“完成审核证据”，不以技术评审代替功能验证。
 - **当前价值**：本页拥有设定生成与一次通过的工程 HOW；先读“原子写入与快照隔离”“提交结果确认”，再沿“代码落点”和测试矩阵核对。内容与公开协议归 [schema](../schema.md#setting13-已确认设计)，代码执行定义归 contracts。
-- **后续变化**：通过后修改归 [#17](https://github.com/12bitsD/agent4novel/issues/17)，冲突澄清归 [#18](https://github.com/12bitsD/agent4novel/issues/18)，全仓契约治理归 [#19](https://github.com/12bitsD/agent4novel/issues/19)；#9 负责真实 SQLite，#5 负责章纲／正文，#15 负责后续 Hono RPC 迁移。
+- **后续变化**：通过后修改归 [#17](https://github.com/12bitsD/agent4novel/issues/17)，冲突澄清归 [#18](https://github.com/12bitsD/agent4novel/issues/18)。[Wiki 005](./005-beat-generation-review.md) 已接入第一章章纲，五步生产链止于 beat-approved；正文单独归 #22，之后再做 #19 治理与 #9 SQLite，#15 仍负责服务定型后的 Hono RPC 迁移。
 - **代码入口**：[内容契约](../../packages/contracts/src/setting.ts)、[结果对账](../../packages/contracts/src/setting-submission.ts)、[完成命令](../../apps/server/src/setting-review.ts)、[store](../../apps/server/src/store/work-store.ts)、[Web 状态](../../apps/web/src/setting-review.ts)、[工作台](../../apps/web/src/pages/Workspace.tsx)。
 
 ## 设计目的
@@ -216,7 +216,7 @@ WorkView 增加 `nextStepId`，来源为 Pipeline.getState；页面用它选择�
 | 大纲已通过，Setting 不存在 | ready-to-generate | setting | generate |
 | Setting 生成失败且可重试 | failed | setting | generate |
 | Setting 待把关 | awaiting-setting-review | null | approve |
-| 四步定义已全部通过 | setting-approved | null | 空 |
+| 四步定义已全部通过（#13 基线／兼容测试） | setting-approved | null | 空 |
 
 不可重试失败不给 generate。生成中仍是页面局部 transient 状态；客户端不能从按钮状态推导后台任务已经结束。complete 的显示由定义末端关卡决定，保留以 Outline 结束的旧定义／测试，不把所有 complete 硬编码成 setting-approved。
 
@@ -299,7 +299,7 @@ HTTP 大小限制在 JSON 解析前使用 Hono body-limit；其对无 Content-Le
 
 CLI 一次进程调用内使用与 Web 相同的规范化和对账函数，网络错误后最多自动回读一次，未知结果退出非零并保留输入文件；不自动重复写入。新进程若发现服务器已 approved，仅报告已通过并让调用方读取现状，不伪造上一次进程的 pending 基线。
 
-smoke 扩为 create → caption/creative → select → outline → approve outline → setting → 读取 pending 内容构造请求 → approve-setting → 验证 setting-approved。测试用 fake Step，在提交前修改至少一项内容并用 fake 下游断言消费到最终值。真实 smoke 使用合成素材与已配置 provider，生成调用按现有运行 skill 执行。
+以下是 #13 交付时的四步验证；#5 当前 smoke 终点见 Wiki 005。smoke 扩为 create → caption/creative → select → outline → approve outline → setting → 读取 pending 内容构造请求 → approve-setting → 验证 setting-approved。测试用 fake Step，在提交前修改至少一项内容并用 fake 下游断言消费到最终值。真实 smoke 使用合成素材与已配置 provider，生成调用按现有运行 skill 执行。
 
 设置独立 attemptId（含随机部分）并复用 callLlm／现有 telemetry；通过动作不记成 LLM 调用。生成已成功但因上游版本变化未提交时，应同时保留 LLM 成功记录与 pipeline 的 upstream-changed 结果，不能伪造模型失败。
 
@@ -440,6 +440,22 @@ smoke 扩为 create → caption/creative → select → outline → approve outl
 
 ## 上下文演进
 
+### 2026-09-08 — 设定通过后接入章纲
+
+- **触发证据**：#5 Workspace 和实际 CLI smoke 通过设定后生成 beat#1。
+- **原假设**：下方状态表和 smoke 止于 Setting，章纲尚在设计。
+- **决定**：保留 #13 四步基线作为历史与兼容定义；当前生产第五步及 CLI 终点以 Wiki 005 为准。
+- **影响**：Setting 的同版本通过、固定基准及页内草稿语义不变。
+- **上下文处理**：preserve 原始决定、评审和四步实测；replace Agent Context 的当前后续边界。
+
+### 2026-09-08 — 为章纲接手建立方案入口并修正后续排期
+
+- **触发证据**：#5 票面已拆分正文，作者批准五视角复审后正式录入 Wiki，并确认先完成产物再做治理／持久化。
+- **原假设**：本页旧交接将 #19、#9 排在 #5 之前，#5 同时拥有章纲与正文。
+- **决定**：现行后续入口改为 [Wiki 005](./005-beat-generation-review.md)，顺序 #5 → #22 → #19 → #9 → #6；Setting 同版本一次通过机制继续作为继承基础。
+- **影响**：#5 计划把生产终点延伸至 beat-approved，但当前代码仍止于 setting-approved；UUID、Beat 恢复与 Agent 诊断均为待实现设计。
+- **上下文处理**：preserve 本票原始目的、已实现契约、评审和真实验证；replace 当前交接的旧分工与排期，保留本事件解释原因。
+
 ### 2026-09-05 — 确认完整设定与一次通过设计
 
 - **触发证据**：Human 在 #13 访谈中逐项确认栏目、通用卡片、Markdown、单页草稿、同版通过、跨栏移动及失败策略，并最终确认整体设计基线。
@@ -476,4 +492,4 @@ smoke 扩为 create → caption/creative → select → outline → approve outl
 
 Human 产品对齐与独立技术方案评审均已完成；2026-09-05 已按方案实施当前四步链、同版本通过与 Web／CLI 恢复闭环。具体 TDD、实测和发布裁决只看本页“完成审核证据”；远端交付结果以 issue 完成评论与 live 状态为准，不在同一提交中伪造事后结果。
 
-后续优化票 [#17](https://github.com/12bitsD/agent4novel/issues/17)、[#18](https://github.com/12bitsD/agent4novel/issues/18)、[#19](https://github.com/12bitsD/agent4novel/issues/19) 分别承接设定后编辑、冲突澄清、契约治理；治理排在 #13 后、#9／#5 前。`materials` 是否支持多素材及独立预处理仍未定案，应由相关治理／存储票澄清，不能视为 #13 已授权范围。
+后续优化票 [#17](https://github.com/12bitsD/agent4novel/issues/17)、[#18](https://github.com/12bitsD/agent4novel/issues/18)、[#19](https://github.com/12bitsD/agent4novel/issues/19) 分别承接设定后编辑、冲突澄清、契约治理；按上方 2026-09-08 变化事件，当前先交付 #5 章纲与 #22 正文，再推进治理／SQLite。`materials` 是否支持多素材及独立预处理仍未定案，应由相关治理／存储票澄清，不能视为 #13 已授权范围。

@@ -9,6 +9,7 @@ import type {
   WorkView,
 } from '@agent4novel/contracts'
 import { advanceOutcomeDtoSchema, workViewSchema } from '@agent4novel/contracts'
+import { withDeadline } from './request-deadline.js'
 export type { AdvanceOutcomeDto } from '@agent4novel/contracts'
 
 export type AppConfig = { demo: boolean }
@@ -42,7 +43,7 @@ export function listWorks(): Promise<WorkSummary[]> {
 }
 
 export async function getWork(id: string): Promise<WorkView> {
-  return workViewSchema.parse(await request<unknown>(`/api/works/${encodeURIComponent(id)}`))
+  return withDeadline(10_000, async signal => workViewSchema.parse(await request<unknown>(`/api/works/${encodeURIComponent(id)}`, { signal })))
 }
 
 export function createWork(input: { seed: string; title?: string }): Promise<Work> {
@@ -75,7 +76,11 @@ export function selectCreativeDirection(
 }
 
 export async function advance(workId: string): Promise<AdvanceOutcomeDto> {
-  return advanceOutcomeDtoSchema.parse(await post<unknown>(`/api/works/${workId}/advance`))
+  return withDeadline(1_820_000, async signal => {
+    const result = advanceOutcomeDtoSchema.parse(await request<unknown>(`/api/works/${encodeURIComponent(workId)}/advance`, { method: 'POST', signal }))
+    if (result.state.workId !== workId) throw new Error('服务器返回了不同作品')
+    return result
+  })
 }
 
 // saveOutlineDraft(#4):保存大纲草稿(新项无 id,server 补注入),永远 pending;乐观锁同上
