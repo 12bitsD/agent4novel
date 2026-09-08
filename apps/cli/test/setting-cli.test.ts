@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Artifact, SettingApproveRequest, SettingArtifact, WorkView } from '@agent4novel/contracts'
-import { settingApproveRequestSchema } from '@agent4novel/contracts'
+import type { Artifact, BeatArtifact, SettingApproveRequest, SettingArtifact, WorkView } from '@agent4novel/contracts'
+import { beatApproveRequestSchema, settingApproveRequestSchema } from '@agent4novel/contracts'
 import { createClient } from '../src/client.js'
 import * as cmd from '../src/commands.js'
 
@@ -125,21 +125,23 @@ describe('setting CLI submission', () => {
     const calls: string[] = []
     let advances = 0
     let submitted: SettingApproveRequest | undefined
+    const beat: BeatArtifact = { id: 'beat-1', workId: 'w1', kind: 'beat', chapter: 1, version: 1, humanStatus: 'pending', createdAt: 'created-once', content: { title: '开局', goal: '寻找名字', writingPlan: [{ itemId: 'item-1', title: '问路', content: '旅人询问居民。' }], ending: '走向码头。' } }
     const client = createClient({ baseUrl: 'http://x', fetch: async (url, init) => {
       const path = new URL(url).pathname
       const method = init!.method!
       calls.push(`${method} ${path}`)
+      if (path === '/api/config') return json({ demo: true })
       if (method === 'GET') return json(current)
       if (path === '/api/works') return json({ id: 'w1', title: '测试作品', seed: '合成素材', config: {}, createdAt: 'created-once' }, 201)
       if (path.endsWith('/advance')) {
-        const kind = (['creative', 'outline', 'setting'] as const)[advances++]!
-        const artifact: Artifact = kind === 'setting' ? baseline : {
+        const kind = (['creative', 'outline', 'setting', 'beat'] as const)[advances++]!
+        const artifact: Artifact = kind === 'beat' ? beat : kind === 'setting' ? baseline : {
           id: `artifact-${kind}`, workId: 'w1', kind, version: 1, humanStatus: 'pending' as const, createdAt: 'created-once',
           content: kind === 'creative' ? { directions: [{ directionId: 'direction-one' }] } : { arcs: [] },
         }
         current = {
           ...current, artifacts: [...current.artifacts, artifact], nextStepId: null,
-          workflowState: kind === 'creative' ? 'awaiting-selection' : kind === 'outline' ? 'awaiting-outline-review' : 'awaiting-setting-review',
+          workflowState: kind === 'creative' ? 'awaiting-selection' : kind === 'outline' ? 'awaiting-outline-review' : kind === 'beat' ? 'awaiting-beat-review' : 'awaiting-setting-review',
           allowedActions: kind === 'creative' ? ['select'] : ['approve'],
         }
         return json({ kind: 'advanced', stepId: kind, state: { workId: 'w1', stage: 'awaiting-approval', nextStepId: null, pendingGate: { kind } }, telemetry: [] })
@@ -152,22 +154,29 @@ describe('setting CLI submission', () => {
       if (path.endsWith('/artifacts/setting/approve')) {
         submitted = settingApproveRequestSchema.parse(JSON.parse(String(init?.body)))
         const artifact: SettingArtifact = { ...baseline, humanStatus: 'approved', content: submitted.content as SettingArtifact['content'] }
-        current = { ...current, artifacts: current.artifacts.map((entry) => entry.kind === 'setting' ? artifact : entry), workflowState: 'setting-approved', nextStepId: null, allowedActions: [] }
+        current = { ...current, artifacts: current.artifacts.map((entry) => entry.kind === 'setting' ? artifact : entry), workflowState: 'ready-to-generate', nextStepId: 'beat', allowedActions: ['generate'] }
         return json(artifact)
+      }
+      if (path.endsWith('/artifacts/beat/approve')) {
+        const request = beatApproveRequestSchema.parse(JSON.parse(String(init?.body)))
+        const artifact = { ...beat, humanStatus: 'approved', content: request.content }
+        current = { ...current, artifacts: current.artifacts.map(entry => entry.kind === 'beat' ? artifact as BeatArtifact : entry), workflowState: 'beat-approved', nextStepId: null, allowedActions: [] }
+        return json({ artifact, workflow: { workflowState: 'beat-approved', nextStepId: null, allowedActions: [] }, telemetry: [], command: { kind: 'execution-result', requestId: '11111111-1111-4111-8111-111111111111', operation: 'approve-beat', target: { workId: 'w1', kind: 'beat', chapter: 1 }, expectedHead: { artifactId: beat.id, version: 1 }, executionMode: 'demo', latencyMs: 0, attemptIds: [], writeOutcome: 'committed', resultHead: { artifactId: beat.id, version: 1, humanStatus: 'approved' } } })
       }
       throw new Error(`Unexpected fake request ${method} ${path}`)
     } })
 
     const result = await cmd.smoke(client, { seed: '合成素材' }, () => {})
-    expect(result.final.workflowState).toBe('setting-approved')
+    expect(result.final.workflowState).toBe('beat-approved')
     expect(submitted?.expectedHeadVersion).toBe(1)
     expect(submitted?.content.overview).not.toBe(baseline.content.overview)
     expect(result.final.artifacts.find((artifact) => artifact.kind === 'setting')?.content).toEqual(submitted?.content)
     expect(calls).toEqual([
+      'GET /api/config',
       'POST /api/works', 'POST /api/works/w1/advance', 'GET /api/works/w1',
       'POST /api/works/w1/artifacts/creative/select', 'POST /api/works/w1/advance', 'POST /api/works/w1/approve',
       'POST /api/works/w1/advance', 'GET /api/works/w1', 'GET /api/works/w1',
-      'POST /api/works/w1/artifacts/setting/approve', 'GET /api/works/w1',
+      'POST /api/works/w1/artifacts/setting/approve', 'POST /api/works/w1/advance', 'GET /api/works/w1', 'GET /api/works/w1', 'POST /api/works/w1/artifacts/beat/approve', 'GET /api/works/w1',
     ])
   })
 
@@ -175,6 +184,7 @@ describe('setting CLI submission', () => {
     const calls: string[] = []
     const client = createClient({ baseUrl: 'http://x', fetch: async (url, init) => {
       calls.push(`${init?.method} ${new URL(url).pathname}`)
+      if (new URL(url).pathname === '/api/config') return json({ demo: true })
       if (new URL(url).pathname === '/api/works') return json({ id: 'w1', title: 't', seed: 's', config: {}, createdAt: 'created-once' })
       if (new URL(url).pathname.endsWith('/advance')) return json({
         kind: 'failed', stepId: 'creative', code: 'llm-timeout', retryable: true, attemptId: 'attempt-1',
@@ -183,7 +193,7 @@ describe('setting CLI submission', () => {
       return json(workWith(baseline))
     } })
     await expect(cmd.smoke(client, { seed: '合成素材' }, () => {})).rejects.toMatchObject({ code: 'llm-timeout', retryable: true, attemptId: 'attempt-1' })
-    expect(calls).toEqual(['POST /api/works', 'POST /api/works/w1/advance'])
+    expect(calls).toEqual(['GET /api/config', 'POST /api/works', 'POST /api/works/w1/advance'])
   })
 
   it.each(['conflict', 'invalid-success', 'malformed-error'])('reconciles %s once when the server has the submitted result', async (response) => {

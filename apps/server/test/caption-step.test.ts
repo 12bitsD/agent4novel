@@ -16,6 +16,7 @@ vi.mock('../src/steps/llm.js', () => ({
 }))
 
 import { createCaptionStep } from '../src/steps/caption-step.js'
+import { telemetryFor, resetTelemetry, withRequest } from '../src/steps/telemetry.js'
 
 const step = createCaptionStep()
 const baseInput = { workId: 'w1', seed: '一个都市异能校园故事', upstream: {} }
@@ -33,6 +34,22 @@ beforeEach(() => {
 })
 
 describe('caption RealStep', () => {
+  it('keeps synthetic secrets out of shared error logs and telemetry while returning useful safe diagnostics', async () => {
+    const marker = 'SYNTHETIC_PRIVATE_MARKER'
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    resetTelemetry()
+    mocks.generateObject.mockRejectedValue(Object.assign(new Error(marker), {
+      name: 'AI_NoObjectGeneratedError', text: marker, cause: new Error(marker), finishReason: 'stop', usage: { outputTokens: 20 },
+    }))
+    try {
+      await expect(withRequest('11111111-1111-4111-8111-111111111111', false, () => runStep(step, baseInput, {}))).rejects.toMatchObject({ code: 'llm-invalid-output' })
+      expect(JSON.stringify(log.mock.calls)).not.toContain(marker)
+      expect(JSON.stringify(telemetryFor('w1'))).not.toContain(marker)
+      expect(telemetryFor('w1')).toMatchObject([{ error: 'output-schema', requestId: '11111111-1111-4111-8111-111111111111' }])
+      mocks.generateObject.mockRejectedValue(new Error(marker))
+      await expect(runStep(step, baseInput, {})).rejects.toMatchObject({ message: 'llm request unavailable' })
+    } finally { log.mockRestore() }
+  })
   it('returns schema-valid caption content', async () => {
     mocks.generateObject.mockResolvedValue({ object: validCaption, usage: {}, finishReason: 'stop' })
     const out = await runStep(step, baseInput, {})

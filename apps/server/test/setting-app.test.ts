@@ -15,6 +15,8 @@ const setting = {
   characters: [{ itemId: 'item-character', title: '旅人', content: '想要找回自己的名字。' }],
   factions: [], relationships: [], extensions: [],
 }
+const caption = { inputStage: '脑洞', summary: '提炼稿', elements: [{ kind: '设定', content: '雾城' }], gaps: [] }
+const outline = { arcs: [1, 2, 3].map(i => ({ arcId: `a-${i}`, title: '寻人', conflict: '记忆消失', development: '询问居民', resolution: '找到名字', segments: [1, 2].map(j => ({ segmentId: `s-${i}-${j}`, title: '追问', summary: '寻找线索', outcome: '获得回答' })) })) }
 
 function setup(store = new InMemoryStore()) {
   const work = store.createWork({ seed: '雾中小镇，寻找名字' })
@@ -25,7 +27,7 @@ function setup(store = new InMemoryStore()) {
     { stepId: 'setting', outputKind: 'setting', consumes: ['caption', 'creative', 'outline'], gateAfter: { kind: 'setting' } },
   ]
   const creative = { directions: [{ directionId: 'd1', title: '方向', hook: '钩子', tags: [], synopsis: '故事', characters: [], setting: [], payoffs: [], outline: [] }] }
-  for (const [kind, content] of [['caption', '提炼稿'], ['creative', creative], ['outline', '已通过大纲']] as const) {
+  for (const [kind, content] of [['caption', caption], ['creative', creative], ['outline', outline]] as const) {
     store.appendArtifact(work.id, kind, content)
     store.setStatus(work.id, kind, 'approved')
   }
@@ -128,7 +130,7 @@ describe('Setting approval HTTP boundary', () => {
 
   it('shows the earlier pending gate, rejects stale approval, then restores the same Setting after upstream approval', async () => {
     const { app, store, pipeline, work, pending, approve } = setup()
-    store.appendArtifact(work.id, 'outline', '作者修改大纲')
+    store.appendArtifact(work.id, 'outline', outline)
     expect(await (await app.request(`/api/works/${work.id}`)).json()).toMatchObject({ workflowState: 'awaiting-outline-review' })
     const rejected = await approve({ content: setting, expectedHeadVersion: 1 })
     expect(rejected.status).toBe(409)

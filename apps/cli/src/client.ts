@@ -1,4 +1,6 @@
-import { advanceOutcomeDtoSchema, apiErrorSchema, settingApproveResponseSchema, workViewSchema } from '@agent4novel/contracts'
+import { advanceOutcomeDtoSchema, apiErrorSchema, settingApproveResponseSchema, workViewSchema, diagnosticResponseSchema, diagnosticQuerySchema } from '@agent4novel/contracts'
+import type { BeatSubmission, DiagnosticQuery } from '@agent4novel/contracts'
+import { appConfigSchema } from '@agent4novel/contracts'
 import type {
   Artifact,
   ArtifactKind,
@@ -27,6 +29,7 @@ export class CliError extends Error {
     readonly retryable = false,
     readonly attemptId?: string,
     readonly issues?: ValidationIssue[],
+    readonly details?: Record<string, unknown>,
   ) {
     super(message)
     this.name = 'CliError'
@@ -66,6 +69,7 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
     path: string,
     body?: unknown,
     defaultTimeoutMs = DEFAULT_CLI_TIMEOUT_MS,
+    raw = false,
   ): Promise<T> {
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -83,6 +87,7 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
         signal: controller.signal,
       })
       const data: unknown = await res.json().catch(() => null)
+      if (raw) return { status: res.status, body: data } as T
       if (!res.ok) {
         const parsed = apiErrorSchema.safeParse(data)
         if (!parsed.success) throw new CliError('Invalid server error response', 'invalid-response', res.status)
@@ -102,11 +107,12 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
   }
 
   return {
+    getConfig: async () => appConfigSchema.parse(await call<unknown>('GET', '/api/config')),
     listWorks: () => call<WorkSummary[]>('GET', '/api/works'),
     createWork: (input: { seed: string; title?: string }) =>
       call<Work>('POST', '/api/works', input),
-    getWork: async (workId: string): Promise<WorkView> => {
-      const data = await call<unknown>('GET', `/api/works/${workId}`)
+    getWork: async (workId: string, reconcile = false): Promise<WorkView> => {
+      const data = await call<unknown>('GET', `/api/works/${encodeURIComponent(workId)}`, undefined, reconcile ? 10_000 : DEFAULT_CLI_TIMEOUT_MS)
       const parsed = workViewSchema.safeParse(data)
       if (!parsed.success || parsed.data.id !== workId) {
         throw new CliError('Invalid work response', 'invalid-response', 200)
@@ -142,7 +148,17 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
       return parsed.data
     },
     // LLM 遥测回看(#14)
-    getTelemetry: (workId: string) =>
-      call<{ workId: string; telemetry: LlmTelemetry[] }>('GET', `/api/works/${workId}/telemetry`),
+    getTelemetry: async (workId: string, query: DiagnosticQuery = {}) => {
+      const params = new URLSearchParams()
+      for (const [key, value] of Object.entries(diagnosticQuerySchema.parse(query))) {
+        if (value !== undefined) params.set(key, value)
+      }
+      const result = diagnosticResponseSchema.parse(await call<unknown>('GET', `/api/works/${encodeURIComponent(workId)}/telemetry${params.size ? `?${params}` : ''}`))
+      if (result.workId !== workId) throw new CliError('Diagnostic response belongs to a different work', 'invalid-response')
+      return result
+    },
+    beatCommand: (workId: string, submission: BeatSubmission) => call<{ status: number; body: unknown }>('POST',
+      `/api/works/${encodeURIComponent(workId)}/artifacts/beat/${submission.operation === 'approve-beat' ? 'approve' : 'regenerate'}`,
+      submission.request, submission.operation === 'approve-beat' ? 30_000 : 920_000, true),
   }
 }

@@ -154,7 +154,7 @@ describe('works routes', () => {
 
     const res = await app.request(`/api/works/${w.id}/telemetry`)
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ workId: w.id, telemetry: [] })
+    expect(await res.json()).toMatchObject({ workId: w.id, telemetry: [], commands: [], window: { retention: 'process-memory' } })
 
     const missing = await app.request('/api/works/nope/telemetry')
     expect(missing.status).toBe(404)

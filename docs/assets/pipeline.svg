@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="470" viewBox="0 0 1080 470" role="img" aria-labelledby="pipeline-title pipeline-desc" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', serif">
   <title id="pipeline-title">当前创作流水线与规划中的按章循环</title>
-  <desc id="pipeline-desc">提炼稿自动通过；作者选定一个创意方向，通过弧线与剧情点大纲，再在本页编辑完整设定并一次通过。当前终点为 setting-approved。章纲与正文属于规划中的 #5。</desc>
+  <desc id="pipeline-desc">提炼稿自动通过；作者选定一个创意方向，通过弧线与剧情点大纲，再在本页编辑完整设定并一次通过。第一章章纲支持编辑、再生和通过，终点为 beat-approved。正文 #22 与后续章节 #6 尚待实现。</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#444444"/>
     </marker>
   </defs>
   <rect x="0" y="0" width="1080" height="470" fill="#ffffff"/>
-  <text x="20" y="32" font-size="12" font-style="italic" fill="#777777">当前流程 · #13</text>
+  <text x="20" y="32" font-size="12" font-style="italic" fill="#777777">当前流程 · #5</text>
 
   <!-- Current flow: caption → selected creative → approved outline → Setting. -->
   <rect x="20" y="85" width="110" height="62" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
@@ -22,21 +22,21 @@
   <text x="370" y="110" text-anchor="middle" font-size="14" fill="#111111">创意稿</text>
   <text x="370" y="132" text-anchor="middle" font-size="10" fill="#777777">creative · 方向包</text>
   <polygon points="485,96 505,116 485,136 465,116" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
-  <text x="485" y="121" text-anchor="middle" font-size="12" fill="#8a2d2d">审</text>
+  <text x="485" y="121" text-anchor="middle" font-size="12" fill="#8a2d2d">人</text>
   <text x="485" y="170" text-anchor="middle" font-size="10" fill="#8a2d2d">选定一个方向</text>
   <text x="597.5" y="68" text-anchor="middle" font-size="12" fill="#999999">③</text>
   <rect x="530" y="85" width="135" height="62" rx="3" fill="#ffffff" stroke="#222222" stroke-width="1.2"/>
   <text x="597.5" y="110" text-anchor="middle" font-size="14" fill="#111111">大纲</text>
   <text x="597.5" y="132" text-anchor="middle" font-size="10" fill="#777777">弧线 + 剧情点</text>
   <polygon points="710,96 730,116 710,136 690,116" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
-  <text x="710" y="121" text-anchor="middle" font-size="12" fill="#8a2d2d">审</text>
+  <text x="710" y="121" text-anchor="middle" font-size="12" fill="#8a2d2d">人</text>
   <text x="710" y="170" text-anchor="middle" font-size="10" fill="#8a2d2d">通过</text>
   <text x="830" y="68" text-anchor="middle" font-size="12" fill="#999999">④</text>
   <rect x="755" y="85" width="150" height="62" rx="3" fill="#f3f3f3" stroke="#222222" stroke-width="1.2"/>
   <text x="830" y="110" text-anchor="middle" font-size="14" fill="#111111">完整设定</text>
   <text x="830" y="132" text-anchor="middle" font-size="10" fill="#777777">整份生成 · 本页编辑</text>
   <polygon points="950,96 970,116 950,136 930,116" fill="#ffffff" stroke="#8a2d2d" stroke-width="1.4"/>
-  <text x="950" y="121" text-anchor="middle" font-size="12" fill="#8a2d2d">审</text>
+  <text x="950" y="121" text-anchor="middle" font-size="12" fill="#8a2d2d">人</text>
   <text x="950" y="170" text-anchor="middle" font-size="10" fill="#8a2d2d">一次通过</text>
 
   <g stroke="#444444" stroke-width="1.1" marker-end="url(#arrow)">
@@ -50,32 +50,33 @@
   </g>
   <path d="M 970 116 H 1038 V 211 H 1034" fill="none" stroke="#444444" stroke-width="1.1" marker-end="url(#arrow)"/>
   <rect x="810" y="196" width="220" height="30" rx="4" fill="#f3f3f3" stroke="#222222"/>
-  <text x="920" y="216" text-anchor="middle" font-size="11" fill="#111111">当前终点 · setting-approved</text>
+  <text x="920" y="216" text-anchor="middle" font-size="11" fill="#111111">设定通过 → 第一章章纲</text>
 
-  <!-- Dashed continuation is future scope, not an available action. -->
-  <rect x="320" y="270" width="720" height="162" rx="10" fill="#fcfcfc" stroke="#999999" stroke-dasharray="5 4"/>
-  <text x="336" y="292" font-size="11" font-style="italic" fill="#888888">规划 #5 · 每章循环</text>
-  <path d="M 920 226 V 251 H 305 V 344 H 341" fill="none" stroke="#888888" stroke-dasharray="4 4" marker-end="url(#arrow)"/>
-  <rect x="345" y="314" width="120" height="60" rx="3" fill="#ffffff" stroke="#999999"/>
-  <text x="405" y="338" text-anchor="middle" font-size="14" fill="#777777">章纲</text>
-  <text x="405" y="359" text-anchor="middle" font-size="9.5" fill="#888888">目标 · 冲突 · 钩子</text>
+  <!-- Beat is current; only prose and chapter continuation are future scope. -->
+  <text x="420" y="296" text-anchor="middle" font-size="11" fill="#111111">⑤ 当前：通过 → beat-approved</text>
+  <rect x="545" y="270" width="495" height="162" rx="10" fill="#fcfcfc" stroke="#999999" stroke-dasharray="5 4"/>
+  <text x="561" y="292" font-size="11" font-style="italic" fill="#888888">规划 · 正文 #22 / 后续章 #6</text>
+  <path d="M 920 226 V 251 H 305 V 344 H 341" fill="none" stroke="#444444" marker-end="url(#arrow)"/>
+  <rect x="345" y="314" width="120" height="60" rx="3" fill="#ffffff" stroke="#222222"/>
+  <text x="405" y="338" text-anchor="middle" font-size="14" fill="#777777">第一章章纲</text>
+  <text x="405" y="359" text-anchor="middle" font-size="9.5" fill="#888888">编辑 / 整份再生</text>
   <polygon points="505,324 525,344 505,364 485,344" fill="#ffffff" stroke="#8a2d2d"/>
-  <text x="505" y="349" text-anchor="middle" font-size="12" fill="#8a2d2d">审</text>
+  <text x="505" y="349" text-anchor="middle" font-size="12" fill="#8a2d2d">人</text>
   <rect x="555" y="314" width="125" height="60" rx="3" fill="#ffffff" stroke="#999999"/>
   <text x="617.5" y="338" text-anchor="middle" font-size="14" fill="#777777">正文</text>
   <text x="617.5" y="359" text-anchor="middle" font-size="9" fill="#888888">每章约 2000–4000 字</text>
   <polygon points="725,324 745,344 725,364 705,344" fill="#ffffff" stroke="#8a2d2d"/>
-  <text x="725" y="349" text-anchor="middle" font-size="12" fill="#8a2d2d">审</text>
+  <text x="725" y="349" text-anchor="middle" font-size="12" fill="#8a2d2d">人</text>
   <rect x="795" y="314" width="150" height="60" rx="3" fill="#ffffff" stroke="#999999"/>
   <text x="870" y="349" text-anchor="middle" font-size="14" fill="#777777">完本</text>
   <g stroke="#888888" stroke-width="1" stroke-dasharray="4 4" marker-end="url(#arrow)">
-    <line x1="465" y1="344" x2="481" y2="344"/>
+    <line x1="465" y1="344" x2="481" y2="344" stroke="#444444" stroke-dasharray="none"/>
     <line x1="525" y1="344" x2="551" y2="344"/>
     <line x1="680" y1="344" x2="701" y2="344"/>
     <line x1="745" y1="344" x2="791" y2="344"/>
     <path d="M 725 364 V 406 H 405 V 378" fill="none"/>
   </g>
-  <text x="565" y="399" text-anchor="middle" font-size="10.5" fill="#888888">下一章</text>
+  <text x="565" y="399" text-anchor="middle" font-size="10.5" fill="#888888">下一章 · #6</text>
 
   <line x1="20" y1="452" x2="48" y2="452" stroke="#444444"/>
   <text x="55" y="456" font-size="11" fill="#555555">当前流程</text>

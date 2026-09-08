@@ -8,9 +8,9 @@ topics: ["agent-cli", "llm-telemetry", "workflow-smoke", "optimistic-locking", "
 code_paths: ["apps/cli/src/client.ts", "apps/cli/src/commands.ts", "apps/cli/src/main.ts", "packages/contracts/src/telemetry.ts", "apps/server/src/steps/telemetry.ts", "apps/server/src/steps/llm-call.ts", "apps/server/src/routes/works.ts", ".claude/skills/agent4novel-drive/SKILL.md"]
 symbols: ["createClient", "CliError", "smoke", "LlmTelemetry", "recordTelemetry", "telemetryCursor", "telemetryFor", "callLlm"]
 inherits: ["004", "011"]
-changed_by: ["016", "013"]
+changed_by: ["016", "013", "005"]
 read_when: ["drive-workflow-from-cli", "debug-llm-failure", "change-cli-command", "change-telemetry", "run-end-to-end-smoke"]
-last_context_reviewed: "2026-09-05"
+last_context_reviewed: "2026-09-08"
 ---
 
 # 014 — Agent 可用性基建：CLI + 遥测内联 + 项目级 Skill
@@ -19,9 +19,10 @@ last_context_reviewed: "2026-09-05"
 
 - **读取时机**：用命令行驱动作品、修改 CLI、分析 LLM 失败、扩展遥测或维护 smoke 探针时读取。
 - **原始目的**：消除 Agent 手拼 curl 和手记 expectedHeadVersion 的易错操作，并让一次 advance 同时返回结果与诊断。
-- **实际落地**：a4n 提供 JSON 命令；#13 新增 approve-setting，并将 smoke 延伸至设定通过。LLM 成败写入进程内账本，advance 内联本次遥测，logs 支持跨次回看。
+- **实际落地**：a4n 提供 JSON 命令；#13 新增 approve-setting，#5 新增按章 Beat 命令并将 smoke 延伸至章纲通过。LLM 成败写入进程内账本，advance 内联本次遥测，logs 支持跨次回看。
 - **当前价值**：本文继续拥有 CLI 命令语义、遥测契约、smoke 流程和 outline 截断的排障经验。
 - **后续变化**：[Wiki 016](./016-model-runtime-provider-config.md) 接管模型配置与 timeout 默认值；[Wiki 013](./013-setting-generation-review.md) 拥有 Setting 完整显式版本请求与结果对账规则，不沿用 Outline 自动补版本。
+  [Wiki 005](./005-beat-generation-review.md) 已增加按章命令、请求关联与写入结果，移除共享原始错误内容传播；Beat 恢复语义以该页为准。
 - **代码入口**：[CLI commands](../../apps/cli/src/commands.ts)、[CLI client](../../apps/cli/src/client.ts)、[telemetry ledger](../../apps/server/src/steps/telemetry.ts)、[LLM call](../../apps/server/src/steps/llm-call.ts)、[drive skill](../../.claude/skills/agent4novel-drive/SKILL.md)。
 
 ## 设计目的
@@ -54,31 +55,31 @@ Agent 操作面必须满足三个条件：命令可组合、输出可解析、�
 ./apps/cli/bin/a4n <command>
 ~~~
 
-命令为 list、create、get、advance、select、save-outline、approve、approve-setting、logs、smoke。select/save-outline 自动回填 head version；approve-setting 文件必须显式携带完整 content 与读取时 expectedHeadVersion，最多自动回读一次，不自动重写。pnpm -s cli 等价，但必须带 -s 以免横幅污染 stdout；地址与 timeout 默认值见 [Wiki 016](./016-model-runtime-provider-config.md)，Setting 恢复规则见 [Wiki 013](./013-setting-generation-review.md#提交结果确认)。
+命令为 config、list、create、get、advance、select、save-outline、approve、approve-setting、approve-beat、regenerate-beat、logs、smoke。Beat 文件显式保留章号、Artifact ID 与版本；get 按 kind/chapter 精确读取。select/save-outline 自动回填 head version；approve-setting 文件必须显式携带完整 content 与读取时 expectedHeadVersion，最多自动回读一次，不自动重写。pnpm -s cli 等价，但必须带 -s 以免横幅污染 stdout；地址与 timeout 默认值见 [Wiki 016](./016-model-runtime-provider-config.md)，Setting 恢复规则见 [Wiki 013](./013-setting-generation-review.md#提交结果确认)。
 
-CliError 保留 server 返回的 code、status、retryable、attemptId 与可选 issues。命令函数只返回可 JSON 序列化值，main 统一负责打印与 exit code。CLI 主动 deadline 覆盖 fetch 和响应体，默认数值未变；超时不代表服务器回滚。
+CliError 保留 server 返回的 code、status、retryable、attemptId 与可选 issues。命令函数只返回可 JSON 序列化值，main 统一负责打印与 exit code。CLI 主动 deadline 覆盖 fetch 和响应体，Beat 默认通过 30s、再生 920s、恢复 GET 10s；其他默认值未变；超时不代表服务器回滚。
 
 ### 遥测账本
 
-LlmTelemetry 公开 stepId、attemptId、model、ok、latencyMs、可选 token/finishReason/error，以及 promptChars、promptHash、systemHash。
+LlmTelemetry 公开可选 requestId、stepId、attemptId、model、ok、latencyMs、可选 token/finishReason/error，以及 promptChars、promptHash、systemHash。
 
 实现语义：
 
 - callLlm 无论成功或失败都调用 recordTelemetry。
-- 账本是容量 1000 的进程内环形缓冲，按 workId 查询。
-- advance 开始前记 telemetryCursor，结束后只把该 cursor 之后且属于本作品的记录内联到响应。
-- GET /api/works/:id/telemetry 与 CLI logs 返回本进程仍保留的全部该作品记录。
+- LLM 与命令摘要分别保留全局最近 1000 条，按 workId 及可选 requestId/attemptId 过滤。
+- HTTP 请求以 AsyncLocalStorage 收集本次记录，不依赖全局窗口 cursor；淘汰或同作品并发不污染内联 telemetry。
+- GET /api/works/:id/telemetry 与 CLI logs 返回 telemetry、commands、window；窗口含 processInstanceId、容量及截断信息，重启清空不表示从未执行。
 - promptHash 标识本次 user prompt；systemHash 是对应步骤 SKILL.md 内容的 12 位 hash。
 - 不记录 key、素材、完整 prompt 或完整 output。
 
-server stdout 的 llm.error 另含 textChars、最多 200 字符的 textTail 和最多 500 字符的 causeMessage，用于判断截断或 Zod/JSON 失败；它们不进入查询账本。
+server stdout 的 llm.error 只含安全分类、长度、tokens、finishReason、hash 与关联 ID；不再输出 textTail、causeMessage 或供应商原始 message。
 
 ### 失败分类
 
 | 观测 | 首要判断 | 下一步 |
 |---|---|---|
 | finishReason=length 且 outputTokens 撞上限 | 输出被截断，JSON 不完整 | 收紧 prompt 篇幅或评估该步骤 token 上限 |
-| finishReason=stop 但 ok=false | 输出结束但未通过解析/schema | 用 attemptId 查 server 的 llm.error causeMessage |
+| finishReason=stop 但 ok=false | 输出结束但未通过解析/schema | 用 requestId/attemptId 查安全分类与输出长度 |
 | llm-timeout | provider 单次调用超时 | 按 retryable 手动 advance，并检查 wiki 016 的 timeout |
 | network-error | CLI 请求先结束或 server 不可达 | 区分 CLI timeout 与 server LLM timeout |
 
@@ -86,7 +87,7 @@ server stdout 的 llm.error 另含 textChars、最多 200 字符的 textTail 和
 
 ### Smoke 探针
 
-smoke 执行 create → advance（caption + creative）→ select 首个方向 → advance（outline）→ approve outline → advance（setting）→ get setting → 修改总览并 approve-setting → get final，核对 setting-approved 与修改内容。成功后 stdout 给出 steps 与 final，stderr 报进度；HTTP 200 的 failed outcome 同样停止探针，失败时不会返回部分 steps，应据 stderr 用单条命令和 logs 检查已有状态。
+smoke 执行 config → create → caption/creative → select → outline/通过 → setting/编辑并通过 → beat#1/编辑并通过 → get final，核对 beat-approved、最终编辑和无 prose。成功 stdout 给出 steps/final；失败 stderr 保留部分 steps、运行模式及可用诊断，exit 非零。HTTP 200 failed 同样停止，不自动重跑模型。
 
 ## 代码落点
 
@@ -99,18 +100,34 @@ smoke 执行 create → advance（caption + creative）→ select 首个方向 �
 
 ## 测试与验证
 
-CLI 测试以注入 fetch 覆盖 REST 映射、自动回填版本、首方向缺省、smoke、logs 与 timeout。Server 路由测试目前只锁定 fake advance 的空 telemetry、按作品查询和 404；尚未直接断言 callLlm 成败记录或 1000 条淘汰边界。
+CLI 测试以注入 fetch 覆盖 REST 映射、自动回填版本、首方向缺省、smoke、logs 与 timeout。#5 增加真实 CLI 子进程与 loopback fixture 集成、请求精确关联、1001 条淘汰与重启窗口测试，以及共享 callLlm 脱敏回归。
 
 真实探针曾捕获 outline 在 8000 output tokens 以 length 截断，以及 finishReason=stop 但 schema 失败。前者促使 outline 上限升至 16000 并收紧 prompt；后者促使保留 causeMessage/textTail。复测只证明已缓解该故障，不代表所有 provider 都可靠；当前验证见 [wiki 016](./016-model-runtime-provider-config.md)。
 
 ## 边界与非目标
 
 - telemetry 与作品不持久化；账本最多 1000 条，重启或淘汰后不可查。
-- smoke 自动选首方向并通过大纲、修改并通过设定，只验证链路，不代表人工质量验收。
+- smoke 自动选首方向并通过大纲、修改并通过设定和章纲，只验证链路，不代表人工质量验收。
 - advance 是同步长请求；没有后台 job、SSE、Web telemetry 或跨进程聚合。
 - provider、credential、Base URL、wire protocol 和 timeout 默认值归 wiki 016。
 
 ## 上下文演进
+
+### 2026-09-08 — Beat 命令和安全请求诊断落地
+
+- **触发证据**：#5 CLI 集成通过；共享错误泄漏与跨请求归属风险由定向测试覆盖。
+- **原假设**：cursor 账本足够，原始错误尾部有助排障，smoke 止于 Setting。
+- **决定**：改用请求局部收集及安全分类，增加 Beat 文件命令、结构化恢复与窗口；smoke 止于 Beat 通过。
+- **影响**：运行方式同步 drive skill；字段约束见 schema，Beat 语义见 Wiki 005。
+- **上下文处理**：preserve 下方历史失败及设计记录；replace 当前操作说明。历史 textTail/causeMessage 不再是可用能力。
+
+### 2026-09-08 — 收录章纲的 Agent 观测改进设计
+
+- **触发证据**：作者要求从 Agent 视角检查返回信息；复审发现模型成功不等于条件写入成功，同作品 cursor 也不能准确关联并发请求，原始 text/cause 日志存在风险。
+- **原假设**：现有 LLM 遥测、时间窗口与 stdout 原文已足够解释一次操作。
+- **决定**：后续 #5 以 requestId/attemptIds 贯通命令和模型，使用安全错误分类、精确归属与有界诊断窗口；HOW 见 [Wiki 005](./005-beat-generation-review.md)，字段见 [schema](../schema.md#agent-可观测协议)。
+- **影响**：计划扩展现有 logs／CLI／共享 helper，运行 skill 在代码验证后更新。当前 raw textTail/causeMessage 及 cursor 路径仍未修改，不把方案安全要求冒充已完成修复。
+- **上下文处理**：preserve outline 截断实证、当前可用操作和原始排障理由；增加 planned 后续入口。代码落地后再 replace 受影响的现行 HOW。
 
 ### 2026-09-05 — 完整设定命令与 smoke 新终点
 

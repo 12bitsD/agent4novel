@@ -116,7 +116,7 @@ describe('Setting Pipeline integration', () => {
     const consumer = fakeArtifactStep('future-consumer', 'consumed')
     const withConsumer = new Pipeline({
       store, steps: new Map([...steps, ['future-consumer', consumer.step]]),
-      definition: [...definition, { stepId: 'future-consumer', outputKind: 'prose', consumes: ['setting'], gateAfter: { kind: 'prose' } }],
+      definition: [...definition, { stepId: 'future-consumer', outputKind: 'prose', chapter: 1, consumes: ['setting'], gateAfter: { kind: 'prose', chapter: 1 } }],
       resolveConfig: () => ({}),
     })
     expect((await withConsumer.advance(work.id)).kind).toBe('awaiting-approval')

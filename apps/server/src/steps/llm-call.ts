@@ -6,7 +6,8 @@ import type { AgentConfig } from '@agent4novel/contracts'
 import type { z } from 'zod'
 import { KnownError } from '../errors.js'
 import { modelRuntime } from './llm.js'
-import { recordTelemetry } from './telemetry.js'
+import { recordTelemetry, currentRequest } from './telemetry.js'
+import { safeLog } from '../safe-log.js'
 
 // 提示词以文件维护(ADR-0002),各 step 一个目录,此处共享 loader,模块级缓存
 const skillCache = new Map<string, string>()
@@ -26,6 +27,20 @@ export function truncateSeed(seed: string): string {
 
 function hash12(text: string): string {
   return createHash('sha256').update(text).digest('hex').slice(0, 12)
+}
+
+const safeFinish = (value: unknown) => typeof value === 'string' && ['stop', 'length', 'content-filter', 'tool-calls', 'error', 'other', 'unknown'].includes(value) ? value : 'unknown'
+const safeTokens = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined
+function classify(error: unknown): string {
+  const e = error as { name?: string; finishReason?: unknown; code?: unknown; data?: { error?: { code?: unknown } } }
+  const name = typeof e?.name === 'string' ? e.name : ''
+  if (name === 'TimeoutError' || name === 'AbortError') return 'timeout'
+  if (e?.code === 'llm-config-invalid' || (error instanceof KnownError && !error.retryable && error.code === 'llm-unavailable')) return 'configuration'
+  if (e?.data?.error?.code === 'context_length_exceeded' || e?.data?.error?.code === 'max_context_length') return 'context-limit'
+  if (e?.finishReason === 'length') return 'output-truncated'
+  if (name.includes('NoObjectGeneratedError') || name === 'AI_TypeValidationError' || name === 'ZodError') return 'output-schema'
+  if (name === 'TypeError' || name === 'AI_APICallError' || name === 'AI_RetryError') return 'network'
+  return 'unknown'
 }
 
 // LLM 调用小帮手(#3c 决策 15/16):generateObject + zod + token 上限 + 超时;类型化错误。
@@ -49,7 +64,8 @@ export async function callLlm<T>(args: {
   const base = {
     stepId: args.stepId,
     attemptId: args.attemptId,
-    model,
+    model: /^(deepseek:[a-zA-Z0-9_.-]{1,96}|longcat:LongCat-2\.0)$/.test(model) ? model : 'unrecognized-model',
+    ...(currentRequest() ? { requestId: currentRequest()!.requestId } : {}),
     promptChars: args.prompt.length,
     promptHash: hash12(args.prompt),
     systemHash: hash12(args.system),
@@ -64,20 +80,21 @@ export async function callLlm<T>(args: {
       ...(args.maxRetries !== undefined ? { maxRetries: args.maxRetries } : {}),
       abortSignal: AbortSignal.timeout(modelRuntime.requestTimeoutMs),
     })
+    if (finishReason === 'length') throw Object.assign(new Error('output truncated'), { name: 'AI_NoObjectGeneratedError', finishReason, usage })
+    const validated = args.schema.parse(object)
     const telemetry = {
       ...base,
       ok: true as const,
       latencyMs: Date.now() - started,
-      inputTokens: usage?.inputTokens,
-      outputTokens: usage?.outputTokens,
-      finishReason,
+      inputTokens: safeTokens(usage?.inputTokens),
+      outputTokens: safeTokens(usage?.outputTokens),
+      finishReason: safeFinish(finishReason),
     }
     recordTelemetry(args.workId, telemetry)
-    console.log(JSON.stringify({ event: 'llm.call', ...telemetry }))
-    return object
+    safeLog({ event: 'llm.call', ...telemetry })
+    return validated
   } catch (err) {
-    // 诊断字段(#14 排查):NoObjectGeneratedError 自带 finishReason/usage/text,
-    // 只记 text 尾片段(截断假设的证据在结尾),不落全文
+    // Provider text, nested causes, and arbitrary messages are never public diagnostics.
     const diag = err as {
       finishReason?: string
       usage?: { outputTokens?: number }
@@ -88,23 +105,16 @@ export async function callLlm<T>(args: {
       ...base,
       ok: false as const,
       latencyMs: Date.now() - started,
-      error: err instanceof Error ? err.name : String(err),
-      outputTokens: diag.usage?.outputTokens,
-      finishReason: diag.finishReason,
+      error: classify(err),
+      outputTokens: safeTokens(diag?.usage?.outputTokens),
+      finishReason: safeFinish(diag?.finishReason),
     }
     recordTelemetry(args.workId, telemetry)
-    console.log(
-      JSON.stringify({
+    safeLog({
         event: 'llm.error',
         ...telemetry,
-        textChars: diag.text?.length,
-        textTail: diag.text?.slice(-200),
-        // cause 链是 finishReason=stop 却校验失败时的关键证据(zod issues / JSON parse 位置)
-        causeName: diag.cause?.name,
-        causeMessage: diag.cause?.message.slice(0, 500),
-      }),
-    )
-    if (err instanceof KnownError) throw err
+        textChars: typeof diag?.text === 'string' ? diag.text.length : undefined,
+      })
     const name = err instanceof Error ? err.name : ''
     if (name === 'TimeoutError' || name === 'AbortError') {
       throw new KnownError('llm-timeout', 'llm request timed out', {
@@ -113,14 +123,14 @@ export async function callLlm<T>(args: {
       })
     }
     // generateObject 的 schema 校验失败(AI SDK 抛 NoObjectGeneratedError,v7 实际名为 AI_ 前缀)→ 模型输出非法
-    if (name.includes('NoObjectGeneratedError') || name === 'AI_TypeValidationError') {
+    if (name.includes('NoObjectGeneratedError') || name === 'AI_TypeValidationError' || name === 'ZodError') {
       throw new KnownError('llm-invalid-output', 'llm output failed schema validation', {
         retryable: true,
         attemptId: args.attemptId,
       })
     }
-    throw new KnownError('llm-unavailable', err instanceof Error ? err.message : String(err), {
-      retryable: true,
+    throw new KnownError('llm-unavailable', 'llm request unavailable', {
+      retryable: err instanceof KnownError ? err.retryable : true,
       attemptId: args.attemptId,
     })
   }

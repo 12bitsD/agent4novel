@@ -66,6 +66,8 @@ export const workflowStates = [
   'outline-approved',
   'awaiting-setting-review',
   'setting-approved',
+  'awaiting-beat-review',
+  'beat-approved',
   'failed',
 ] as const
 export type WorkflowState = (typeof workflowStates)[number]
