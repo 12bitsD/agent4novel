@@ -8,7 +8,7 @@ agent4novel 的领域数据模型。代码英文 id ↔ 领域中文词（见 [C
 
 | 节点（kind） | 产物内容 | 形状 |
 |---|---|---|
-| `caption` | 提炼稿（#3c）：`{inputStage（脑洞/设定/主线/模板）, summary, elements:[{kind,content}], gaps[]}`；理解层产物，落库即 approved，不设关卡 | 每作品一份 |
+| `caption` | 提炼稿（#3c）：`{inputStage（脑洞/设定/主线/模板）, summary, elements:[{kind,content}], gaps[]}`；理解素材后的开发判断与提案，落库即 approved，不设关卡 | 每作品一份 |
 | `creative` | 创意稿（#3c）：`{directions:[方向包 ×N]}`，方向包 = `directionId + title + hook + tags[] + synopsis + characters[] + setting[] + payoffs[] + outline[]`（全 hint 级）；N=directionCount（默认 2，严格 1~3）；选定时落**单方向**新版本 | 每作品一份 |
 | `outline` | 大纲（#4，两层，与章节解耦）：`{arcs:[{arcId, title, conflict, development, resolution, segments:[{segmentId, title, summary, outcome}]}]}`；弧线 3~8、每弧剧情点 2~8；`arcId`/`segmentId` 由 server 注入；章数不在本层（归 #5） | 每作品一份 |
 | `setting` | 完整设定（#13）：`{overview, world[], characters[], factions[], relationships[], extensions[]}`；固定栏目通用卡片 + 动态补充栏目，具体规则见下方 | 每作品一份 |
@@ -30,6 +30,18 @@ Work = {
   createdAt: string
 }
 ```
+
+### AgentConfig（Agent 配置）
+
+`agentConfigSchema` 保留既有 model、systemPrompt、skills、tools、directionCount，并加入可选 `thinking: "enabled" | "disabled"`、`temperature: number`（0–1）、`topP: number`（大于 0 且不超过 1）。`generationParametersSchema` 对这三项采用 strict 校验；省略项由 ModelRuntime 解析，provider 支持范围和默认值以 [Wiki 016](./wiki/016-model-runtime-provider-config.md) 为准。没有新增公开的作品配置编辑 UI/API。
+
+`LlmTelemetry.generation?` 使用相同 schema，记录本次已解析的生成参数。它是安全诊断，不含凭据或模型正文。
+
+### 单节点实验协议
+
+`stepExperimentRequestSchema` 是本地 CLI 与独立 worker 的协议，不是作品 REST 写入接口。请求为 `{ stepId, input: { seed, upstream?, chapter?, regeneration? }, systemPrompt?, config? }`；节点限 caption/creative/outline/setting/beat。Beat 必须 chapter=1，其他节点不接受 chapter 或 regeneration；下游仍按生产 Step 的输入 schema 与消费守卫校验。
+
+实验 config 只接受 model、directionCount 及三项生成参数，拒绝未知字段；SP 必须非空且最多 100000 字符，seed 受共享素材预算限制。成功结果为 `{ kind: "succeeded", runId, stepId, executionMode: "live", model, content, telemetry }`；失败以 `kind: "failed"`、code、retryable 替代 content，公共响应不含模型 raw 文本。可执行定义见 [step-experiment.ts](../packages/contracts/src/step-experiment.ts)，命令与文件限制见 [Wiki 014](./wiki/014-agent-cli-telemetry.md)。
 
 ### Artifact（产物）
 

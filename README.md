@@ -51,6 +51,8 @@ The server loads `.env.local` at startup and Git ignores it; environment variabl
 
 Credentials, base URLs, and provider adapters remain server-only. `Work.config.model` is an internal per-work override seam; there is no public UI or API for changing it yet. The current LongCat adapter targets its documented Chat Completions surface, not blanket compatibility with every OpenAI protocol such as Responses. See [wiki 016](./docs/wiki/016-model-runtime-provider-config.md) for the configuration contract, safety rules, and verified cases.
 
+LongCat defaults to thinking disabled, temperature `0.9`, and top-p `0.95`. Single-step experiments can override these through a config file or CLI flags; see [generation parameters](./docs/wiki/016-model-runtime-provider-config.md#生成参数与单节点覆盖).
+
 ### CLI (for scripts and agents)
 
 Generation and review are also drivable from the command line — stdout is always pure JSON:
@@ -66,6 +68,18 @@ Generation and review are also drivable from the command line — stdout is alwa
 
 Beat CLI also supports `get <workId> --kind beat --chapter 1`, `regenerate-beat <workId> --file request.json`, and `approve-beat <workId> --file request.json`. Files require `chapter: 1`, `expectedArtifactId`, `expectedHeadVersion`, and complete `content`; regeneration additionally requires `instructions` (which may be empty). It preserves the reviewed baseline and never automatically resubmits an uncertain write. See [Wiki 005](./docs/wiki/005-beat-generation-review.md).
 
+Run one production step with supplied inputs or a custom system prompt:
+
+```bash
+./apps/cli/bin/a4n run-step caption --seed-file seed.txt \
+  --system-prompt-file caption-sp.md --thinking off --temperature 0.9 --top-p 0.95
+./apps/cli/bin/a4n run-step setting --input-file setting-input.json --config-file generation.json
+```
+
+`run-step` supports `caption`, `creative`, `outline`, `setting`, and `beat` (chapter 1). It requires the installed full monorepo and a configured live provider, starts a local server worker, and needs no running HTTP server. It does not create or update a work. Choose exactly one of `--seed-file` and `--input-file`; downstream steps need JSON with `seed` and the required upstream `content`. A custom SP replaces only the system prompt; omitting it uses the production prompt. `--top-k` is explicitly unsupported.
+
+Success returns schema-validated `content` and safe `telemetry` as JSON; failures write a JSON error to stderr and exit 1. Raw model output and reasoning are not returned. The worker's default total deadline is 920 seconds, overridable with `--timeout-ms` or `A4N_CLI_TIMEOUT_MS`. See [single-step inputs, limits, and output](./docs/wiki/014-agent-cli-telemetry.md#单节点实验-run-step).
+
 Agents opening this repo get the full recipe via the bundled skill `.claude/skills/agent4novel-drive`.
 
 ## How it works
@@ -75,7 +89,7 @@ Agents opening this repo get the full recipe via the bundled skill `.claude/skil
 </p>
 <p align="center"><sub>Fig. 1 · Current five-step chain ends at beat-approved; dashed steps are future prose and chapter continuation</sub></p>
 
-The internal caption is auto-approved. Select a creative direction, approve the outline and setting, then edit or regenerate the first chapter’s Beat and approve it. The endpoint is `beat-approved`; approval does not generate prose or later chapters.
+The internal caption interprets the source material, makes story-development judgments, and proposes concrete plot ideas, distinguishing source content from inferences and suggestions. It is auto-approved. Select a creative direction, approve the outline and setting, then edit or regenerate the first chapter’s Beat and approve it. The endpoint is `beat-approved`; approval does not generate prose or later chapters.
 
 A Beat contains a title, goal, ordered writing-plan cards, and ending. Pending edits and regeneration instructions stay in page memory; leaving asks before discarding them. Whole-plan regeneration consumes those edits and instructions, creating a new pending version. Approval stores the final content on the same ID/version and makes it read-only. Version comparison (#20) and post-approval chapter regeneration (#21) remain separate work.
 

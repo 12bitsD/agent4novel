@@ -4,7 +4,7 @@ import { runStep, settingContentSchema } from '@agent4novel/contracts'
 const mocks = vi.hoisted(() => ({ generateObject: vi.fn() }))
 vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
 vi.mock('../src/steps/llm.js', () => ({ modelRuntime: {
-  defaultModelId: 'deepseek:deepseek-chat', requestTimeoutMs: 120_000, languageModel: () => 'mock-model',
+  defaultModelId: 'deepseek:deepseek-chat', requestTimeoutMs: 120_000, generationSettings: () => ({ parameters: {}, options: {} }), languageModel: () => 'mock-model',
 } }))
 
 import { createSettingStep } from '../src/steps/setting-step.js'

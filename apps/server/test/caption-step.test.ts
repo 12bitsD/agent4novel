@@ -10,7 +10,7 @@ vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
 vi.mock('../src/steps/llm.js', () => ({
   modelRuntime: {
     defaultModelId: 'deepseek:deepseek-chat',
-    requestTimeoutMs: 120_000,
+    requestTimeoutMs: 120_000, generationSettings: () => ({ parameters: {}, options: {} }),
     languageModel: mocks.languageModel,
   },
 }))
@@ -66,7 +66,7 @@ describe('caption RealStep', () => {
       abortSignal: unknown
     }
     expect(arg.model).toBe('mock-model')
-    expect(arg.system).toContain('提炼')
+    expect(arg.system).toContain('你是故事开发编辑。')
     expect(arg.prompt).toContain('一个都市异能校园故事')
     expect(arg.abortSignal).toBeDefined()
   })

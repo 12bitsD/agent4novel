@@ -16,7 +16,7 @@ function buildPrompt(input: { seed: string; caption: CaptionContent }, count: nu
   ].join('\n\n')
 }
 
-export function createCreativeStep(): ArtifactStep {
+export function createCreativeStep(options: { systemPrompt?: string } = {}): ArtifactStep {
   return {
     id: 'creative',
     inputSchema: creativeStepInputSchema,
@@ -30,7 +30,7 @@ export function createCreativeStep(): ArtifactStep {
       )
       const raw = await callLlm({
         schema: creativeLlmOutputSchema,
-        system: loadSkill('creative'),
+        system: options.systemPrompt ?? loadSkill('creative'),
         prompt: buildPrompt({ seed: input.seed, caption }, count),
         config,
         workId: input.workId,

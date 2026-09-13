@@ -51,6 +51,8 @@ pnpm dev
 
 凭据、base URL 与 provider adapter 只存在于 server。`Work.config.model` 是作品级内部覆盖接缝，目前没有公开 UI/API。当前 LongCat adapter 只对接其文档明确支持的 Chat Completions，不代表兼容 Responses 等全部 OpenAI 协议。配置契约、安全规则与实测案例统一见 [wiki 016](./docs/wiki/016-model-runtime-provider-config.md)。
 
+LongCat 默认关闭 thinking，temperature 为 `0.9`，top-p 为 `0.95`。单节点实验可通过配置文件或 CLI 参数覆盖，规则见 [生成参数](./docs/wiki/016-model-runtime-provider-config.md#生成参数与单节点覆盖)。
+
 ### CLI（供脚本和 Agent 使用）
 
 生成与把关也能从命令行驱动——stdout 恒为纯 JSON：
@@ -66,6 +68,18 @@ pnpm dev
 
 章纲 CLI 还支持 `get <workId> --kind beat --chapter 1`、`regenerate-beat <workId> --file request.json`、`approve-beat <workId> --file request.json`。文件要求 `chapter: 1`、`expectedArtifactId`、`expectedHeadVersion` 和整份 `content`；再生额外要求 `instructions`（可为空）。命令保留查看时的基线，不自动重发结果未知的写请求。协议见 [Wiki 005](./docs/wiki/005-beat-generation-review.md)。
 
+提供输入或自定义 system prompt，独立运行一个生产节点：
+
+```bash
+./apps/cli/bin/a4n run-step caption --seed-file seed.txt \
+  --system-prompt-file caption-sp.md --thinking off --temperature 0.9 --top-p 0.95
+./apps/cli/bin/a4n run-step setting --input-file setting-input.json --config-file generation.json
+```
+
+`run-step` 支持 `caption`、`creative`、`outline`、`setting` 和 `beat`（第一章）。它要求已安装依赖的完整 monorepo 和可用的真实 provider，启动本地 server worker，无需运行 HTTP server，也不创建或修改作品。`--seed-file` 与 `--input-file` 必须二选一；下游节点需要含 `seed` 和必需上游 `content` 的 JSON。自定义 SP 只替换 system prompt，省略时使用生产提示词。明确不支持 `--top-k`。
+
+成功时以 JSON 返回通过 schema 校验的 `content` 和安全 `telemetry`；失败向 stderr 写 JSON 错误并 exit 1。不返回 raw 模型输出或推理内容。worker 总等待默认 920 秒，可由 `--timeout-ms` 或 `A4N_CLI_TIMEOUT_MS` 覆盖。输入格式、限制和结果边界见 [单节点运行](./docs/wiki/014-agent-cli-telemetry.md#单节点实验-run-step)。
+
 打开本仓库的 Agent 可通过内置 skill `.claude/skills/agent4novel-drive` 获得完整用法。
 
 ## 它是怎么工作的
@@ -75,7 +89,7 @@ pnpm dev
 </p>
 <p align="center"><sub>图 1 · 当前五步链路结束于 beat-approved；虚线部分是后续正文与章节推进</sub></p>
 
-内部提炼稿自动通过。先选定创意方向，通过大纲和设定，再编辑或重新生成第一章章纲，最后通过。当前终点是 `beat-approved`；通过不会生成正文或后续章节。
+内部提炼稿在理解素材后作故事开发判断并给出具体剧情提案，区分原有内容、推测与建议，自动通过。先选定创意方向，通过大纲和设定，再编辑或重新生成第一章章纲，最后通过。当前终点是 `beat-approved`；通过不会生成正文或后续章节。
 
 章纲包含章标题、本章目标、有序写作安排、章末落点与承接。修改与再生意见只保存在本页，离开前提示丢弃；整份再生消费当前编辑和意见，成功后产生新版 pending。通过将最终内容存入同一 ID/版本并设为只读。版本比较（#20）、通过后的章节重生（#21）仍是独立后续需求。
 

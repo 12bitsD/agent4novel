@@ -170,10 +170,6 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
     : null
 
   const state = generating ? 'generating' : (work?.workflowState ?? 'ready-to-generate')
-  const showPoster =
-    work?.workflowState === 'awaiting-selection' &&
-    creative !== null &&
-    creativeArtifact !== undefined
   const showOutline =
     (work?.workflowState === 'awaiting-outline-review' || work?.workflowState === 'outline-approved') &&
     outline !== null &&
@@ -181,6 +177,13 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
 
   const showSetting = setting !== null && (work?.workflowState === 'awaiting-setting-review' || work?.workflowState === 'setting-approved')
   const showBeat = beat !== null && (work?.workflowState === 'awaiting-beat-review' || work?.workflowState === 'beat-approved')
+  // 生成间隙保留已选定的创意稿；动作权限仍由服务器读模型决定。
+  const showPoster = creative !== null && creativeArtifact !== undefined && (
+    work?.workflowState === 'awaiting-selection' || (
+      creativeArtifact.humanStatus === 'approved' && !showOutline && !showSetting && !showBeat &&
+      (work?.workflowState === 'ready-to-generate' || work?.workflowState === 'failed')
+    )
+  )
   const nextStep = generating ? generationStep : work?.nextStepId
   const stepLabel = nextStep === 'beat' ? '第一章章纲' : nextStep === 'setting' ? '设定' : nextStep === 'outline' ? '大纲' : '创意稿'
 
@@ -214,11 +217,12 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
 
       {showPoster && creativeArtifact && (
         <CreativePoster
+          key={`${creativeArtifact.id}:${creativeArtifact.version}`}
           workId={workId}
           content={creative as CreativeContent}
           headVersion={creativeArtifact.version}
           caption={caption}
-          readonly={false}
+          readonly={generating || work?.workflowState !== 'awaiting-selection' || !work.allowedActions.includes('select')}
           onChanged={() => void refresh()}
           onSelected={() => void continueAfterApproval()}
         />

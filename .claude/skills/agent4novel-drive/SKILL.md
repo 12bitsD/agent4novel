@@ -1,6 +1,6 @@
 ---
 name: agent4novel-drive
-description: 用命令行启动并驱动 agent4novel 全链路(建作品/推进/选定/保存/通过)、安全配置模型、准备测试 case、查 LLM 遥测、读前端页面。测试链路、分析产物质量、切换 DeepSeek/LongCat 或排查 LLM 失败时都应使用。
+description: 用命令行驱动 agent4novel 创作链路、独立运行节点和对照 SP，安全配置模型与生成参数，准备测试 case、查 LLM 遥测、读前端页面。测试链路、分析产物质量或排查 LLM 失败时使用。
 ---
 
 # 驱动 agent4novel
@@ -19,6 +19,17 @@ pnpm dev                         # server :8787 + web :5173
 ```
 
 Live 模式会把生成所需的素材和上游产物发送给所选远程 provider。
+
+## 独立运行节点与对照 SP
+
+对照单个节点时，先读 [Wiki 014 单节点实验](../../../docs/wiki/014-agent-cli-telemetry.md#单节点实验-run-step)，按节点补齐 upstream content。完整 monorepo 安装依赖后可直接运行，无需启动 HTTP server；worker 使用真实 provider，不创建或修改作品。
+
+```bash
+./apps/cli/bin/a4n run-step caption --seed-file seed.txt --system-prompt-file caption-sp.md
+./apps/cli/bin/a4n run-step setting --input-file setting-input.json --config-file generation.json
+```
+
+修改 thinking、temperature、topP、模型或等待时间前读 [Wiki 016](../../../docs/wiki/016-model-runtime-provider-config.md#生成参数与单节点覆盖)。`--thinking on|off`、`--temperature`、`--top-p` 逐字段覆盖配置文件，`--top-k` 明确不支持。固定输入对照 SP 时，保存返回的 content、telemetry.generation、promptHash 与 systemHash；成功 content 已过生产 schema，失败按 stderr JSON 与非零退出处理。文件限制、必需上游、timeout 和安全输出以 Wiki 014/016 为准。
 
 ## CLI 命令
 
@@ -55,10 +66,10 @@ Beat 文件是 `{ chapter: 1, expectedArtifactId, expectedHeadVersion, content }
 
 ```
 { requestId?, stepId, ok, latencyMs, inputTokens, outputTokens, finishReason, error,
-  promptHash, systemHash, attemptId }
+  generation?, promptHash, systemHash, attemptId }
 ```
 
-- `systemHash` 是 SKILL.md 内容 hash:prompt 改没改,对 hash 就知道
+- `systemHash` 是本次实际 SP 内容的 hash：默认来自生产 SKILL.md，自定义 SP 时来自传入内容；generation 记录实际解析的公开生成参数。
 - 失败排查:`logs <workId>` 回看当前窗口;`finishReason=length` = 输出被 token 上限截断;`finishReason=stop` 但 `ok=false` = 内容没过 schema；只暴露安全分类、长度与字段路径，不输出原始 text/cause/provider message
 - requestId / attemptId 可串联 `llm.call`、`llm.error`、命令摘要和响应。
 - 日志响应包含 `telemetry`、`commands`、`window`；LLM 与命令各保留全局最近 1000 条，过滤不会扩大窗口。`processInstanceId` 随进程重启变化；截断和空结果都不是未执行证明。

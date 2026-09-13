@@ -13,7 +13,7 @@ function buildPrompt(input: { seed: string; creative: CreativeContent }): string
   ].join('\n\n')
 }
 
-export function createOutlineStep(): ArtifactStep {
+export function createOutlineStep(options: { systemPrompt?: string } = {}): ArtifactStep {
   return {
     id: 'outline',
     inputSchema: outlineStepInputSchema,
@@ -27,7 +27,7 @@ export function createOutlineStep(): ArtifactStep {
       )
       const raw = await callLlm({
         schema: outlineLlmOutputSchema,
-        system: loadSkill('outline'),
+        system: options.systemPrompt ?? loadSkill('outline'),
         prompt: buildPrompt({ seed: input.seed, creative }),
         config,
         workId: input.workId,

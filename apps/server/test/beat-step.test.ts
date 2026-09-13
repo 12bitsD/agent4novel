@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { beatContentSchema, runStep, settingContentSchema } from '@agent4novel/contracts'
 const mocks = vi.hoisted(() => ({ generateObject: vi.fn() }))
 vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
-vi.mock('../src/steps/llm.js', () => ({ modelRuntime: { defaultModelId: 'deepseek:deepseek-chat', requestTimeoutMs: 120_000, languageModel: () => 'mock-model' } }))
+vi.mock('../src/steps/llm.js', () => ({ modelRuntime: { defaultModelId: 'deepseek:deepseek-chat', requestTimeoutMs: 120_000, generationSettings: () => ({ parameters: {}, options: {} }), languageModel: () => 'mock-model' } }))
 import { createBeatStep } from '../src/steps/beat-step.js'
 import { resetTelemetry, telemetryFor } from '../src/steps/telemetry.js'
 import { createFakeCaptionStep, createFakeCreativeStep, createFakeOutlineStep, createFakeSettingStep } from '../src/steps/fake-step.js'

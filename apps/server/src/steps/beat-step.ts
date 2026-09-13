@@ -6,13 +6,13 @@ import { assignBeatIds } from '../beat-content.js'
 import { callLlm, loadSkill } from './llm-call.js'
 import { beatStepInputSchema, beatStepOutputSchema } from './beat-io.js'
 
-export function createBeatStep(): ArtifactStep {
+export function createBeatStep(options: { systemPrompt?: string } = {}): ArtifactStep {
   return {
     id: 'beat', inputSchema: beatStepInputSchema, outputSchema: beatStepOutputSchema,
     async run(input, config) {
       const { upstream, regeneration } = beatStepInputSchema.parse(input)
       const mode = regeneration ? 'regenerate' : 'initial'
-      const system = loadSkill('beat')
+      const system = options.systemPrompt ?? loadSkill('beat')
       const prompt = [
         `模式：${mode}；当前章号：1`,
         `完整已通过大纲：\n${JSON.stringify(upstream.outline)}`,

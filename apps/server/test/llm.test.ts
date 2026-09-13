@@ -130,4 +130,36 @@ describe('ModelRuntime', () => {
     expect(result.object).toEqual({ ok: true })
     expect(fakeFetch).toHaveBeenCalledOnce()
   })
+  it('sends the LongCat story defaults and permits explicit thinking/sampling overrides', async () => {
+    const bodies: Record<string, unknown>[] = []
+    const runtime = createModelRuntime({ LONGCAT_API_KEY: 'synthetic-key' }, {
+      fetch: async (_input, init) => {
+        bodies.push(JSON.parse(String(init?.body)))
+        return new Response(JSON.stringify({ id: 'sampling-test', model: 'LongCat-2.0',
+          choices: [{ index: 0, message: { role: 'assistant', content: '{"ok":true}' }, finish_reason: 'stop' }],
+        }), { headers: { 'content-type': 'application/json' } })
+      },
+    })
+    for (const config of [{}, { thinking: 'enabled' as const, temperature: 0, topP: 1 }]) {
+      await generateObject({ model: runtime.languageModel(), schema: z.object({ ok: z.boolean() }),
+        prompt: 'Return JSON.', ...runtime.generationSettings(config).options })
+    }
+    expect(bodies[0]).toMatchObject({ thinking: { type: 'disabled' }, temperature: 0.9, top_p: 0.95 })
+    expect(bodies[1]).toMatchObject({ thinking: { type: 'enabled' }, temperature: 0, top_p: 1 })
+    expect(bodies[0]).not.toHaveProperty('top_k')
+  })
+
+  it('rejects invalid controls and keeps LongCat defaults out of other providers', () => {
+    const runtime = createModelRuntime({ LONGCAT_API_KEY: 'synthetic-key', DEEPSEEK_API_KEY: 'synthetic-key' })
+    expect(runtime.generationSettings({})).toEqual({ parameters: {}, options: {} })
+    expect(runtime.generationSettings({ model: DEFAULT_LONGCAT_MODEL_ID }).parameters)
+      .toEqual({ thinking: 'disabled', temperature: 0.9, topP: 0.95 })
+    expect(runtime.generationSettings({ temperature: 0.7, topP: 1 }).options)
+      .toEqual({ temperature: 0.7, topP: 1 })
+    for (const config of [{ temperature: -0.1 }, { temperature: 1.1 }, { temperature: NaN },
+      { temperature: Infinity }, { topP: 0 }, { topP: 1.1 }, { thinking: 'disabled' as const }]) {
+      expect(() => runtime.generationSettings(config)).toThrow(expect.objectContaining({ code: 'llm-unavailable', retryable: false }))
+    }
+  })
+
 })

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { generateObject } from 'ai'
 import { seedCharBudget } from '@agent4novel/contracts'
-import type { AgentConfig } from '@agent4novel/contracts'
+import type { AgentConfig, GenerationParameters } from '@agent4novel/contracts'
 import type { z } from 'zod'
 import { KnownError } from '../errors.js'
 import { modelRuntime } from './llm.js'
@@ -70,9 +70,14 @@ export async function callLlm<T>(args: {
     promptHash: hash12(args.prompt),
     systemHash: hash12(args.system),
   }
+  let generation: GenerationParameters | undefined
   try {
+    const languageModel = modelRuntime.languageModel(model)
+    const settings = modelRuntime.generationSettings(args.config)
+    generation = settings.parameters
     const { object, usage, finishReason } = await generateObject({
-      model: modelRuntime.languageModel(model),
+      model: languageModel,
+      ...settings.options,
       schema: args.schema,
       system: args.system,
       prompt: args.prompt,
@@ -84,6 +89,7 @@ export async function callLlm<T>(args: {
     const validated = args.schema.parse(object)
     const telemetry = {
       ...base,
+      ...(generation ? { generation } : {}),
       ok: true as const,
       latencyMs: Date.now() - started,
       inputTokens: safeTokens(usage?.inputTokens),
@@ -103,6 +109,7 @@ export async function callLlm<T>(args: {
     }
     const telemetry = {
       ...base,
+      ...(generation ? { generation } : {}),
       ok: false as const,
       latencyMs: Date.now() - started,
       error: classify(err),

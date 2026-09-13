@@ -5,7 +5,7 @@ import { assignSettingIds } from '../setting-content.js'
 import { callLlm, loadSkill, truncateSeed } from './llm-call.js'
 import { settingStepInputSchema, settingStepOutputSchema } from './setting-io.js'
 
-export function createSettingStep(): ArtifactStep {
+export function createSettingStep(options: { systemPrompt?: string } = {}): ArtifactStep {
   return {
     id: 'setting',
     inputSchema: settingStepInputSchema,
@@ -14,7 +14,7 @@ export function createSettingStep(): ArtifactStep {
       const { upstream } = settingStepInputSchema.parse(input)
       const draft = await callLlm({
         schema: settingDraftSchema,
-        system: loadSkill('setting'),
+        system: options.systemPrompt ?? loadSkill('setting'),
         prompt: [
           `作者原始素材:\n${truncateSeed(input.seed)}`,
           `素材提炼稿:\n${JSON.stringify(upstream.caption, null, 2)}`,

@@ -8,7 +8,7 @@ function buildPrompt(input: { seed: string }): string {
   return `作者原始素材:\n${truncateSeed(input.seed)}\n\n请输出提炼稿。`
 }
 
-export function createCaptionStep(): ArtifactStep {
+export function createCaptionStep(options: { systemPrompt?: string } = {}): ArtifactStep {
   return {
     id: 'caption',
     inputSchema: captionStepInputSchema,
@@ -16,7 +16,7 @@ export function createCaptionStep(): ArtifactStep {
     async run(input, config: AgentConfig) {
       const content = await callLlm({
         schema: captionStepOutputSchema.shape.content,
-        system: loadSkill('caption'),
+        system: options.systemPrompt ?? loadSkill('caption'),
         prompt: buildPrompt(input),
         config,
         workId: input.workId,
