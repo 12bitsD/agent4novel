@@ -9,7 +9,7 @@ vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
 vi.mock('../src/steps/llm.js', () => ({
   modelRuntime: {
     defaultModelId: 'deepseek:deepseek-chat',
-    requestTimeoutMs: 120_000,
+    requestTimeoutMs: 120_000, generationSettings: () => ({ parameters: {}, options: {} }),
     languageModel: mocks.languageModel,
   },
 }))

@@ -3,6 +3,7 @@ import { artifactKinds, beatLimits, diagnosticQuerySchema } from '@agent4novel/c
 import type { ArtifactKind } from '@agent4novel/contracts'
 import { CliError, createClient, parseCliTimeoutMs } from './client.js'
 import * as cmd from './commands.js'
+import { runLocalStep } from './local-step.js'
 
 // agent4novel CLI(#14):Agent 从命令行驱动全链路。stdout 只出 JSON;进度/错误走 stderr。
 // 用法:pnpm cli <command> [args] [--key value],server 地址 --url 或 A4N_BASE_URL(默认 http://localhost:8787)
@@ -11,6 +12,10 @@ const USAGE = `agent4novel cli — 命令:
   list                                  作品列表
   create --seed <text> | --seed-file <f> [--title <t>]
   get <workId> [--kind caption|creative|outline|setting|beat|prose] [--chapter 1]
+  run-step <node> --input-file <f> | --seed-file <f> [--system-prompt-file <sp>] [--config-file <f>]
+                                       独立运行 caption|creative|outline|setting|beat；本地 server worker，不写作品
+                                       [--thinking on|off] [--temperature 0..1] [--top-p 0..1（不含 0）]
+                                       参数覆盖 config-file 对应项；省略则沿用配置/模型运行时默认；不支持 --top-k
   advance <workId>                      推进流水线(同步长请求,默认等待 1820s)
   select <workId> [directionId]         选定创意方向(缺省取第一个)
   save-outline <workId> --file <f>      保存大纲草稿(f 为大纲 content JSON)
@@ -23,6 +28,7 @@ const USAGE = `agent4novel cli — 命令:
   smoke --seed <text> | --seed-file <f> [--title <t>]   一键全链路探针
 全局: --url <baseUrl>                  默认 $A4N_BASE_URL 或 http://localhost:8787
       --timeout-ms <milliseconds>       覆盖所有请求；普通 300000；advance 1820000；Beat 通过 30000，再生 920000，恢复 GET 10000
+run-step 不连接作品服务；不支持 --url；默认总等待 920000ms，支持 --timeout-ms。
 输出: stdout 恒为 JSON;错误时 stderr 输出 {code,message,...} 且 exit 1。
 advance 兼容 HTTP 200 的 kind:failed，必须检查 kind；smoke 遇 failed 必定非零退出。
 pending 表示等待作者，allowedActions 不等于作者授权。Beat 通过后只读，本期不生成正文。`
@@ -67,6 +73,10 @@ async function main(): Promise<void> {
 
   let result: unknown
   switch (command) {
+    case 'run-step':
+      if (pos.length !== 1) throw new CliError('run-step requires exactly one node', 'usage')
+      result = await runLocalStep(pos[0], flags, timeoutMs)
+      break
     case 'config':
       result = await client.getConfig()
       break

@@ -2,6 +2,8 @@ import { createDeepSeek } from '@ai-sdk/deepseek'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { createProviderRegistry } from 'ai'
 import type { LanguageModel } from 'ai'
+import { agentConfigSchema, generationParametersSchema } from '@agent4novel/contracts'
+import type { AgentConfig, GenerationParameters } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
 
 export const DEFAULT_DEEPSEEK_MODEL_ID = 'deepseek:deepseek-chat' as const
@@ -14,11 +16,22 @@ export class ModelConfigError extends Error {
   readonly code = 'llm-config-invalid'
 }
 
+export type GenerationSettings = {
+  parameters: GenerationParameters
+  options: Pick<GenerationParameters, 'temperature' | 'topP'> & {
+    providerOptions?: { longcat: { thinking: { type: 'enabled' | 'disabled' } } }
+  }
+}
+
+// Application trial profile for story creation, not vendor defaults or a measured optimum.
+const LONGCAT_STORY_PARAMETERS = { thinking: 'disabled', temperature: 0.9, topP: 0.95 } as const
+
 export type ModelRuntime = {
   readonly mode: 'demo' | 'live'
   readonly defaultModelId: SupportedModelId
   readonly requestTimeoutMs: number
   languageModel(modelOverride?: string): LanguageModel
+  generationSettings(config?: AgentConfig): GenerationSettings
 }
 
 const UNCONFIGURED_KEY = 'a4n-unconfigured-provider'
@@ -114,6 +127,27 @@ export function createModelRuntime(
     mode: configured(defaultModelId) ? 'live' : 'demo',
     defaultModelId,
     requestTimeoutMs: timeoutMs(env),
+    generationSettings(config: AgentConfig = {}) {
+      const parsed = agentConfigSchema.safeParse(config)
+      if (!parsed.success || 'topK' in config || 'top_k' in config) {
+        throw new KnownError('llm-unavailable', 'invalid or unsupported generation parameters', { retryable: false })
+      }
+      const selectedModel = parsed.data.model ?? defaultModelId
+      const isLongCat = selectedModel === DEFAULT_LONGCAT_MODEL_ID
+      if (parsed.data.thinking !== undefined && !isLongCat) {
+        throw new KnownError('llm-unavailable', 'thinking control requires LongCat-2.0', { retryable: false })
+      }
+      const overrides = generationParametersSchema.parse({
+        ...(parsed.data.thinking !== undefined ? { thinking: parsed.data.thinking } : {}),
+        ...(parsed.data.temperature !== undefined ? { temperature: parsed.data.temperature } : {}),
+        ...(parsed.data.topP !== undefined ? { topP: parsed.data.topP } : {}),
+      })
+      const parameters: GenerationParameters = { ...(isLongCat ? LONGCAT_STORY_PARAMETERS : {}), ...overrides }
+      const { thinking, ...sampling } = parameters
+      return { parameters, options: { ...sampling,
+        ...(thinking !== undefined ? { providerOptions: { longcat: { thinking: { type: thinking } } } } : {}),
+      } }
+    },
     languageModel(modelOverride?: string) {
       let modelId: SupportedModelId
       try {

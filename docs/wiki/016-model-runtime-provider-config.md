@@ -3,26 +3,26 @@ wiki_id: "016"
 ticket: 16
 ticket_state: done
 context_state: current
-summary: "ModelRuntime 统一 DeepSeek 与 LongCat 的模型选择、服务端凭据、Base URL、结构化输出和两层超时。"
-topics: ["model-runtime", "provider-config", "credentials", "base-url-security", "structured-output", "llm-timeouts"]
-code_paths: ["apps/server/src/index.ts", "apps/server/src/steps/llm.ts", "apps/server/src/steps/llm-call.ts", "apps/server/src/config/local-env.ts", "apps/server/src/start.ts", "apps/cli/src/client.ts", ".env.example"]
-symbols: ["ModelRuntime", "SupportedModelId", "ModelConfigError", "createModelRuntime", "modelRuntime", "callLlm", "DEFAULT_CLI_TIMEOUT_MS", "DEFAULT_ADVANCE_TIMEOUT_MS", "A4N_LLM_TIMEOUT_MS", "A4N_CLI_TIMEOUT_MS", "llm-timeout"]
+summary: "ModelRuntime 统一模型、凭据、结构化输出和超时；LongCat 默认关闭 thinking，并支持有界生成参数覆盖。"
+topics: ["model-runtime", "provider-config", "generation-parameters", "thinking", "credentials", "base-url-security", "structured-output", "llm-timeouts"]
+code_paths: ["apps/server/src/index.ts", "apps/server/src/steps/llm.ts", "apps/server/src/steps/llm-call.ts", "apps/server/src/config/local-env.ts", "apps/server/src/start.ts", "apps/server/src/step-lab-main.ts", "apps/cli/src/local-step.ts", "packages/contracts/src/step.ts", "apps/cli/src/client.ts", ".env.example"]
+symbols: ["ModelRuntime", "SupportedModelId", "ModelConfigError", "createModelRuntime", "modelRuntime", "generationSettings", "generationParametersSchema", "callLlm", "run-step", "DEFAULT_CLI_TIMEOUT_MS", "DEFAULT_ADVANCE_TIMEOUT_MS", "A4N_LLM_TIMEOUT_MS", "A4N_CLI_TIMEOUT_MS", "llm-timeout"]
 inherits: ["014"]
 changed_by: ["013", "005"]
-read_when: ["configure-model-provider", "add-model-provider", "debug-llm-runtime", "change-llm-timeout", "audit-credential-safety"]
-last_context_reviewed: "2026-09-08"
+read_when: ["configure-model-provider", "configure-generation-parameters", "run-isolated-step", "add-model-provider", "debug-llm-runtime", "change-llm-timeout", "audit-credential-safety"]
+last_context_reviewed: "2026-09-13"
 ---
 
 # 016 — 模型运行配置：统一多 Provider、凭据与超时
 
 ## Agent Context
 
-- **读取时机**：配置或新增 provider、切换模型、修改凭据/Base URL、排查结构化输出或 timeout、审计 live 数据边界时读取。
+- **读取时机**：配置或新增 provider、切换模型、调整 thinking/temperature/topP、运行独立节点、修改凭据/Base URL、排查结构化输出或 timeout 时读取。
 - **原始目的**：把散落且 DeepSeek-only 的运行时选择收敛到 ModelRuntime，使 Pipeline 与 RealStep 无需感知 provider。
-- **实际落地**：DeepSeek 与 LongCat 2.0 共用 registry；server 安全加载本地配置，统一校验 URL、模型、credential、单次 LLM timeout 和本地 Zod 边界。
+- **实际落地**：DeepSeek 与 LongCat 2.0 共用 registry；server 安全加载本地配置，统一校验 URL、模型、credential、单次 LLM timeout 和本地 Zod。generationSettings 统一生产与独立节点的生成参数；LongCat 默认 disabled/0.9/0.95，本轮接回验证状态见“测试与验证”。
 - **当前价值**：本文是 provider 配置、运行时行为、错误语义与验证状态的当前唯一 HOW。
 - **后续变化**：CLI／telemetry／smoke 仍由 [Wiki 014](./014-agent-cli-telemetry.md) 拥有；[Wiki 013](./013-setting-generation-review.md) 新增 Setting，显式禁用该步骤的 SDK 重试并记录新实测。[Wiki 005](./005-beat-generation-review.md) 增加 Beat 独立预算、零 SDK 重试和共享安全错误分类。本文 work ID 均为历史进程快照，不代表当前仍存活。
-- **代码入口**：[ModelRuntime](../../apps/server/src/steps/llm.ts)、[LLM call](../../apps/server/src/steps/llm-call.ts)、[local env loader](../../apps/server/src/config/local-env.ts)、[server assembly](../../apps/server/src/start.ts)、[CLI timeout](../../apps/cli/src/client.ts)。
+- **代码入口**：[ModelRuntime](../../apps/server/src/steps/llm.ts)、[LLM call](../../apps/server/src/steps/llm-call.ts)、[generation schema](../../packages/contracts/src/step.ts)、[local env loader](../../apps/server/src/config/local-env.ts)、[独立 worker](../../apps/server/src/step-lab-main.ts)、[CLI timeout](../../apps/cli/src/client.ts)。
 
 ## 设计目的
 
@@ -40,7 +40,7 @@ last_context_reviewed: "2026-09-08"
 
 ### 模块边界
 
-shell/CI 与 server 入口加载的 .env.local 进入 ModelRuntime，再由 registry 选择 DeepSeek 或 LongCat；Work.config.model 可做内部覆盖。入口先 loadLocalEnv 再动态 import，测试直接 import 不加载本地文件；Node 不覆盖已有环境变量，所以 shell/CI 优先。callLlm 统一处理 generateObject、AbortSignal、本地 Zod 与脱敏 telemetry，start.ts 按 mode 装配 RealStep 或 FakeStep。
+shell/CI 与 server 入口加载的 .env.local 进入 ModelRuntime，再由 registry 选择 DeepSeek 或 LongCat；Work.config.model 可做内部覆盖。入口先 loadLocalEnv 再动态 import，测试直接 import 不加载本地文件；Node 不覆盖已有环境变量，所以 shell/CI 优先。callLlm 统一处理 generateObject、生成参数、AbortSignal、本地 Zod 与脱敏 telemetry，start.ts 按 mode 装配 RealStep 或 FakeStep。run-step 使用 server 包的独立 worker 加载配置和生产 Step，不依赖常驻 HTTP server；调用方式见 [Wiki 014](./014-agent-cli-telemetry.md#单节点实验-run-step)。
 
 ### 配置契约
 
@@ -53,9 +53,9 @@ shell/CI 与 server 入口加载的 .env.local 进入 ModelRuntime，再由 regi
 | LONGCAT_BASE_URL | LongCat OpenAI-compatible base | https://api.longcat.chat/openai/v1 |
 | A4N_LLM_TIMEOUT_MS | server 单次 provider 调用上限 | 代码默认 120000；整数 1000..900000；.env.example 为 LongCat 建议值 300000 |
 | A4N_BASE_URL | CLI 到 agent4novel server 的地址 | 默认 http://localhost:8787；不是 provider URL |
-| A4N_CLI_TIMEOUT_MS | CLI HTTP 请求等待上限的全局覆盖 | 未覆盖时普通 300000、advance 1820000、Beat 通过 30000／再生 920000／恢复 GET 10000；整数 1000..3600000；--timeout-ms 优先 |
+| A4N_CLI_TIMEOUT_MS | CLI HTTP 请求或独立 worker 总等待上限的全局覆盖 | 未覆盖时普通 300000、advance 1820000、Beat 通过 30000／再生 920000／恢复 GET 10000、run-step 920000；整数 1000..3600000；--timeout-ms 优先 |
 
-.env.local 只由 server 入口加载。CLI 是独立进程，不自动从该文件读取 A4N_BASE_URL 或 A4N_CLI_TIMEOUT_MS；需要在 CLI 所在 shell 设置或传 flag。
+.env.local 由常驻 server 或 run-step 的 server worker 入口加载。CLI 父进程不自动从该文件读取 A4N_BASE_URL 或 A4N_CLI_TIMEOUT_MS；需要在 CLI 所在 shell 设置或传 flag。worker 加载该文件不会反向改变父进程已经确定的等待期限。
 
 本地初始化从 .env.example 复制到不存在的 .env.local，并设权限 600。key 不得进入命令参数、客户端 bundle、Work.config、产物、fixture、截图、聊天或日志。
 
@@ -71,6 +71,37 @@ shell/CI 与 server 入口加载的 .env.local 进入 ModelRuntime，再由 regi
 Work.config.model 可覆盖启动默认值。当前没有公开 UI/API 修改它；无效 ID 或缺少相应 key 会在 Step 边界返回不可重试的 llm-unavailable，不会自动改用另一家 provider。
 
 切换已注册 provider 只改变模型 ID。新增 provider 必须选择正确 adapter、注册 provider、扩展 SupportedModelId 与 credential 校验，并补 transport 测试。
+
+### 生成参数与单节点覆盖
+
+生成参数由 ModelRuntime.generationSettings 统一解析，生产链和 run-step 共用。LongCat-2.0 未显式设置时发送 `thinking: { type: "disabled" }`、`temperature: 0.9`、`top_p: 0.95`；这些是应用默认值。DeepSeek 省略参数时保留 adapter/provider 默认，不套用 LongCat 的默认值。
+
+| config 字段 | 允许值 | run-step flag | 语义 |
+|---|---|---|---|
+| model | 已注册 provider:model | 通过 --config-file 设置 | 选择本次独立运行的模型 |
+| directionCount | 整数 1..3 | 通过 --config-file 设置 | Creative 生成数量，省略为 2 |
+| thinking | enabled / disabled | --thinking on / off | 仅 LongCat-2.0 可显式设置；DeepSeek 设置此项会失败 |
+| temperature | 有限数字 0..1 | --temperature | 采样温度 |
+| topP | 有限数字，大于 0 且不大于 1 | --top-p | 累积概率采样阈值；wire 字段为 top_p |
+
+`generation.json` 示例：
+
+~~~json
+{
+  "model": "longcat:LongCat-2.0",
+  "thinking": "disabled",
+  "temperature": 0.9,
+  "topP": 0.95
+}
+~~~
+
+run-step 的参数按“显式 flag → config-file 对应字段 → 所选模型的运行时默认值”逐字段取值。flag 不清空文件中其他字段；文件会先校验，因此 `temperature: 2` 不能靠后续 `--temperature 0.9` 掩盖。配置文件只接受上表字段，SP 使用独立的 `--system-prompt-file`。`--thinking` 用 on/off，JSON 用 enabled/disabled，不能混写。
+
+当前接口明确拒绝 `--top-k`，config-file 中的 topK、top_k 和其他未知字段也会失败；不会悄悄忽略或将其转换为 topP。参数通过 generateObject options 传给 adapter，telemetry.generation 只保留实际解析出的公开值，不包含 reasoning 内容。未在配置/模型解析前开始调用的失败不保证带 generation 或 telemetry。
+
+作品仍只通过内部 AgentConfig 覆盖这些参数；本轮未增加作品配置 UI/API。run-step 可用 config-file 选择模型和参数，但不保存 Work.config。它要求真实模型配置，缺 key 时失败，不切到 demo 或其他 provider；模型选择仍需符合本页 credential 与 Base URL 边界。
+
+独立 worker 先加载 `.env.local`，再用 config-file 的 `model`（如有）覆盖自身 A4N_MODEL，最后初始化 ModelRuntime。因此请求模型优先于 shell/文件中的启动默认；没有请求模型时沿用“默认选择与作品覆盖”中的启动顺序。校验和 credential 要求针对本次选中的模型：即使旧启动默认缺 key，只要请求模型有效且有 key，也可运行；请求模型缺 key 时返回 llm-config-invalid。覆盖只作用于这一 worker，不修改父进程、文件或常驻 server；常驻 server 仍拒绝缺少对应 key 的显式 A4N_MODEL。
 
 ### Base URL 与凭据保护
 
@@ -95,6 +126,8 @@ LongCat 的官方材料另有 Responses 支持信息，但当前 @ai-sdk/openai-
 
 A4N_LLM_TIMEOUT_MS 控制一次 generateObject；A4N_CLI_TIMEOUT_MS 或 --timeout-ms 统一覆盖 CLI 等待 server HTTP 请求的上限。没有显式覆盖时，普通请求保持 300000ms；一次 advance 可能串行执行多个自动通过步骤，所以它单独按 2 × 900000 加 20000 返回余量设置为 1820000ms。Beat 命令的默认完整期限为通过 30000ms、再生 920000ms，恢复 GET 10000ms；显式全局 CLI 覆盖仍优先。server 与 CLI timeout 不能混用。
 
+run-step 默认给独立 worker 总计 920000ms，覆盖进程启动、模型调用与结果读取；`--timeout-ms` 优先于 CLI 父进程的 A4N_CLI_TIMEOUT_MS。单次 LLM 仍受 A4N_LLM_TIMEOUT_MS 限制。CLI deadline 到期会结束 worker 并返回 network-error；远程 provider 可能仍在处理请求，不能据此推断远端已取消或自动重跑。
+
 Pipeline 不做 provider 自动重试，也不做跨 provider failover：
 
 - 失败 Step 不落 artifact。
@@ -109,6 +142,7 @@ Pipeline 不做 provider 自动重试，也不做跨 provider failover：
 | 责任 | 权威入口 |
 |---|---|
 | Runtime、registry 与配置校验 | [llm.ts](../../apps/server/src/steps/llm.ts) |
+| 生成参数和独立运行配置 | [step.ts](../../packages/contracts/src/step.ts)、[step-experiment.ts](../../packages/contracts/src/step-experiment.ts)、[step-lab-main.ts](../../apps/server/src/step-lab-main.ts)、[local-step.ts](../../apps/cli/src/local-step.ts) |
 | 模型调用、Zod、timeout 与 telemetry | [llm-call.ts](../../apps/server/src/steps/llm-call.ts) |
 | 本地配置加载与步骤装配 | [local-env.ts](../../apps/server/src/config/local-env.ts)、[start.ts](../../apps/server/src/start.ts) |
 | CLI timeout 与配置模板 | [client.ts](../../apps/cli/src/client.ts)、[.env.example](../../.env.example) |
@@ -118,7 +152,9 @@ Pipeline 不做 provider 自动重试，也不做跨 provider failover：
 
 ### 自动化边界
 
-ModelRuntime 测试以合成 key 与 fake fetch 覆盖选择、缺 key、非法 ID、URL 安全和 timeout；LongCat transport 断言 Bearer、精确模型 ID、/chat/completions 与 json_object。Step 测试通过 languageModel seam 覆盖作品 override、成功、timeout 和非法输出；它们目前不直接断言 telemetry。CLI 测试覆盖 REST、乐观锁、smoke、logs 与独立 timeout。
+ModelRuntime 测试以合成 key 与 fake fetch 覆盖选择、缺 key、非法 ID、URL 安全和 timeout；LongCat transport 断言 Bearer、精确模型 ID、/chat/completions 与 json_object。Step 测试通过 languageModel seam 覆盖作品 override、成功、timeout 和非法输出；CLI 测试覆盖 REST、乐观锁、smoke、logs 与独立 timeout。
+
+2026-09-13 接回的 [llm.test.ts](../../apps/server/test/llm.test.ts)、[isolated-runner.test.ts](../../apps/server/test/isolated-runner.test.ts)、[step-transport.test.ts](../../apps/cli/test/step-transport.test.ts) 覆盖 LongCat 默认及显式参数、DeepSeek thinking 拒绝、config/flag 优先级、topK 拒绝、worker 模型选择与安全 generation 遥测。本轮 contracts/server/CLI 共 280 测、web 64 测通过；四包 typecheck 与 workspace build 通过。仅保留 SDK 的 json_object 已知提示和 Vite 单 chunk 大于 500 kB 提示。命令、RED/GREEN 与剩余项见 [本轮验证记录](../experiments/caption-adoption-2026-09-13/plan.md#验证记录)；独立评阅和最终文档检查结果见该记录，没有新增真实 provider 调用或模型质量结论。
 
 ### 真实验证证据
 
@@ -130,6 +166,8 @@ ModelRuntime 测试以合成 key 与 fake fetch 覆盖选择、缺 key、非法 
 |---|---|
 | 显式模型/URL/credential 无效 | 启动 ModelConfigError；不 demo、不降级 |
 | 作品 override 无效或缺 key | llm-unavailable，retryable=false |
+| generation 字段/值无效或 topK | CLI 预校验为 usage / invalid-input；直接进入运行时则为不可重试 llm-unavailable |
+| 非 LongCat 显式 thinking | 通过 CLI 参数形状校验后，运行时返回 llm-unavailable，retryable=false |
 | provider timeout / 非法输出 | llm-timeout / llm-invalid-output，retryable=true |
 | 网络/provider 其他错误 | llm-unavailable，通常可重试并保留 attemptId |
 | CLI 先到上限 / server 重启 | network-error / 内存作品与 telemetry 丢失 |
@@ -141,6 +179,14 @@ ModelRuntime 测试以合成 key 与 fake fetch 覆盖选择、缺 key、非法 
 - 不做持久化 store、后台 job、队列或异步 advance。
 
 ## 上下文演进
+
+### 2026-09-13 — 统一生成参数并支持独立节点覆盖
+
+- **触发证据**：用户要求将 Caption SP 对照使用的 CLI 与 generation 能力接回主仓库，并保留 LongCat 的 thinking disabled、temperature 0.9、topP 0.95。对应实现为 generationSettings、共享参数 schema、callLlm 和 run-step worker。
+- **原假设**：此前配置 HOW 聚焦模型 ID、credential、wire protocol 与 timeout，独立实验的生成参数和 SP 由临时运行入口承担，缺少可复用的覆盖契约。
+- **决定**：模型运行时统一默认值与校验；config-file 及显式 CLI flag 可逐字段覆盖，先校验文件再应用 flag。topK 明确拒绝；DeepSeek 不接受 LongCat thinking 控制。自定义 SP 的节点输入与文件语义归 Wiki 014。
+- **影响**：生产链与独立运行使用相同生成参数解析和安全 telemetry.generation；凭据与 adapter 继续留在 server 包。run-step worker 加载本地配置后优先选择请求模型，CLI 总等待仍在父进程控制；不会新增作品配置 UI、持久化或 provider failover。
+- **上下文处理**：`preserve` 原始 provider 选择、LongCat Chat 协议决定、真实失败及重入证据；`replace` 当前配置摘要与 CLI timeout 范围，新增生成参数 HOW。本轮本地测试结果记录于“自动化边界”，独立评阅与最终文档检查结果见本轮验证记录，不把历史真机成功外推为本轮证明；Caption SP 决定见 Wiki 011。
 
 ### 2026-09-08 — Beat 接入共享模型与错误边界
 
@@ -192,4 +238,4 @@ ModelRuntime 测试以合成 key 与 fake fetch 覆盖选择、缺 key、非法 
 
 ## 交接结论
 
-后续 Agent 应只通过 ModelRuntime 增加或选择 provider，并把 .env.local、key、Base URL 与 adapter 保持在 server 边界。排障时先区分模型配置错误、结构化输出错误、单次 LLM timeout 和 CLI 请求 timeout；CLI/telemetry 的操作步骤去 [wiki 014](./014-agent-cli-telemetry.md)，LongCat 协议依据去 [research](../research/longcat-provider-config.md)。
+后续 Agent 应通过 ModelRuntime 增加或选择 provider、调整生成参数，并把 .env.local、key、Base URL 与 adapter 保持在 server 边界。排障先区分输入/参数校验、模型配置、结构化输出、单次 LLM timeout 与 CLI 总等待；CLI/telemetry 操作去 [Wiki 014](./014-agent-cli-telemetry.md)，LongCat 协议依据去 [research](../research/longcat-provider-config.md)。本轮独立评阅与最终文档检查结果统一记录在本轮计划。

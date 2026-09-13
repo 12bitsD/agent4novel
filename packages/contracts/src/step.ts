@@ -1,6 +1,15 @@
 import { z } from 'zod'
 
+// Supported application controls; omitted fields are resolved by ModelRuntime.
+export const generationParametersSchema = z.object({
+  thinking: z.enum(['enabled', 'disabled']).optional(),
+  temperature: z.number().min(0).max(1).optional(),
+  topP: z.number().gt(0).max(1).optional(),
+}).strict()
+export type GenerationParameters = z.infer<typeof generationParametersSchema>
+
 export const agentConfigSchema = z.object({
+  ...generationParametersSchema.shape,
   model: z.string().optional(),
   systemPrompt: z.string().optional(),
   skills: z.array(z.string()).optional(),

@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。每个里程碑收尾时刷新本文件（最后更新：2026-09-08，#5 已完成五步链路接线，正在验证与交付收口；#13 发布证据仍看 Wiki 013 与 issue 完成评论）。
+> 用途：context compaction / 新会话接力。每个里程碑收尾时刷新本文件（最后更新：2026-09-13，本轮接回 Caption SP 与单节点 CLI，主仓库测试、typecheck、构建通过，独立评阅与最终文档检查通过；#5/#13 交付状态仍以各票 Wiki 和远端回读为准）。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -19,12 +19,14 @@
 - **#3b / issue #10** 预处理 RealStep + outline/setting 形态对齐（wiki 010 ✅；其 interview 机制已被 #3c 移除）
 - **#3c / issue #11** 预处理重构（wiki 011 ✅）：caption（提炼稿，落库即 approved）→ creative（单次 generateObject 直出 N 个创意稿，gateAfter = 创意海报比较视图）；保存/选定两命令；interview 机制整体移除；全应用多巴胺设计系统（亮暗双主题）
 - **#4** 大纲生成（wiki 004 ✅）：**推翻「分章每章一句话」**，大纲 = 弧线（冲突生命周期：标题/核心冲突/冲突发展/矛盾解决）+ 剧情点（标题/概要/落点）两层，与章节解耦；选定创意稿后 web 自动续跑 advance；保存 = pending + 通用 /approve 通过；读模型 5 态（selected 移除，加 awaiting-outline-review/outline-approved）
-- **#14** Agent 可用性基建（wiki 014 ✅）：`apps/cli`（9 命令，`bin/a4n` 直跑 stdout 纯 JSON，headVersion 自动回填，smoke 探针）；LLM 遥测进程内账本，advance 响应内联 telemetry + `GET /works/:id/telemetry` 回看；systemHash 让 prompt 版本可追；**outline 失败根因根治**（8000 截断 → outline 上限 16000 + SKILL 篇幅纪律）；项目级 skill `.claude/skills/agent4novel-drive`
+- **#14** Agent 可用性基建（wiki 014 ✅）：`apps/cli` 的作品命令、`bin/a4n` 纯 JSON 输出与 smoke 探针；select/save-outline 自动回填 headVersion。LLM 遥测进程内账本，advance 内联 telemetry、logs 回看；systemHash 让 prompt 版本可追。历史 outline 截断促使上限从 8000 调至 16000，并加入 SKILL 篇幅纪律；这不保证所有模型请求成功。当前命令与独立实验入口见 [Wiki 014](./wiki/014-agent-cli-telemetry.md)。
 - **#16** 可配置 ModelRuntime + LongCat provider（[wiki 016](./wiki/016-model-runtime-provider-config.md) ✅）：RealStep 内统一 provider 路由、server-only 本地配置与请求超时；接入 LongCat OpenAI-compatible Chat Completions。2026-08-29 已完成独立生产 Step 真机验证，并留下完整 CLI smoke 的失败与重入结论；所有 work ID 都来自已结束的内存进程，当前不可继续使用，证据边界只看 wiki 016 与 LongCat research。
 - **#13** 完整设定（[Wiki 013](./wiki/013-setting-generation-review.md)）：大纲通过后一次生成；六字段通用卡片、有限 Markdown、页内编辑、专用命令同 id/version 原子通过，不追加 V2。Store 读写快照隔离、生成提交条件、Web 未知结果恢复和 CLI 完整请求已落地。本票原末端 `setting-approved` 已由 #5 延伸至 `beat-approved`，具体交付证据只看本票 Wiki 和完成评论。
 
 ## 关键架构与契约（不能丢）
 
+- **本轮本地接回**：Caption 采用 R10 A SP，提炼稿在理解素材后作开发判断并提出具体剧情建议；选定证据与限制由 [Wiki 011](./wiki/011-caption-creative-directions.md) 保存。`run-step` 可独立运行 caption/creative/outline/setting/beat#1，复用生产输入、输出 schema、ID 和预算；要求完整 monorepo 与真实 provider，由本地 server worker 执行，不写作品。CLI HOW 见 [Wiki 014](./wiki/014-agent-cli-telemetry.md#单节点实验-run-step)。主仓库 344 测、四包 typecheck 和构建通过，记录见 [本轮计划](./experiments/caption-adoption-2026-09-13/plan.md#验证记录)；没有新增真实模型质量证据。已运行 server 缓存生产 SP，需新进程读取更新。
+- **生成参数**：LongCat 默认 thinking disabled、temperature 0.9、topP 0.95，生产链和独立节点共用 ModelRuntime；单节点 config-file 可设置模型与参数，显式 CLI flag 逐字段优先。topK 明确拒绝，telemetry 记录实际公开参数。完整覆盖、provider 和 timeout 契约只看 [Wiki 016](./wiki/016-model-runtime-provider-config.md#生成参数与单节点覆盖)。
 - **#5 当前阶段**：第一章章纲已接入生产第五步，支持本页编辑、整份再生和同版本通过；UUID 身份、Beat CLI、请求关联诊断已落地。方案、AC/TDD 与交付证据只看 [Wiki 005](./wiki/005-beat-generation-review.md)，契约见 [schema](./schema.md#beat5-当前契约)。
 - **workflow 骨架 + 步骤内 agent**；Step 零感知 kind，输出 `{content}` 装整个 JSON；kind = 节点名；pipeline 管解析/组装/持久化，是深模块不是 swap seam。
 - **两个真 seam**：store（InMemoryStore / #9 做 SQLiteStore）、step（FakeStep / RealStep）。
@@ -63,6 +65,7 @@
 - LongCat 的 Responses 协议尚未接入；当前只对接其文档明确支持的 OpenAI-compatible Chat Completions。
 - LongCat 文档未保证 JSON Schema structured output；当前走 `json_object` + 本地 zod 校验。历史三步证据见 Wiki 016，Setting 新样例见 Wiki 013；成功样例不是上游协议保证。
 - `Work.config.model` 已作为内部覆盖接缝接入 Pipeline，但目前没有公开 UI/API；全局启动配置见 [wiki 016](./wiki/016-model-runtime-provider-config.md)。
+- run-step 不持久化实验账本、不自动跑上游，也不校验所供 content 是否来自作品最新版；成功只证明通过生产 schema，raw 模型输出和 reasoning 不对外返回。当前仅 Beat 第一章，CLI 配置不会写回作品。
 - 版本回看 UI（后悔药）没有入口，留 #6；重新生成（带补充想法）/渐进展示/分段提炼留 #12。
 - #5 专属版本比较归 #20，正文后回流与章节重生归 #21；本期只允许通过前整份章纲再生。上条 #6/#12 是旧的通用优化分工，不覆盖这次已确认拆分。
 - #5 已修复序号身份复用、共享原始错误日志和首次 Web advance 无限等待，并增加定向回归。完整 production live smoke 两次卡在 Creative（截断／schema），不属于 Beat 成功证据；独立 Beat live 样例与限制见 Wiki 005。
@@ -70,7 +73,9 @@
 
 ## 下一步
 
-交付 Agent 按 [Wiki 005 完成审核证据](./wiki/005-beat-generation-review.md#完成审核证据) 的剩余项继续，完成独立评审、候选裁决与 PR 交付，不直接开始 #22。#5 当前 OPEN，assignee 12bitsD、ready-for-agent、Project Backlog；#4/#13 依赖均 CLOSED。固定点 70b43968de24ecf21e596bff35988feff62b73a9，source branch 为 codex/issue-5-beat-review，目标 main；merge 仍需作者确认。最终远端状态以 PR/issue 回读为准。
+本轮测试、typecheck、构建、独立评阅与最终文档一致性检查已通过，证据见 [本轮计划](./experiments/caption-adoption-2026-09-13/plan.md#验证记录)。本轮没有新增真实模型调用，也不声明提交、发布或 issue 完成。
+
+#5 后续交付按 [Wiki 005 完成审核证据](./wiki/005-beat-generation-review.md#完成审核证据) 的剩余项继续，不直接开始 #22。2026-09-08 快照记录 #5 OPEN、assignee 12bitsD、ready-for-agent、Project Backlog，#4/#13 依赖 CLOSED；固定点为 70b43968de24ecf21e596bff35988feff62b73a9，source branch 为 codex/issue-5-beat-review，目标 main，当时约定 merge 仍需作者确认。该快照不能代替后续 PR/issue 回读；交付 Agent 恢复该票时先核对当前授权与远端状态。
 
 后续队列：**#5 第一章章纲 → #22 第一章正文 → #19 契约治理 → #9 SQLite → #6 后续章推进**，#7/#8 继续按各自依赖处理。作者已明确先完成产物再治理与持久化；旧的“先 #19/#9 再 #5，章纲与正文合票”理由与替代决定保留在 [Wiki 005 上下文演进](./wiki/005-beat-generation-review.md#上下文演进)。顺序不是新建硬依赖。
 
