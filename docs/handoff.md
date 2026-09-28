@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。最后更新：2026-09-28，#25 收口 CLI 帮助和参数语法；验证与发布前证据见 [Wiki 025](./wiki/025-cli-command-safety.md)，PR/关闭状态以 GitHub 回读为准。
+> 用途：context compaction / 新会话接力。最后更新：2026-09-28，章纲 #5 的 [PR #23](https://github.com/12bitsD/agent4novel/pull/23) 已合并，正在补齐当前候选的交付／关闭证据；当前运行仍止于 `beat-approved`。完成后接 #22 第一章正文，依据见 [Wiki 005](./wiki/005-beat-generation-review.md)。CLI #25 已合并并关闭。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -29,7 +29,7 @@
 
 - **2026-09-13 接回**：Caption 采用 R10 A SP，提炼稿在理解素材后作开发判断并提出具体剧情建议；选定证据与限制由 [Wiki 011](./wiki/011-caption-creative-directions.md) 保存。`run-step` 可独立运行 caption/creative/outline/setting/beat#1，复用生产输入、输出 schema、ID 和预算；要求完整 monorepo 与真实 provider，由本地 server worker 执行，不写作品。CLI HOW 见 [Wiki 014](./wiki/014-agent-cli-telemetry.md#单节点实验-run-step)。主仓库 344 测、四包 typecheck 和构建通过，记录见 [本轮计划](./experiments/caption-adoption-2026-09-13/plan.md#验证记录)；没有新增真实模型质量证据。已运行 server 缓存生产 SP，需新进程读取更新。
 - **生成参数**：LongCat 默认 thinking disabled、temperature 0.9、topP 0.95，生产链和独立节点共用 ModelRuntime；单节点 config-file 可设置模型与参数，显式 CLI flag 逐字段优先。topK 明确拒绝，telemetry 记录实际公开参数。完整覆盖、provider 和 timeout 契约只看 [Wiki 016](./wiki/016-model-runtime-provider-config.md#生成参数与单节点覆盖)。
-- **#5 当前阶段**：第一章章纲已接入生产第五步，支持本页编辑、整份再生和同版本通过；UUID 身份、Beat CLI、请求关联诊断已落地。方案、AC/TDD 与交付证据只看 [Wiki 005](./wiki/005-beat-generation-review.md)，契约见 [schema](./schema.md#beat5-当前契约)。
+- **#5 当前阶段**：第一章章纲实现已合并，支持本页编辑、整份再生和同版本通过；UUID 身份、Beat CLI、请求关联诊断已落地。本轮只做文档与交付证据收口，不重新实现 Beat。方案、AC/TDD、历史验证与本轮预留只看 [Wiki 005](./wiki/005-beat-generation-review.md)，契约见 [schema](./schema.md#beat5-当前契约)。
 - **workflow 骨架 + 步骤内 agent**；Step 零感知 kind，输出 `{content}` 装整个 JSON；kind = 节点名；pipeline 管解析/组装/持久化，是深模块不是 swap seam。
 - **两个真 seam**：store（InMemoryStore / #9 做 SQLiteStore）、step（FakeStep / RealStep）。
 - **模型路由边界**：ModelRuntime 位于 RealStep 内部，不是第三个 Pipeline 注入 seam；已注册 provider 通过模型 ID 切换，新增 provider 需要对应 adapter、registry 注册与 key 契约。完整 HOW 只看 [wiki 016](./wiki/016-model-runtime-provider-config.md)。
@@ -70,16 +70,26 @@
 - run-step 不持久化实验账本、不自动跑上游，也不校验所供 content 是否来自作品最新版；成功只证明通过生产 schema，raw 模型输出和 reasoning 不对外返回。当前仅 Beat 第一章，CLI 配置不会写回作品。
 - 版本回看 UI（后悔药）没有入口，留 #6；重新生成（带补充想法）/渐进展示/分段提炼留 #12。
 - #5 专属版本比较归 #20，正文后回流与章节重生归 #21；本期只允许通过前整份章纲再生。上条 #6/#12 是旧的通用优化分工，不覆盖这次已确认拆分。
-- #5 已修复序号身份复用、共享原始错误日志和首次 Web advance 无限等待，并增加定向回归。完整 production live smoke 两次卡在 Creative（截断／schema），不属于 Beat 成功证据；独立 Beat live 样例与限制见 Wiki 005。
+- #5 已修复序号身份复用、共享原始错误日志和首次 Web advance 无限等待。2026-09-08 完整 production live smoke 两次卡在 Creative（截断／schema），不属于 Beat 成功证据；独立 Beat live 样例也是历史结果。本轮 fake/mock 回归通过；浏览器确认 pending 章纲及意见输入，原生刷新取消／确认受工具限制未验证，不能用 mounted 测试代替。证据边界统一见 Wiki 005。
 - 「演示模式」是 UI 词非领域词，未进 CONTEXT.md。
 
 ## 下一步
 
-本轮 #25 的证据与完成审核见 [Wiki 025](./wiki/025-cli-command-safety.md)。2026-09-13 Caption/CLI 接回的历史验证保留在 [当时计划](./experiments/caption-adoption-2026-09-13/plan.md#验证记录)。本票不调用真实模型，不改变生产链质量结论。
+CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化与真实模型质量验证仍是独立范围。当前能力、验证边界和完成记录统一从 [Wiki 025](./wiki/025-cli-command-safety.md) 进入。2026-09-13 Caption/CLI 的历史验证保留在 [当时计划](./experiments/caption-adoption-2026-09-13/plan.md#验证记录)。
 
-#5 后续交付按 [Wiki 005 完成审核证据](./wiki/005-beat-generation-review.md#完成审核证据) 的剩余项继续，不直接开始 #22。2026-09-08 快照记录 #5 OPEN、assignee 12bitsD、ready-for-agent、Project Backlog，#4/#13 依赖 CLOSED；固定点为 70b43968de24ecf21e596bff35988feff62b73a9，source branch 为 codex/issue-5-beat-review，目标 main，当时约定 merge 仍需作者确认。该快照不能代替后续 PR/issue 回读；交付 Agent 恢复该票时先核对当前授权与远端状态。
+#5 按 [Wiki 005 完成审核证据](./wiki/005-beat-generation-review.md#完成审核证据) 完成本轮冻结、review 和发布收口。当前 source 为 `feat/mvp-closeout`、目标 main；固定点和已授权纳入的既有文档提交见该页计划。#5 仍 OPEN、assignee `12bitsD`、`ready-for-agent`、Project #3 Status `Backlog`，#4/#13 均 CLOSED；完成时保持标签、Project 和原依赖。旧分支／merge 授权快照保留在 Wiki005 的历史记录，不据此重合并已完成的 PR23，也不跳过本轮关闭证据。
 
-后续队列：**#5 第一章章纲 → #22 第一章正文 → #19 契约治理 → #9 SQLite → #6 后续章推进**，#7/#8 继续按各自依赖处理。作者已明确先完成产物再治理与持久化；旧的“先 #19/#9 再 #5，章纲与正文合票”理由与替代决定保留在 [Wiki 005 上下文演进](./wiki/005-beat-generation-review.md#上下文演进)。顺序不是新建硬依赖。
+后续队列：**#5 第一章章纲 → #22 第一章正文 → #19 契约治理 → #9 SQLite → #6 后续章推进**。作者已明确先完成产物再治理与持久化；旧的“先 #19/#9 再 #5，章纲与正文合票”理由与替代决定保留在 [Wiki 005 上下文演进](./wiki/005-beat-generation-review.md#上下文演进)。顺序不是新建硬依赖，#7/#8 仍是原 MVP 的交付项。
+
+| 交付批次 | 可验收结果 | 可并行入口 |
+|---|---|---|
+| #5 收口 | 当前候选审核与 main 回读一致，完成评论及 issue 关闭可核对 | #22 只读方案准备；#5 关闭后解锁 #7 |
+| #22 第一章正文 | 生成、编辑、整章重写与通过；失败保留文本，终点第一章完成，无第二章 | #7 配置界面与生成接线；#22 关闭后解锁 #8 |
+| #19 契约治理 | 各产物与命令边界一致，非法内容在入口／读回被拒绝 | #7/#8 独立界面可推进，共享接口先对齐 |
+| #9 SQLite | 作品与产物跨实际重启可回读，继承条件写入和身份规则 | 与 #8 联验坏例的作品／章节关联及持久化 |
+| #6 后续章 | 可重复的按章推进和作者关卡，遵守已确认的编辑／回流边界 | 收口 #7 配置与 skill 消费、#8 片段标记／备注／列表 |
+
+MVP 的 WHAT 与当前排期以 [父票 #1](https://github.com/12bitsD/agent4novel/issues/1) 为入口，每票按各自 AC 和原生依赖验收；本表只作接手导航，不缩减 MVP、不新建依赖或承诺日期，也不提前设计章节重生。
 
 继续继承条件写入、快照隔离、冻结提交与回读对账，不能照搬 Outline 保存／通过流程。设定后编辑归 #17、冲突澄清归 #18、章纲比较归 #20、章节重生归 #21。#12 仍承接既有 creative 优化，#15 在服务定型后做 Hono RPC；契约归属见 [管理原则](./agents/contract-governance.md)。
 
