@@ -10,7 +10,7 @@ symbols: ["BeatContent", "BeatEditDraft", "BeatCommandObservation", "regenerateB
 inherits: ["004", "013", "014"]
 changed_by: []
 read_when: ["implement-beat", "change-beat-schema", "review-beat-plan", "debug-beat-submission", "design-agent-observability"]
-last_context_reviewed: "2026-09-08"
+last_context_reviewed: "2026-09-28"
 ---
 
 # 005 — 第一章章纲生成、编辑、重新生成与通过
@@ -19,8 +19,8 @@ last_context_reviewed: "2026-09-08"
 
 - **读取时机**：规划／实现／评审 #5，检查按章寻址、章纲失败恢复或 Agent 调用诊断时。
 - **原始目的**：生成当前第一章的完整写作计划，由作者编辑或整份再生，最终通过后再供正文使用；WHAT/AC 以 [issue #5](https://github.com/12bitsD/agent4novel/issues/5) 为准。
-- **实际落地**：已在 `codex/issue-5-beat-review` 接通生产第五步、真实/fake Beat、Web 编辑与再生、同版本通过、UUID 身份及 CLI 文件命令。当前终点 `beat-approved`，无正文或第二章；实现候选正在交付收口，门禁和独立 review 以本页证据为准。
-- **当前价值**：本页是已批准方案的现行工程 HOW；先读“技术方案”对应节、“测试与验证”中的 S1–S6。形状／协议唯一入口为 [schema](../schema.md#beat5-当前契约)，复审证据见 [评审记录](../plans/005-beat-technical-review.md)。
+- **实际落地**：[PR #23](https://github.com/12bitsD/agent4novel/pull/23) 已合并 main，生产第五步、真实/fake Beat、Web 编辑与再生、同版本通过、UUID 身份及 CLI 文件命令已落地。当前终点 `beat-approved`，无正文或第二章；issue 仍在交付收口，本轮只整理文档与核验完成证据。
+- **当前价值**：本页是已批准方案的现行工程 HOW；交付接手先读“本轮范围与计划”和“完成审核证据”，机制按技术小节读取。形状／协议唯一入口为 [schema](../schema.md#beat5-当前契约)，原技术评审与决定见 [评审记录](../plans/005-beat-technical-review.md)。
 - **后续变化**：正文归 #22，比较归 #20，章节重生归 #21；已确认排期 #5 → #22 → #19 → #9 → #6，不把顺序视为新增硬依赖。
 - **代码入口**：现有 [Pipeline](../../apps/server/src/pipeline/pipeline.ts)、[WorkStore](../../apps/server/src/store/work-store.ts)、[路由](../../apps/server/src/routes/works.ts)；完整落点见下表，内容／命令协议均已有运行时 schema。
 
@@ -58,7 +58,7 @@ last_context_reviewed: "2026-09-08"
 | 通过后 | 只读；不得修改或重新生成。正文后返回章纲属于“章节重生”，本期不设计 |
 | 存储范围 | 使用现有 WorkStore，接受服务重启丢失测试作品；跨重启持久化归 #9 |
 
-#5 票面的“尚待方案收口”仍是旧阶段说明；上述访谈与技术方案已完成。方案收录阶段未作远端写入；实现阶段已 claim，issue 的正式方案 backlink 与阶段说明待文档发布时同步，不重新讨论已确认决定。
+上述访谈与技术方案已完成，issue 已有版本化 Wiki backlink；其“尚未合并”阶段说明与 [PR #23](https://github.com/12bitsD/agent4novel/pull/23) 的实际合并状态不一致，交付 Agent 在本轮发布时同步。这里保留已确认决定，不把票面漂移解释成需要重新讨论产品边界。
 
 非目标保持独立：正文 [#22](https://github.com/12bitsD/agent4novel/issues/22)、续写 [#6](https://github.com/12bitsD/agent4novel/issues/6)、新旧比较 [#20](https://github.com/12bitsD/agent4novel/issues/20)、章节重生 [#21](https://github.com/12bitsD/agent4novel/issues/21)。不预建回流接口、语义冲突拦截、单卡 AI 操作或通用版本管理 UI。
 
@@ -66,7 +66,7 @@ last_context_reviewed: "2026-09-08"
 
 存储一致性与人工定稿已有基础，缺口主要在按章调度和重新生成命令；不需要重写编排层。
 
-| 当前事实 | #5 的处理建议 | 依据 |
+| 实施前事实 | #5 的处理建议 | 依据 |
 |---|---|---|
 | Artifact 已区分作品级与章节级产物；getWork 只返回每个地址的最新版 | 继续使用 `(workId, kind='beat', chapter=1)`；章纲内容不重复存章号 | [artifacts](../../packages/contracts/src/artifacts.ts)、[schema](../schema.md) |
 | Store 已支持带 chapter 的追加、条件写入和同版本定稿 | 复用 append/finalize，不增加数据库表，也不让路由拼“先保存再通过” | [Store 实现](../../apps/server/src/store/in-memory-store.ts) |
@@ -81,7 +81,24 @@ last_context_reviewed: "2026-09-08"
 
 ## 技术方案
 
-以下是复审通过、正在实现的工程设计；实际覆盖见“测试与验证”，不能用设计命令宣称当前生产应用已完整支持 Beat。
+### 本轮范围与计划（2026-09-28）
+
+本轮是已合并 Beat 的文档与交付证据收口，不重新实现 #5。只读审计已核实 [PR #23](https://github.com/12bitsD/agent4novel/pull/23) 合并到 main；issue 仍 OPEN，尚缺 issue 完成评论与关闭回读。[PR #23 发布门禁](https://github.com/12bitsD/agent4novel/pull/23) 已记录历史 C6.6/C6.7 与 C6 PASS；本轮不重演其原始审查，也不用旧裁决代替本次文档候选审核。原产品决定、S1–S6 和历史失败继续保留。本轮证据目录为 `/Users/user/Documents/Codex/2026-09-28/agent4novel-mvp/`，范围／AC／元数据核对见 `beat-close-audit.md`；排期核对见 `mvp-scope-review.md`。
+
+- **交付边界**：固定点为远端 main `a96339a7eb11e8d28a4eb33ba8829ef6bfac7bbd`，source 为 `feat/mvp-closeout`，采用 PR → main；运行验证基线为 `7c79f600a78df7ad87cc6b490b99086fe9a37581`。用户已授权把这笔既有 Wiki025/handoff 本地文档提交纳入本交付，须与新增差异一起审计，不夹带未知历史。
+- **范围**：更新本页、双语 README 和 handoff；仅在索引内容不一致时更新 Wiki README。保留第一章 `beat-approved` 终点，不改业务代码、schema、提示词、模型配置、交互或运行 skill，不实现正文、第二章、SQLite、比较或回流。
+- **元数据终态**：本轮回读 #5 assignee 为 `12bitsD`、标签 `ready-for-agent`；授权 `read:project` 后精确回读 Project #3 `agent4novel Development` 的 Status 为 `Backlog`（`audit-beat-project-readback.json`）。完成时保持标签、Project 值和 #4/#13 原依赖，不自动修改关联 #7/#22。关闭结果只在发布完成后回读。
+- **替代验证**：本轮无行为变化，C2.1/C2.2 的 RED/GREEN 为 N/A；以当前基线定向/全仓回归、文档结构/链接、双语一致性和浏览器合成案例补证。历史真实模型样例仅作历史证据，不声称本轮 live 重跑。
+
+执行顺序及逻辑提交边界：
+
+1. 先记录本范围与计划，保持原始意图、人工决定和失败经验；用同页不可变历史链接收窄旧审核流水，新增本轮八项完成证据预留。
+2. 同步当前合并事实、交付缺口和下一票 #22；#19 → #9 → #6 是既定后续排期，#7/#8 仍属 MVP，按各自依赖推进。排期不新增硬依赖。
+3. 当前基线执行定向、test/typecheck/build；完成浏览器编辑、再生、通过和刷新行为实测。尚未完成的操作保持待验证；发现确定行为缺陷时先停下文档限定范围，按清单重新安排 RED/GREEN 和受影响验证。
+4. 检查精确文件范围、链接、结构、领域词和双语事实；交付 Agent 完成三轮自校准后冻结整个候选，交给未参与修改的 Standards/Spec reviewers。review 前不把预留字段写为通过。
+5. 将本轮文档收口作为一个逻辑提交；按清单完成新的 T0/T1 审核与终止比较，再发布新 PR、回读 main/CI/issue 元数据、完成评论及关闭。旧 PR23 不重复 merge，原历史裁决不重写为本轮证据。
+
+以下保留原复审通过的工程设计与实施理由，现已由 PR #23 落地；其中“建议”和旧实现缺口描述记录当时的设计起点，不表示这些能力仍待开发。当前验证、未覆盖项和交付阶段见“测试与验证”，设计评审不能替代本轮完成审核。
 
 技术小节保留已审 R1 的编号；内容字段及第 6.1 节协议已按知识归属移入 schema，其余实施约束在本页继续维护。
 
@@ -467,26 +484,48 @@ COREPACK_ENABLE_AUTO_PIN=0 pnpm build
 
 **近上限技术样例**：2026-09-08 以合法 Setting 字段加入合成控制字符，经 JSON 转义构成 user prompt 398,160 字符（含 system 的合计仍低于 400,000），直接调用真实 Beat Step。attemptId `work-synthetic-near-limit-beat-555de113-61b1-4fe8-ade0-b62b7891007f`，LongCat-2.0，331,282/851 input/output tokens，44,226ms，stop，四部分 schema-valid、5 卡。这个样例只校准转义后的资源边界，不代表文学质量；超预算不调用模型和 context-limit 安全分类另有单元测试。数值仍保留 400,000 / 8,000，不静默截断。
 
+### 历史审核快照（2026-09-08）
+
+原发布前八项审核记录完整保存在[不可变历史版本](https://github.com/12bitsD/agent4novel/blob/a96339a7eb11e8d28a4eb33ba8829ef6bfac7bbd/docs/wiki/005-beat-generation-review.md#完成审核证据)，包括 82 文件 manifest、原始 RED/GREEN、发现处理、逐项 N/A、T0/T1、300 项根测试和独立 32 项定向复跑。旧来源属于本票 Wiki，不复制到 handoff，也不把本机临时日志当成远端 CI。
+
+历史事实按各自记录边界读取：首轮 Standards/Spec 因 context-limit、跨 Store 旧 HTTP 命令和首次等待的证据不足判 FAIL；补证／修订后两轴 PASS，独立 reviewer 对 T1 给出 C6.4 PASS。context 测试的首次失败是夹具错误，不是产品 RED。Wiki 快照按约定只记发布前证据；[PR #23 发布门禁](https://github.com/12bitsD/agent4novel/pull/23) 已记录 C6.6 独立 PASS、T2 `665dfd96ea315f8ace23e07be0c19573634a35e7`、C6.7 的 82 文件 manifest 与 C6 PASS，不能因 Wiki 不自记终止结果便称历史裁决缺失。本轮回读该历史记录但未重演原始审查；当前缺口是 issue 完成评论／关闭与本次文档候选审核。
+
+原产品决定、实施推导、变化事件和上方真实模型成功／失败样例继续保留。上述 300 项测试、真实 Beat 样例及 Creative 两次失败均为 2026-09-08 历史证据；此后共享 LLM 配置、CLI 参数和页面有后续变更，不把旧 live 样例声明为当前运行。
+
+### 本轮浏览器观察（2026-09-28）
+
+运行基线 `7c79f60`；隔离 fake fixture 位于 localhost:8790，Vite 位于 localhost:5174，只使用合成作品。实际浏览器显示第一章 pending 章纲、编辑／通过／再生控件及仅页内保留的说明，成功输入仅用于本页的修改意见。记录与截图在本轮证据目录的 `beat-browser-acceptance.md`、`beat-browser-pending.png`。
+
+**原生刷新取消／确认子项：N/A（工具限制）**。reload 调用 10 秒超时后仍能看到原页和意见，`getJsDialog` 未暴露对话框；返回书架操作也没有可供工具操作的确认。原生应用自动化受工具边界限制，未绕过。以上既不证明刷新取消／确认正确，也不证明应用缺陷；原生刷新行为仍保留人工核对风险。本轮 mounted 测试覆盖监听、仅意见 dirty 和清理，不冒充原生弹窗验收。没有据此宣称本轮实际浏览器走完再生／通过全路径。
+
 ### 完成审核证据
 
-本节八个字段是 C6.3/C6.5 唯一预留的受控转录区域；实质行为或上方事实变化必须重新进入 C5。
+以下八项属于 **2026-09-28 文档交付收口候选**，是本轮 C6.3/C6.5 的预留转录区域；旧快照不替代新 review。T0/T1、逐项最终裁决和发布前 attestation 尚未取得的部分保持 pending；C6.5–C6.7 终止记录与最终 C6 判定留给 GitHub 完成评论，不在本页提前宣称关闭。
 
-- **清单与候选**：固定点 `70b43968de24ecf21e596bff35988feff62b73a9`；source `codex/issue-5-beat-review` → PR → main，merge 需作者确认。清单 blob `db7f3eda6bce154b99e2ed67f50072465e9e2be0`；双轴通过候选 T0 `af41591906babcc626dfe0ec803dcd3442f9a7be`；pre-attestation T1 `ef82bad99e6632e026a4afb1c5491505de837f0a`。staged manifest 为 `git diff --name-status 70b43968de24ecf21e596bff35988feff62b73a9 af41591906babcc626dfe0ec803dcd3442f9a7be` 的完整 82 文件（代码／测试／锁文件／知识文档／图示）；无 unstaged/untracked，base..HEAD 无本地提交。
-- **逐项判定**：C1 = PASS：C1.1/C1.8 据本轮 gh issue/dependency/Project 回读（OPEN、#4/#13 CLOSED、无评论；assignee 已 claim 12bitsD，完成时保留 ready-for-agent/Project Backlog，无明确终态规则）；C1.2/C1.6 据固定点、source branch、manifest 与远端 main 无保护／ruleset／workflow 的回读；C1.3–C1.5/C1.7 据本页已确认 grill/R1/S1–S6、领域/schema/ADR、作者正文拆票和范围决定。C2 = PASS：C2.1–C2.3 据下栏 RED/GREEN、公开边界测试与实际 CLI／浏览器；C2.4 据初步清理对共享边界与复用的结论；C2.5 据 Spec 逐条 AC 核对；C2.6 N/A（存在行为变化，执行 RED/GREEN）。C3 = PASS：C3.1–C3.4/C3.6 据本地门禁栏最终命令、静态扫描和日志／输入对抗测试；C3.5 据 closure_reuse/quality/efficiency 三视角清理，修复结果见本页变化事件：复用共享恢复／deadline／Markdown，保留 Beat 专用再生边界；提升错误语义可读性，提前数组数量检查并限制 CLI 文件读取，未扩票。C4 = PASS：C4.1–C4.3/C4.5–C4.8 据知识维护栏及链接／schema／图示校验，C4.4 research 已保存，新增 ADR N/A（沿用既有 Step/Store 架构，无新增不可逆决定）；C4.9 据上方三轮自校准与修订后双轴复核。C5 = PASS：C5.1–C5.3 据 T0 manifest、两种 diff check、空本地历史与工作区余项核对；C5.4–C5.7 据下栏独立双轴原发现、接受修复与新候选 PASS。C6.1/C6.2 = PASS：补证与文档修订后定向及全仓重跑，双轴复审通过。C6.3 = PASS：只在预留八字段转录上述证据、T0、例外与风险，当时 T1/裁决保留 pending；精确 diff 已经 C6.4 独立核对。C6.4 = PASS：beat_c5_standards 核验 T0 → T1 仅四个预留字段变化、转录忠实；继承完整 T0 并检查增量，T1 的 82 文件、空本地历史、工作区与两种 diff check 均一致，无新增阻塞。C3.2 格式/lint 子项 N/A（仓库无对应脚本，typecheck/diff 检查替代）；C7.3 预计 N/A（当前无 CI，发布时须再回读，不用本地门禁冒充 CI）。
-- **验收与 TDD**：AC1/2→beat-step、beat-pipeline、beat 契约与生产 demo；AC3/5→原子通过、fake downstream 消费最终编辑、mounted Workspace 与 CLI 回读；AC4/6→再生草稿与意见、旧 head/CAS/共享锁、跨 Store UUID、unknown 恢复；AC7→完整门禁、双轴 review 与交付。行为 RED 包含首次缺章、专用路由 404、跨 Store 重复 ID、上游更换后误提交、非法输出落库、日志异常改变结果、命令缺诊断、未知恢复／迟到响应回退、secret 文本泄漏、CLI logs 的 undefined query。后续修复另有 RED：合法编辑通过误判冲突、旧 GET 恢复权限、10,000 卡放大校验错误、Workspace 的迟到无 Beat GET 隐藏已通过页面；另补 code/status 不匹配的 5xx 必须 unknown、再生超预算显示长度的 RED，最小修复后定向 GREEN。fake 下游新增测试初次即 PASS（补充既有行为证据，不冒充 RED）。
-- **本地门禁**：2026-09-08 21:46，根脚本 `COREPACK_ENABLE_AUTO_PIN=0 pnpm test` exit 0（contracts 50、server 151、Web 61、CLI 38）；`pnpm typecheck` 和 `pnpm build`（同环境前缀）exit 0。完整测试输出保留在本轮命令日志（最新 `/tmp/a4n-closure-DO8pu2/c5-fix-test.log`），未用管道掩盖退出码。构建只有既有 DOCX 504.50kB 分块警告。`git diff --check <fixed-point>` exit 0，仓库无 lint/formatter 脚本（C3.2 对该子项 N/A，使用 typecheck/diff 检查）；R0/R1 hash 与归档值一致。82 文件 staged 增量静态扫描：硬编码凭据、shell/eval/SQL 注入模式均无命中，`.env.local` 被忽略；新增 fixture 默认 fake，只有显式 --live-beat 才加载已配置 provider。19 个 Markdown 的本地链接／锚点／Wiki 必填元数据及固定标题校验通过；四张 SVG 经浏览器渲染核验。jsdom@26.1.0 用于 mounted DOM；whatwg-encoding 间接依赖 deprecated 警告。SDK LongCat responseFormat 警告为已知 json_object + 本地 Zod 限制，不代表 structuredOutputs 已支持。
-- **双轴 review**：技术方案评审 preserve；首轮候选 `95e5f9c212203c3c26bc22a4bd5636c402ef692f` 的 Standards FAIL（P2 context-limit 证据缺失；P3 导航状态冲突），Spec FAIL（AC7 缺 R2/R4/context-limit 必测证据；AC1–6 未发现确定实现错误）。全部接受，补证／修订见下方变化事件；T0 复审：beat_c5_standards 与 beat_c5_spec 分别 PASS，均完整核对五文件修订并继承先前 82 文件审计；原发现全部关闭、无新增阻塞。Spec 独立复跑 Server 25／Web 7 共 32 项通过并逐条确认 AC1–6 与 AC7 必测证据。独立 beat_c5_security 首轮及 T0 JSON 评审均 passed=true、security_concerns/logic_errors 为空；首轮导航建议已关闭，T0 suggestions 为空。初步清理（三个只读 Agent：closure_reuse/quality/efficiency）发现不可达安全日志、pending→approved 误判、旧 GET 权限、错误分类和预算丢失、大数组校验放大及 CLI 文件无界读取；接受并修复，不将清理结论冒充 C5。
-- **修复与回归**：上述发现修复后 contracts/server/Web/CLI 定向测试通过；共享 LLM helper 回归覆盖 caption/creative/outline/setting。C5 修订仅补公开路径测试及文档，无生产行为修改：beat-pipeline 21、beat-step 4、mounted Workspace 7 项定向通过；全仓最终 300 项与 typecheck/build 通过。context 测试最初夹具失败、其余补证初次 PASS 的性质见变化事件，不虚构业务 RED。所有首轮 findings 均接受并关闭，无有证据拒绝项；T0 获双轴及安全／逻辑 PASS，T1 获下栏独立 C6.4 裁决。
-- **知识维护**：Wiki 005、索引与 004/013/014/016 继承边界、schema、CONTEXT、双语 README/四张 SVG、handoff、contract-governance 和 drive skill 已同步；R0/R1、调研及作者原始决定 preserve。CLI 真实 provider 限制与浏览器原生刷新限制如上。issue backlink 在远端入口可读后同步，不预写关闭结果。
-- **发布前裁决**：2026-09-08，未参与实现的 beat_c5_standards 对 T1 `ef82bad99e6632e026a4afb1c5491505de837f0a` 给出 **C6.4 PASS**：清单 blob 匹配；T0 → T1 仅四个预留字段，转录忠实于已审候选、双轴原始结论、gh 回读与验证证据；300 项根测试及 32 项独立定向测试有结果，夹具失败未冒充业务 RED，计划未冒充运行结果。完整 82 文件范围不变，HEAD 等于 BASE、无区间提交或 unstaged/untracked，diff check 通过，secret 仍忽略。剩余风险：完整 production live smoke 停在 Creative，原生刷新弹窗未完整确认，内存／单进程边界；无新增阻塞。本次按 C6.5 一次转录该裁决，仍须 C6.6 终止核验与 C6.7 后才能交付；不在本候选记录最终 tree 或整节 C6 判定，merge 仍需作者确认。
+- **清单与候选**：清单 blob `db7f3eda6bce154b99e2ed67f50072465e9e2be0`；固定点 main `a96339a7eb11e8d28a4eb33ba8829ef6bfac7bbd`；source `feat/mvp-closeout` → PR → main；运行基线 `7c79f600a78df7ad87cc6b490b99086fe9a37581`。用户授权纳入既有 Wiki025/handoff 文档提交；本轮新增文档范围见上方计划。完整候选 manifest 为 README.md、README.zh-CN.md、docs/handoff.md、docs/wiki/005-beat-generation-review.md、docs/wiki/025-cli-command-safety.md；新增 staged 四文件，025 来自已授权既有提交。双轴通过 T0 `53b6f8d0a5dde692c5e22619df7b5512fda60bf8`；T1 `fd2a0b976c2315535bcc383a4e3a83d4866f6f83`。
+- **逐项判定**：C1 = PASS：C1.1/C1.8 据 live issue/依赖/Project 回读及计划中明确的保持终态；C1.2/C1.6 据 source/base、远端无保护/ruleset、精确 manifest 和既有提交归属；C1.3–C1.5/C1.7 据本轮范围核对、既有产品裁决、最小 Wiki/schema/领域/ADR 及文档执行计划。C2 = PASS：C2.3–C2.5 据下栏 AC 回归映射与独立 Spec；C2.4 沿用现有深模块，本轮无代码；C2.6 据结构/链接/事实校验。C2.1/C2.2 RED/GREEN 子项 N/A（纯文档，暂存/历史检查仍通过）；C2.3 原生刷新取消/确认子项 N/A（工具限制，保留人工核验风险）。C3 = PASS：C3.1/C3.6 据 closeout 三脚本和56项定向输出；C3.2–C3.4 据两种 diff-check、五文档/历史/安全扫描，secret仍忽略且无未跟踪项；C3.5 据三轮校准和复用/可读性/归属/效率结论。C3.2 lint/format 子项 N/A（无对应脚本，使用typecheck/diff，不承诺formatter保证）；C3.6 原生刷新子项 N/A（上述工具限制）。C4 = PASS：C4.1/C4.2/C4.5/C4.6/C4.8 据本轮四文档、既有025收敛、双语事实及结构/链接验证；C4.9 三轮校准见知识维护栏。C4.3/C4.4 N/A（形状/领域/架构/外部选型未变）；C4.7 N/A（运行HOW和流程规则未变）。C5 = PASS：C5.1–C5.3 据T0、manifest、两种diff-check、7c79f60逐笔完整patch及工作区审计；C5.4–C5.7 据独立双轴首轮FAIL、接受P2修复并重新冻结后的PASS。C6.1/C6.2 = PASS（文档事实修正、结构/链接重验、双轴精确复审；可执行树不变，419项等结果仍适用）。C6.3 = PASS：仅预留字段忠实转录来源与T0，T1/attestation保持pending。C6.4 = PASS：独立 beat_close_audit 精确比较 T0→T1 仅四个预留字段，忠实于原始输出；完整五文档、7c79f60逐笔历史、manifest/index/工作区余项、diff-check与证据映射一致，来源 `closeout-attestation.md`。
+- **验收与 TDD**：AC1/2 对应 `beat.test.ts`、`beat-step.test.ts`、`beat-pipeline.test.ts` 的内容／生成／关卡与 Web 阅读；AC3/5 对应同版本人工通过、fake downstream 消费最终编辑、CLI 回读与无 prose 终点；AC4/6 对应当前编辑／意见再生、CAS/共享锁、旧 head/跨 Store 身份、unknown 和迟到响应恢复。当前基线四包定向 56 项通过：contracts 8、server 27、Web 17、CLI 4，精确命令及日志索引见 `beat-close-audit.md` 与 `audit-beat-{contracts,server,web,cli}.log`；真实可执行 CLI 集成仅访问 loopback fake 服务。本轮不新增行为测试，历史 RED/GREEN 保存在旧快照；AC7 仍待本轮独立 review 与交付收口。
+- **本地门禁**：2026-09-28 运行基线 `7c79f60` 执行 `pnpm run test`、`pnpm run typecheck`、`pnpm run build` 全部 exit 0，命令／HEAD／退出码见 `closeout-{test,typecheck,build}.json`（文档收口阶段重跑），完整输出见同名 `.log`。根测试 419 项／46 文件（contracts 66、server 165、Web 64、CLI 124），四包 typecheck 与 build 通过；保留既有 DOCX 504.50 kB、超过 500 kB 分块警告。当前文档收口不改变可执行内容；`git diff --check a96339a7`、五文档本地链接、Wiki005/025 frontmatter／固定标题／backlink 检查通过，无未跟踪文件和凭据模式命中，`.env.local` 仍忽略，详见 `closeout-doc-check.txt`。精确冻结候选和完整历史仍需双轴核验。本轮未运行真实模型。
+- **双轴 review**：独立 beat_close_audit（Standards）与 mvp_scope（Spec）对 T0 均 PASS，原始报告为 `closeout-standards.md`、`closeout-spec.md`。首轮 `4467bdabc6a3e98f9d2c96a33b497d2802607cf7` 因历史C6记录归因P2判FAIL；接受修复，精确复审仅Wiki005六段改动后关闭，无剩余阻塞。两轴未参与本候选实现，分别核对完整五文档/7c79f60历史；Spec独立回读PR23并核验历史提交tree，不用旧PASS代替本轮裁决。
+- **修复与回归**：当前只读审计未发现确定行为缺陷，本轮不改业务实现；修正导航仍以原开发分支为现状、未区分历史审核与当前交付的文档漂移。首轮 Standards P2：从 Wiki 未自记终止结果误推历史裁决缺失；接受，补充 PR23 的真实 C6.6/C6.7/T2/C6 PASS 来源并修正所有相关措辞。该修订只改变文档事实，结构／链接检查后重新冻结并重跑双轴；原始发现见 `closeout-standards.md`，T0两轴复审PASS，见各自原始报告；原始首轮发现保留。原生刷新证据不完整按上方 N/A 留存，不据工具超时发明缺陷或写为成功。
+- **知识维护**：Wiki005 的当前入口、范围／计划、历史证据导航与本轮预留已更新；双语 README 同步 PR23 已合并但仍在关闭前核验，handoff 记录下一票和可验收 MVP 排期，#7/#8 范围保留。Wiki 索引现有范围仍准确，无需修改。schema/CONTEXT/ADR/research/运行 skill/docs/agents 不受本轮文档收口影响，按上栏 N/A。原人工决定、原技术方案、失败实验及五步终点 preserve；三轮自校准已逐轮完成：①无可执行改动，当前测试覆盖保持；②文档与已合并五步链、领域词及历史证据边界一致；③五文档候选对应 #5 收口及已授权 Wiki025 整理，AC7 的独立审查／交付仍待完成。结构／链接与中英文路线图事实一致；复用、可读性、知识归属、效率检查见 `closeout-doc-check.txt`，未引入运行时变化。
+- **发布前裁决**：2026-09-28，未参与实现的 beat_close_audit 对 T1 `fd2a0b976c2315535bcc383a4e3a83d4866f6f83` 给出 C6.4 **PASS**（`closeout-attestation.md`）：仅四个预留字段变化，来源转录忠实，完整五文档/既有提交及工作区/证据映射通过，无新增阻塞。清单blob、固定点与C1–C5/C6.1–C6.4见本节前栏。本次仅按C6.5写入裁决，仍须终止比较和精确提交检查；不在本页记录T2或整节C6。剩余风险为内存／单进程边界、完整 live smoke 的历史 Creative 失败及本轮原生刷新确认未验证；交付与关闭结果以随后 GitHub 回读为准。
 
 ## 边界与非目标
 
 范围仅第一章完整 Beat；不做批量章纲、正文、版本比较、单卡 AI、回流或已通过编辑。继承单进程锁、内存存储、当前页面草稿生命周期；不承诺 exactly-once 模型执行、日志持久回执或跨整个人工编辑周期的语义一致性。
 
-正文 #22、第二章循环 #6、新旧比较 #20、章节重生 #21、全仓治理 #19、SQLite #9 各自独立。模型预算的合成真实样例与容量限制见下方实测记录；诊断窗口会淘汰并随进程清空，不能以空日志证明未执行。
+正文 #22、第二章循环 #6、新旧比较 #20、章节重生 #21、全仓治理 #19、SQLite #9 各自独立。模型预算的合成真实样例与容量限制见上方 2026-09-08 实测记录；诊断窗口会淘汰并随进程清空，不能以空日志证明未执行。
 
 ## 上下文演进
+
+### 2026-09-28 — 对已合并实现重新收口交付证据
+
+- **触发证据**：本轮用户要求继续完成 MVP；远端回读 PR23 已于 2026-09-08 合并、#5 仍 OPEN，导航和票面仍保留原发布前阶段，issue 没有完成评论。独立 review 补充回读 PR23 后确认其已有 C6.6/C6.7 和 C6 PASS 终止记录；旧 Wiki 不自记这些结果符合记录边界。当前基线定向 56 项、全仓 419 项及 typecheck/build 通过，历史终止记录仍不能代替本轮候选裁决。
+- **原假设**：旧实现候选与发布前审核快照足够接手，仍需等待原 PR 合并。原人工决定和当时另行确认 merge 的授权边界保留在历史事件／快照。
+- **决定**：本轮以 `feat/mvp-closeout` 对已合并行为作新一轮文档交付收口，先锁定范围与计划，再取得当前候选的独立审核与发布证据；不重复实现 Beat、不重写旧 C6、不先关闭 issue。
+- **影响**：当前入口区分已合并能力、历史 live 结果和本轮回归；UI 仅确认 pending 页面与意见输入，原生刷新取消／确认因工具限制记 N/A，风险不隐藏。下一票仍为 #22，后续排期与原 MVP 范围在 handoff 收敛。
+- **上下文处理**：preserve 原始目的、Human 决定、技术理由、原生刷新限制和 Creative 失败；compact 旧八项审计为摘要并链接同 Wiki 的不可变发布版本；replace 漂移的交付入口，不改变 Wiki/issue/schema/ADR 的知识归属。
 
 ### 2026-09-08 — 正式候选评审补齐必测证据
 
@@ -530,12 +569,12 @@ COREPACK_ENABLE_AUTO_PIN=0 pnpm build
 
 ## 交接结论
 
-可以依赖五步链路、Beat 四部分契约、专用命令和请求诊断；不能假定已有正文、第二章、持久化或自动语义一致性检查。接手时先查下方完成审核证据与 live PR/issue 状态，不把本地能力等同于已合并发布。
+可以依赖已由 PR23 合并的五步链路、Beat 四部分契约、专用命令和请求诊断；不能假定已有正文、第二章、持久化或自动语义一致性检查。本轮仍须以当前候选完成 review、发布与 issue 关闭核验；先读上方“完成审核证据”，不能用合并事实代替 issue 完成评论与关闭回读，也不能用历史 PR 裁决代替本轮文档审核。历史真实模型结果和本轮 fake/mock 回归分开使用。
 
 ### 下一步
 
 | 行动 | 负责人 | 截止时间 |
 |---|---|---|
-| 完成尚缺的门禁、独立评审和精确候选 attestation | 交付 Agent + 独立 reviewer | commit/push 前 |
-| 发布 PR 并回读分支、检查和 Wiki；同步票面工程入口 | 交付 Agent | C1–C6 全部通过后 |
-| 按确认的 PR 模式合并、核对 issue 终态 | 作者授权 + 交付 Agent | merge 前取得授权，关闭前验证 main |
+| 冻结本轮文档候选，补齐三轮自校准、独立双轴和 T0/T1 证据；完成终止比较 | 交付 Agent + 独立 reviewer | 本轮发布前 |
+| 按本轮 C1 交付模式发布新 PR、回读 main/CI/元数据，完成评论后关闭 #5；不重复合并 PR23 | 交付 Agent | 本轮 C1–C6 通过后 |
+| 从 #22 的独立方案开始正文，保持两 Step／两关卡；其后 #19 → #9 → #6，#7/#8 仍属 MVP | 后续票交付 Agent | #5 关闭并确认依赖状态后；排期见 handoff |

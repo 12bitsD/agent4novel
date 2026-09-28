@@ -164,13 +164,13 @@ pnpm build
 | [#14](https://github.com/12bitsD/agent4novel/issues/14) | Agent CLI + LLM 遥测 + 项目驱动 skill | ✅ |
 | [#16](https://github.com/12bitsD/agent4novel/issues/16) | 可配置 ModelRuntime + LongCat provider | ✅ |
 | [#13](https://github.com/12bitsD/agent4novel/issues/13) | 大纲通过后生成完整设定，本地编辑并一次通过（[工程上下文](./docs/wiki/013-setting-generation-review.md)） | ✅ 已实现 |
-| [#5](https://github.com/12bitsD/agent4novel/issues/5) | 第一章章纲：编辑、再生、通过（[上下文](./docs/wiki/005-beat-generation-review.md)） | 已实现，交付收口中 |
+| [#5](https://github.com/12bitsD/agent4novel/issues/5) | 第一章章纲：编辑、再生、通过（[上下文](./docs/wiki/005-beat-generation-review.md)） | [PR #23](https://github.com/12bitsD/agent4novel/pull/23) 已合并，关闭前核验中 |
 | [#25](https://github.com/12bitsD/agent4novel/issues/25) | CLI 帮助零副作用与严格参数校验（[上下文](./docs/wiki/025-cli-command-safety.md)） | 已实现 |
 | [#22](https://github.com/12bitsD/agent4novel/issues/22) | 第一章正文及作者关卡 | 计划中 |
 | [#9](https://github.com/12bitsD/agent4novel/issues/9) | 产物设计与治理后接入 SQLite | 计划中 |
 | [#6](https://github.com/12bitsD/agent4novel/issues/6) | 续写 + 作品详情 + router | |
-| [#7](https://github.com/12bitsD/agent4novel/issues/7) | Agent 配置（文风/题材/爽点） | |
-| [#8](https://github.com/12bitsD/agent4novel/issues/8) | 坏例收集 | |
+| [#7](https://github.com/12bitsD/agent4novel/issues/7) | Agent 配置（文风/题材/爽点） | 计划中，属于 MVP |
+| [#8](https://github.com/12bitsD/agent4novel/issues/8) | 坏例收集 | 计划中，属于 MVP |
 
 [契约收敛 #19](https://github.com/12bitsD/agent4novel/issues/19) 在章纲和正文产物之后进行：#5 → #22 → #19 → #9 → #6。这是排期，不是新增依赖边。[通过后的设定修改 #17](https://github.com/12bitsD/agent4novel/issues/17)、[冲突澄清 #18](https://github.com/12bitsD/agent4novel/issues/18) 分别留给后续优化；边界见 [#13 设计](./docs/wiki/013-setting-generation-review.md)。这些是计划中的能力，不代表当前界面或存储已支持。
 
