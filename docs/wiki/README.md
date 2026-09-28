@@ -4,6 +4,8 @@
 
 核心读者是规划、实现、调试和评审本项目的 Agent。默认先按 `.claude/skills/agent4novel-wiki/SKILL.md` 检索并读取 `Agent Context`，只有任务需要时才展开技术方案或历史。
 
+恢复项目进度时，先读 [交接快照的当前里程碑与验证边界](../handoff.md#当前里程碑与验证边界)，再按本页索引进入相关 ticket。首章闭环与完整 MVP 的完成状态分别核对 [#22](https://github.com/12bitsD/agent4novel/issues/22) 和 [#1](https://github.com/12bitsD/agent4novel/issues/1)。
+
 ## 信息边界
 
 同一事实只保留一个权威来源，Wiki 通过链接继承，不复制整份内容。

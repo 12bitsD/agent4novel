@@ -4,6 +4,8 @@
 
 领域词的存储形态与代码 id 见 [docs/schema.md](docs/schema.md)。
 
+本页定义领域词，不表示所有能力均已实现。当前里程碑、验证范围及下一步见 [交接快照](docs/handoff.md#当前里程碑与验证边界)；首章工程上下文见 [Wiki 022](docs/wiki/022-prose-generation-review.md)，完整 MVP 的范围以 [#1](https://github.com/12bitsD/agent4novel/issues/1) 为准。
+
 ## 创作产物
 
 **脑洞**:
