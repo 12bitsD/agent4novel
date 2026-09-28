@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。最后更新：2026-09-28，#25 收口 CLI 帮助和参数语法；验证与发布前证据见 [Wiki 025](./wiki/025-cli-command-safety.md)，PR/关闭状态以 GitHub 回读为准。
+> 用途：context compaction / 新会话接力。最后更新：2026-09-28，CLI #25 已经 [PR #26](https://github.com/12bitsD/agent4novel/pull/26) 合并并关闭；当前能力与历史证据入口见 [Wiki 025](./wiki/025-cli-command-safety.md)。下一票接回 #5。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -75,7 +75,7 @@
 
 ## 下一步
 
-本轮 #25 的证据与完成审核见 [Wiki 025](./wiki/025-cli-command-safety.md)。2026-09-13 Caption/CLI 接回的历史验证保留在 [当时计划](./experiments/caption-adoption-2026-09-13/plan.md#验证记录)。本票不调用真实模型，不改变生产链质量结论。
+CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化与真实模型质量验证仍是独立范围。当前能力、验证边界和完成记录统一从 [Wiki 025](./wiki/025-cli-command-safety.md) 进入。2026-09-13 Caption/CLI 的历史验证保留在 [当时计划](./experiments/caption-adoption-2026-09-13/plan.md#验证记录)。
 
 #5 后续交付按 [Wiki 005 完成审核证据](./wiki/005-beat-generation-review.md#完成审核证据) 的剩余项继续，不直接开始 #22。2026-09-08 快照记录 #5 OPEN、assignee 12bitsD、ready-for-agent、Project Backlog，#4/#13 依赖 CLOSED；固定点为 70b43968de24ecf21e596bff35988feff62b73a9，source branch 为 codex/issue-5-beat-review，目标 main，当时约定 merge 仍需作者确认。该快照不能代替后续 PR/issue 回读；交付 Agent 恢复该票时先核对当前授权与远端状态。
 
