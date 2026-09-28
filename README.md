@@ -55,14 +55,18 @@ LongCat defaults to thinking disabled, temperature `0.9`, and top-p `0.95`. Sing
 
 ### CLI (for scripts and agents)
 
-Generation and review are also drivable from the command line — stdout is always pure JSON:
+Generation and review are also drivable from the command line — successful command results on stdout are pure JSON:
 
 ```bash
+./apps/cli/bin/a4n --help                       # command list, no I/O
+./apps/cli/bin/a4n approve-beat --help          # input shape, example, and effects
 ./apps/cli/bin/a4n smoke --seed-file seed.txt   # full chain through edited Setting and Beat approval
 ./apps/cli/bin/a4n list                         # create / get / advance / select / approve / logs …
 ./apps/cli/bin/a4n get work-1 --kind setting    # replace work-1 with your work ID
 ./apps/cli/bin/a4n approve-setting work-1 --file setting-request.json
 ```
+
+Help (`--help` / `-h`) at the top level or on any command exits 0 before reading files, contacting the server, or starting a model worker. Help text goes to stderr. Unknown, duplicate, missing, or empty options and invalid argument counts fail before I/O with a safe `usage` JSON error on stderr and exit 1. `create` and `smoke` require exactly one of `--seed` and `--seed-file`. A standalone help token takes precedence; use `--seed=--help` for that literal value. Existing `--flag=value` and pnpm `--` separators remain supported. See [CLI command safety](./docs/wiki/025-cli-command-safety.md).
 
 `setting-request.json` contains the complete `{ content, expectedHeadVersion }` request. Keep the version from the setting you reviewed: `approve-setting` never replaces it with the latest version. Automatic version lookup remains limited to `select` and `save-outline`; `smoke` exercises an actual setting edit before approval.
 
@@ -161,6 +165,7 @@ Every ticket runs the same loop: grill and align scope → establish its Wiki co
 | [#16](https://github.com/12bitsD/agent4novel/issues/16) | Configurable ModelRuntime + LongCat provider | ✅ |
 | [#13](https://github.com/12bitsD/agent4novel/issues/13) | Full setting after outline approval; edit locally and approve once ([engineering context](./docs/wiki/013-setting-generation-review.md)) | ✅ implemented |
 | [#5](https://github.com/12bitsD/agent4novel/issues/5) | First-chapter Beat: edit, regenerate, approve ([context](./docs/wiki/005-beat-generation-review.md)) | Implemented; delivery in progress |
+| [#25](https://github.com/12bitsD/agent4novel/issues/25) | Safe CLI help and strict arguments ([context](./docs/wiki/025-cli-command-safety.md)) | Implemented |
 | [#22](https://github.com/12bitsD/agent4novel/issues/22) | First-chapter prose and author gate | Planned |
 | [#9](https://github.com/12bitsD/agent4novel/issues/9) | SQLite after artifact design/consolidation | Planned |
 | [#6](https://github.com/12bitsD/agent4novel/issues/6) | Continue writing + work detail + router | |

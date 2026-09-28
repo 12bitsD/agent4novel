@@ -33,6 +33,8 @@ Live 模式会把生成所需的素材和上游产物发送给所选远程 provi
 
 ## CLI 命令
 
+先用 `./apps/cli/bin/a4n --help` 或 `<command> --help` / `-h` 查看语法、请求形状与副作用；帮助在任何 I/O 前返回。参数错误返回安全 `usage` JSON 并非零退出：修正命令后再执行，勿把未知参数当作已生效配置。`create` / `smoke` 的 `--seed` 与 `--seed-file` 恰好选一个。独立帮助 token 优先，字面值用 `--seed=--help`；严格语法边界见 [Wiki 025](../../../docs/wiki/025-cli-command-safety.md)。
+
 ```bash
 ./apps/cli/bin/a4n list                          # 作品列表
 ./apps/cli/bin/a4n create --seed-file seed.txt --title "标题"

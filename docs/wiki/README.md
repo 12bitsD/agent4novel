@@ -151,3 +151,4 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [013 完整设定生成与一次通过](./013-setting-generation-review.md) | [#13](https://github.com/12bitsD/agent4novel/issues/13) | current | 设定生成、页内编辑、同版本原子通过、失败对账 |
 | [014 Agent CLI 与遥测](./014-agent-cli-telemetry.md) | [#14](https://github.com/12bitsD/agent4novel/issues/14) | mixed | 作品 CLI、run-step 单节点 SP 对照、smoke、安全 telemetry |
 | [016 模型运行配置](./016-model-runtime-provider-config.md) | [#16](https://github.com/12bitsD/agent4novel/issues/16) | current | provider、凭据、timeout、生成参数默认与覆盖、ModelRuntime |
+| [025 CLI 命令发现与参数校验](./025-cli-command-safety.md) | [#25](https://github.com/12bitsD/agent4novel/issues/25) | current | 帮助零副作用、严格参数与安全 usage |
