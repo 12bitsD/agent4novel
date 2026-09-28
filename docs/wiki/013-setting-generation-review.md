@@ -2,15 +2,15 @@
 wiki_id: "013"
 ticket: 13
 ticket_state: done
-context_state: current
-summary: "大纲后整份生成设定，以存储原子条件写入、页内草稿与回读对账完成同版本定稿；生产链止于设定通过。"
+context_state: mixed
+summary: "大纲后整份生成设定，以存储原子条件写入、页内草稿与回读对账完成同版本定稿；后续生成消费 approved 设定。"
 topics: ["setting", "setting-review", "artifact-finalization", "stable-ids", "contract-governance"]
 code_paths: ["packages/contracts/src/setting.ts", "packages/contracts/src/artifacts.ts", "apps/server/src/store/work-store.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts", "apps/server/src/start.ts", "apps/web/src/pages/Workspace.tsx", "apps/cli/src/commands.ts"]
 symbols: ["SettingContent", "SettingReviewDraft", "matchesSettingSubmission", "WorkStore", "finalizeArtifact", "approveSetting", "createSettingStep", "reduceSettingReview", "Pipeline.advance", "workflowOf", "expectedHeadVersion"]
 inherits: ["004", "011", "014", "016"]
-changed_by: ["005"]
+changed_by: ["005", "022"]
 read_when: ["implement-setting", "change-setting-schema", "change-setting-review", "change-artifact-finalization", "trace-setting-decisions"]
-last_context_reviewed: "2026-09-08"
+last_context_reviewed: "2026-09-29"
 ---
 
 # 013 — 完整设定生成与一次通过
@@ -19,9 +19,9 @@ last_context_reviewed: "2026-09-08"
 
 - **读取时机**：实现 #13、修改设定形态／编辑／通过语义，或确定后续生成如何消费设定时。
 - **原始目的**：把创意稿中的设定要点扩展成作品基准，经作者把关后供章纲与正文消费；范围与 AC 以 [issue #13](https://github.com/12bitsD/agent4novel/issues/13) 为准。
-- **实际落地**：生产链为 caption → creative → outline → setting；生成 pending、页内编辑、专用命令同版本原子通过、approved 只读已实现。2026-09-05 按技术方案完成 TDD 切片，交付门禁状态见“完成审核证据”，不以技术评审代替功能验证。
+- **实际落地**：#13 当时交付 caption → creative → outline → setting 四步链；设定生成 pending、页内编辑、专用命令同版本原子通过、approved 只读仍有效。2026-09-05 的 TDD 与交付门禁只证明本票基线；当前完整生产链已由 #5／#22 延伸至首章正文通过。
 - **当前价值**：本页拥有设定生成与一次通过的工程 HOW；先读“原子写入与快照隔离”“提交结果确认”，再沿“代码落点”和测试矩阵核对。内容与公开协议归 [schema](../schema.md#setting13-已确认设计)，代码执行定义归 contracts。
-- **后续变化**：通过后修改归 [#17](https://github.com/12bitsD/agent4novel/issues/17)，冲突澄清归 [#18](https://github.com/12bitsD/agent4novel/issues/18)。[Wiki 005](./005-beat-generation-review.md) 已接入第一章章纲，五步生产链止于 beat-approved；正文单独归 #22，之后再做 #19 治理与 #9 SQLite，#15 仍负责服务定型后的 Hono RPC 迁移。
+- **后续变化**：[Wiki 005](./005-beat-generation-review.md) 接入章纲，[Wiki 022](./022-prose-generation-review.md) 接入消费 approved Beat 与 Setting 的正文，六步链止于 `prose-approved`；正文保存不修改 Setting，正文通过后可编辑的例外不扩展到设定。通过后设定修改归 [#17](https://github.com/12bitsD/agent4novel/issues/17)，冲突澄清归 [#18](https://github.com/12bitsD/agent4novel/issues/18)，治理／存储等排期见 [handoff](../handoff.md)。
 - **代码入口**：[内容契约](../../packages/contracts/src/setting.ts)、[结果对账](../../packages/contracts/src/setting-submission.ts)、[完成命令](../../apps/server/src/setting-review.ts)、[store](../../apps/server/src/store/work-store.ts)、[Web 状态](../../apps/web/src/setting-review.ts)、[工作台](../../apps/web/src/pages/Workspace.tsx)。
 
 ## 设计目的
@@ -41,6 +41,8 @@ last_context_reviewed: "2026-09-08"
 开工时仅有 `Work + Artifact` 和 `InMemoryStore`；本票保留此存储结构。旧 Setting 占位字段已被本票替换，没有独立的 setting SQL 表或 materials 表；SQLite 的架构方向仍遵循 [ADR-0002](../adr/0002-storage-sqlite-skills-as-files.md)。
 
 ## 技术方案
+
+本节四步状态表、`setting-approved` 终点与对应 smoke 保留 #13 当时方案；当前完整链路按 [#22 承接事件](#2026-09-29--正文消费正式设定并延伸首章链路) 进入六步定义。设定同版本通过、页内草稿与 approved 只读的语义未改变。
 
 ### 方案决策与模块职责
 
@@ -440,6 +442,14 @@ CLI 一次进程调用内使用与 Web 相同的规范化和对账函数，网�
 
 ## 上下文演进
 
+### 2026-09-29 — 正文消费正式设定并延伸首章链路
+
+- **触发证据**：当前 [生产装配](../../apps/server/src/start.ts) 的第六步 `prose#1` 声明消费 Beat 与 Setting；正文保存和通过边界由 [Wiki 022](./022-prose-generation-review.md) 与 [schema](../schema.md#prose22-当前契约) 记录。
+- **原假设**：#13 的生产链止于设定通过，#5 随后接入章纲；四步及五步终点分别说明各票当时的范围。
+- **决定**：将当前完整首章链路指向 Wiki 022，继续保留本页作为正式设定生成、同版定稿及回读对账的入口。
+- **影响**：approved 设定成为正文上游；Prose 自动保存、通过后编辑与本票只读边界独立，不回写或演进 Setting，也不提前接入作品 Wiki。
+- **上下文处理**：preserve 原始设计理由、Human 决定、四步状态表和验证历史；replace 摘要、Agent Context 与交接中的当前终点，并标注旧技术范围；下一跳为 Wiki 022。
+
 ### 2026-09-08 — 设定通过后接入章纲
 
 - **触发证据**：#5 Workspace 和实际 CLI smoke 通过设定后生成 beat#1。
@@ -490,6 +500,6 @@ CLI 一次进程调用内使用与 Web 相同的规范化和对账函数，网�
 
 ## 交接结论
 
-Human 产品对齐与独立技术方案评审均已完成；2026-09-05 已按方案实施当前四步链、同版本通过与 Web／CLI 恢复闭环。具体 TDD、实测和发布裁决只看本页“完成审核证据”；远端交付结果以 issue 完成评论与 live 状态为准，不在同一提交中伪造事后结果。
+Human 产品对齐与独立技术方案评审均已完成；2026-09-05 已按方案实施 #13 当时四步链、同版本通过与 Web／CLI 恢复闭环。具体 TDD、实测和发布裁决只看本页“完成审核证据”；远端交付结果以 issue 完成评论与 live 状态为准，不在同一提交中伪造事后结果。
 
-后续优化票 [#17](https://github.com/12bitsD/agent4novel/issues/17)、[#18](https://github.com/12bitsD/agent4novel/issues/18)、[#19](https://github.com/12bitsD/agent4novel/issues/19) 分别承接设定后编辑、冲突澄清、契约治理；按上方 2026-09-08 变化事件，当前先交付 #5 章纲与 #22 正文，再推进治理／SQLite。`materials` 是否支持多素材及独立预处理仍未定案，应由相关治理／存储票澄清，不能视为 #13 已授权范围。
+后续优化票 [#17](https://github.com/12bitsD/agent4novel/issues/17)、[#18](https://github.com/12bitsD/agent4novel/issues/18)、[#19](https://github.com/12bitsD/agent4novel/issues/19) 分别承接设定后编辑、冲突澄清、契约治理；当前首章正文与生产衔接从 [Wiki 022](./022-prose-generation-review.md) 读取，后续排期见 [handoff](../handoff.md)；本页四步证据不替代后续票验收。`materials` 是否支持多素材及独立预处理仍未定案，应由相关治理／存储票澄清，不能视为 #13 已授权范围。

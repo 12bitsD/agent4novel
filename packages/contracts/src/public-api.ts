@@ -3,6 +3,8 @@ import { artifactKinds, workViewEnvelopeSchema } from './artifacts.js'
 import { settingArtifactSchema } from './setting.js'
 import { llmTelemetrySchema } from './telemetry.js'
 import { beatCommandObservationSchema, beatInputBudgetSchema } from './beat-command.js'
+import { proseContentSchema, proseEditDraftSchema } from './prose.js'
+import { proseCommandObservationSchema, proseInputBudgetSchema } from './prose-command.js'
 import { beatContentSchema } from './beat.js'
 export const appConfigSchema = z.object({ demo: z.boolean() }).strict()
 
@@ -21,6 +23,10 @@ export const workViewSchema = workViewEnvelopeSchema.superRefine((work, ctx) => 
       const parsed = beatContentSchema.safeParse(artifact.content)
       if (!parsed.success) for (const issue of parsed.error.issues) ctx.addIssue({ ...issue, path: ['artifacts', i, 'content', ...issue.path] })
     }
+    if (artifact.kind === 'prose') {
+      const parsed = (artifact.humanStatus === 'approved' ? proseContentSchema : proseEditDraftSchema).safeParse(artifact.content)
+      if (!parsed.success) for (const issue of parsed.error.issues) ctx.addIssue({ ...issue, path: ['artifacts', i, 'content', ...issue.path] })
+    }
     if (artifact.kind !== 'setting') return
     const parsed = settingArtifactSchema.safeParse(artifact)
     if (!parsed.success) for (const issue of parsed.error.issues) {
@@ -34,14 +40,15 @@ export const pipelineStateSchema = z.object({
   workId: z.string(), stage: z.enum(['ready', 'blocked', 'awaiting-approval', 'complete']),
   nextStepId: z.string().nullable(), pendingGate: gateRefSchema.optional(),
 }).strict()
-const advanced = z.object({ kind: z.literal('advanced'), stepId: z.string(), state: pipelineStateSchema, beatCommand: beatCommandObservationSchema.optional() }).strict()
+const advanced = z.object({ kind: z.literal('advanced'), stepId: z.string(), state: pipelineStateSchema, beatCommand: beatCommandObservationSchema.optional(), proseCommand: proseCommandObservationSchema.optional() }).strict()
 const awaiting = z.object({ kind: z.literal('awaiting-approval'), state: pipelineStateSchema }).strict()
 const complete = z.object({ kind: z.literal('complete'), state: pipelineStateSchema }).strict()
 const failed = z.object({
   kind: z.literal('failed'), stepId: z.string(), code: z.string(), retryable: z.boolean(),
   attemptId: z.string().optional(), state: pipelineStateSchema,
   beatCommand: beatCommandObservationSchema.optional(),
-  inputBudget: beatInputBudgetSchema.optional(),
+  proseCommand: proseCommandObservationSchema.optional(),
+  inputBudget: z.union([beatInputBudgetSchema, proseInputBudgetSchema]).optional(),
 }).strict()
 export const advanceOutcomeSchema = z.discriminatedUnion('kind', [advanced, awaiting, complete, failed])
 const telemetry = { telemetry: z.array(llmTelemetrySchema) }

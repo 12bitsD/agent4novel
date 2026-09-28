@@ -68,6 +68,8 @@ export const workflowStates = [
   'setting-approved',
   'awaiting-beat-review',
   'beat-approved',
+  'awaiting-prose-review',
+  'prose-approved',
   'failed',
 ] as const
 export type WorkflowState = (typeof workflowStates)[number]

@@ -4,10 +4,11 @@ import {
   perChapterKinds,
   beatApproveRequestSchema, beatRegenerateRequestSchema, beatArtifactSchema, recoverBeatSubmission, beatCommandErrorSchema, beatCommandResponseSchema,
   matchesBeatSubmission,
+  proseApproveRequestSchema, proseRegenerateRequestSchema, proseSaveRequestSchema, proseArtifactSchema, recoverProseSubmission, proseCommandErrorSchema, proseCommandResponseSchema, matchesProseSubmission,
 } from '@agent4novel/contracts'
 import { CliError } from './client.js'
 import type { Client } from './client.js'
-import type { BeatSubmission, DiagnosticQuery } from '@agent4novel/contracts'
+import type { BeatSubmission, ProseSubmission, DiagnosticQuery } from '@agent4novel/contracts'
 
 // 命令层(#14):每个命令返回可 JSON 序列化的结果,由 main 打印;进度一律走 stderr(logger 注入)
 
@@ -42,7 +43,7 @@ function headOf(work: WorkView, kind: ArtifactKind): number {
   return head
 }
 
-// select/save 自动回填 expectedHeadVersion:一次快照同时供方向解析与乐观锁,Agent 不用自己记账
+// select/save-outline 自动回填 expectedHeadVersion:一次快照同时供方向解析与乐观锁,Agent 不用自己记账
 // directionId 缺省取第一个方向(smoke 场景);交互场景应显式传
 export async function select(client: Client, workId: string, directionId?: string) {
   const work = await client.getWork(workId)
@@ -62,6 +63,7 @@ export async function saveOutline(client: Client, workId: string, content: Outli
 }
 
 export async function approve(client: Client, workId: string, kind: ArtifactKind) {
+  if (kind === 'prose') throw new CliError('Use approve-prose with a complete request file', 'prose-approval-required')
   if (kind === 'beat') throw new CliError('Use approve-beat with a complete request file', 'beat-approval-required')
   if (kind === 'setting') {
     throw new CliError('Use approve-setting <workId> --file <request.json> to submit edited content and expectedHeadVersion', 'setting-approval-required')
@@ -145,6 +147,41 @@ export async function runBeatCommand(client: Client, workId: string, operation: 
     { ...local, ...safeRecovery, causeCode, ...(failure.success ? { command: failure.data.command, telemetry: failure.data.telemetry, inputBudget: failure.data.inputBudget } : {}) })
 }
 
+export async function runProseCommand(client: Client, workId: string, operation: ProseSubmission['operation'], input: unknown) {
+  const parsed = (operation === 'approve-prose' ? proseApproveRequestSchema : operation === 'save-prose' ? proseSaveRequestSchema : proseRegenerateRequestSchema).safeParse(input)
+  if (!parsed.success) throw new CliError('Invalid Prose request file', 'invalid-input', undefined, false, undefined,
+    parsed.error.issues.map(({ path, code }) => ({ path, code, message: 'invalid field' })))
+  const submission: ProseSubmission = operation === 'approve-prose'
+    ? { operation, request: proseApproveRequestSchema.parse(parsed.data) } : operation === 'save-prose'
+      ? { operation, request: proseSaveRequestSchema.parse(parsed.data) } : { operation, request: proseRegenerateRequestSchema.parse(parsed.data) }
+  const local = { operation, target: { workId, kind: 'prose', chapter: 1 }, expectedHead: { artifactId: submission.request.expectedArtifactId, version: submission.request.expectedHeadVersion,
+    ...(submission.operation === 'save-prose' ? { humanStatus: submission.request.expectedHumanStatus } : {}) } }
+  const work = await client.getWork(workId)
+  const baseline = proseArtifactSchema.safeParse(work.artifacts.find(a => a.kind === 'prose' && a.chapter === 1))
+  if (!baseline.success) throw new CliError('No first-chapter Prose', 'artifact-not-found', 404, false, undefined, undefined, { ...local, resolution: 'rejected', nextActions: ['read-work'], observedHead: null })
+  if (baseline.data.id !== submission.request.expectedArtifactId || baseline.data.version !== submission.request.expectedHeadVersion || baseline.data.humanStatus !== (submission.operation === 'save-prose' ? submission.request.expectedHumanStatus : 'pending')) {
+    throw new CliError('Request identity, version or status no longer matches; the file was not modified or submitted', 'version-conflict', 409, false, undefined, undefined,
+      { ...local, resolution: 'conflict', nextActions: ['read-work', 'load-server-version'], observedHead: { artifactId: baseline.data.id, version: baseline.data.version, humanStatus: baseline.data.humanStatus } })
+  }
+  let response: { status: number; body: unknown } | undefined
+  let causeCode = 'network-error'
+  try { response = await client.proseCommand(workId, submission) } catch (error) { if (error instanceof CliError) causeCode = error.code }
+  let recovery = recoverProseSubmission({ baseline: baseline.data, submission, hasUnknownWrite: false, response })
+  if (recovery.resolution === 'confirmed') return proseCommandResponseSchema.parse(response!.body)
+  const failure = proseCommandErrorSchema.safeParse(response?.body)
+  if (failure.success) causeCode = failure.data.code
+  else if (response) causeCode = 'invalid-response'
+  let latest: WorkView | undefined
+  try { latest = await client.getWork(workId, true) } catch (error) { if (error instanceof CliError && error.code === 'work-not-found') causeCode = 'work-not-found' }
+  recovery = recoverProseSubmission({ baseline: baseline.data, submission, hasUnknownWrite: recovery.hasUnknownWrite, response, work: latest, workIsReadback: latest !== undefined })
+  if (recovery.resolution === 'confirmed') return { artifact: recovery.artifact, resolution: recovery.resolution, nextActions: recovery.nextActions, confirmedBy: 'read-work' }
+  const code = recovery.resolution === 'conflict' ? 'prose-result-conflict' : recovery.resolution === 'uncertain' ? 'prose-result-unknown' : causeCode
+  const { artifact: _artifact, ...safeRecovery } = recovery
+  throw new CliError('Prose command did not confirm the requested result; keep the request file', code, response?.status,
+    failure.success ? failure.data.retryable : false, failure.success ? failure.data.attemptId : undefined, failure.success ? failure.data.issues : undefined,
+    { ...local, ...safeRecovery, causeCode, ...(failure.success ? { command: failure.data.command, telemetry: failure.data.telemetry, inputBudget: failure.data.inputBudget } : {}) })
+}
+
 export type SmokeResult = {
   workId: string
   executionMode: 'demo' | 'live'
@@ -152,7 +189,7 @@ export type SmokeResult = {
   final: WorkView
 }
 
-// 一键全链路探针包含真实的页内编辑等价操作，最后必须确认设定定稿。
+// 一键全链路探针包含正文编辑保存与通过，最后回读核验首章定稿。
 export async function smoke(
   client: Client,
   args: { seed: string; title?: string },
@@ -183,7 +220,7 @@ export async function smoke(
     const outcome = await client.advance(work.id)
     if (outcome.kind === 'failed') {
       throw new CliError(`Smoke stopped at ${outcome.stepId}`, outcome.code, 200, outcome.retryable, outcome.attemptId, undefined,
-        { telemetry: outcome.telemetry, ...(outcome.beatCommand ? { command: outcome.beatCommand } : {}), ...(outcome.inputBudget ? { inputBudget: outcome.inputBudget } : {}) })
+        { telemetry: outcome.telemetry, ...(outcome.proseCommand ? { command: outcome.proseCommand } : outcome.beatCommand ? { command: outcome.beatCommand } : {}), ...(outcome.inputBudget ? { inputBudget: outcome.inputBudget } : {}) })
     }
     return outcome
   }
@@ -215,11 +252,28 @@ export async function smoke(
     content: { ...pendingBeat.content, goal: `${pendingBeat.content.goal}\n\n作者确认：先保护证人，再追问线索。` },
   }
   await run('approve-beat(edited)', () => runBeatCommand(client, work.id, 'approve-beat', beatRequest), () => 'approved')
+  await run('advance#5(prose)', advanceSmoke, outcome => outcome.kind)
+  const pendingProse = await run('get(prose#1)', async () => {
+    const current = await client.getWork(work.id)
+    const artifact = proseArtifactSchema.safeParse(current.artifacts.find(a => a.kind === 'prose' && a.chapter === 1))
+    if (!artifact.success || artifact.data.humanStatus !== 'pending') throw new CliError('Smoke requires pending first-chapter Prose review', 'smoke-incomplete')
+    return artifact.data
+  }, artifact => `v${artifact.version} pending`)
+  const proseContent = { text: `${pendingProse.content.text}\n\n作者定稿：先保护证人，再追问线索。\n` }
+  const savedProse = await run('save-prose(edited)', async () => {
+    const result = await runProseCommand(client, work.id, 'save-prose', { chapter: 1, expectedArtifactId: pendingProse.id,
+      expectedHeadVersion: pendingProse.version, expectedHumanStatus: 'pending', content: proseContent,
+    })
+    return proseArtifactSchema.parse(result.artifact)
+  }, artifact => `v${artifact.version} ${artifact.humanStatus}`)
+  const proseRequest = { chapter: 1 as const, expectedArtifactId: savedProse.id, expectedHeadVersion: savedProse.version, content: proseContent }
+  await run('approve-prose(saved)', () => runProseCommand(client, work.id, 'approve-prose', proseRequest), () => 'approved')
   const final = await run('get(final)', async () => {
     const current = await client.getWork(work.id)
-    if (current.workflowState !== 'beat-approved' || !matchesBeatSubmission(pendingBeat, beatRequest, current.artifacts.find(a => a.kind === 'beat' && a.chapter === 1))
+    if (current.workflowState !== 'prose-approved' || !matchesBeatSubmission(pendingBeat, beatRequest, current.artifacts.find(a => a.kind === 'beat' && a.chapter === 1))
       || !matchesSettingSubmission(pending, request, current.artifacts.find(a => a.kind === 'setting'))
-      || current.artifacts.some(a => a.kind === 'prose')) throw new CliError('Smoke did not reach the expected approved Beat without prose', 'smoke-incomplete')
+      || !matchesProseSubmission(savedProse, proseRequest, current.artifacts.find(a => a.kind === 'prose' && a.chapter === 1))
+      || current.artifacts.some(a => (a.chapter ?? 0) > 1)) throw new CliError('Smoke did not confirm the edited and approved first chapter', 'smoke-incomplete')
     return current
   }, current => current.workflowState)
   return { workId: work.id, executionMode, steps, final }

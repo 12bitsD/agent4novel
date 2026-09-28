@@ -1,5 +1,5 @@
 import { commandSummarySchema, diagnosticResponseSchema } from '@agent4novel/contracts'
-import type { LlmTelemetry, BeatCommandObservation, CommandSummary, DiagnosticQuery } from '@agent4novel/contracts'
+import type { LlmTelemetry, BeatCommandObservation, ProseCommandObservation, CommandSummary, DiagnosticQuery } from '@agent4novel/contracts'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomUUID } from 'node:crypto'
 import { safeLog } from '../safe-log.js'
@@ -23,12 +23,12 @@ let commandSeq = 0
 let processInstanceId = randomUUID()
 const commands: Array<{ workId: string; seq: number } & CommandSummary> = []
 
-export function recordCommand(workId: string, command: BeatCommandObservation, code: string): void {
+export function recordCommand(workId: string, command: BeatCommandObservation | ProseCommandObservation, code: string): void {
   try {
     const summary = commandSummarySchema.parse({ command, code, recordedAt: new Date().toISOString() })
     commands.push({ workId, seq: ++commandSeq, ...summary })
     if (commands.length > CAPACITY) commands.splice(0, commands.length - CAPACITY)
-    safeLog({ event: 'beat.command', ...summary })
+    safeLog({ event: command.operation.endsWith('-prose') ? 'prose.command' : 'beat.command', ...summary })
   } catch { /* diagnostic validation/sink failures never undo a command */ }
 }
 export function diagnosticsFor(workId: string, query: DiagnosticQuery = {}) {

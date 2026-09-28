@@ -38,13 +38,13 @@ export default function BeatReview({ state, onAction, allowCommands, onApprove, 
   return <section ref={root} className="setting-review" aria-label="章纲关卡">
     <header className="setting-review-header">
       <div><p className="setting-eyebrow">第一章 · 写作计划</p><h2>{approved ? '章纲已通过' : '先看清这一章，再开始写作'}</h2>
-        <p className="setting-muted">{approved ? '后续正文将使用这份章纲。本期不生成正文。' : '修改仅保存在当前页面；点击通过后，一次定稿。'}</p></div>
+        <p className="setting-muted">{approved ? '后续正文使用这份章纲。' : '修改仅保存在当前页面；点击通过后，一次定稿。'}</p></div>
       {!approved && <div className="setting-actions">
         <button type="button" style={btnSecondary} onClick={() => onAction({ type: 'mode', mode: editing ? 'preview' : 'edit' })}>{editing ? '预览章纲' : '编辑章纲'}</button>
         <button type="button" disabled={locked} style={btnPrimary} onClick={() => {
           if (state.instructions.trim()) setConfirmation({ title: '通过当前可见的章纲？', description: '修改意见仅用于重新生成。本次只通过当前可见章纲，不会应用这些修改意见。', label: '仍然通过当前章纲', run: onApprove })
           else onApprove()
-        }}>通过章纲</button>
+        }}>通过章纲并生成正文</button>
       </div>}
     </header>
     {state.notice && <p className="setting-notice" role="status">{state.notice}</p>}

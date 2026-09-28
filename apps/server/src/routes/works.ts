@@ -13,10 +13,12 @@ import {
   settingLimits,
   beatApproveRequestSchema, beatRequestHeadSchema, beatLimits, beatCommandResponseSchema, beatCommandErrorSchema,
   beatRegenerateRequestSchema,
+  proseApproveRequestSchema, proseRequestHeadSchema, proseLimits, proseCommandResponseSchema, proseCommandErrorSchema,
+  proseRegenerateRequestSchema, proseSaveRequestSchema,
   diagnosticQuerySchema,
   workViewSchema,
 } from '@agent4novel/contracts'
-import type { ApiError, ArtifactKind, OutlineContent, OutlineDraft, WorkflowState, WorkView } from '@agent4novel/contracts'
+import type { ApiError, ArtifactKind, OutlineContent, OutlineDraft, WorkflowState, WorkView, LlmTelemetry } from '@agent4novel/contracts'
 import type { Pipeline } from '../pipeline/pipeline.js'
 import { KnownError } from '../errors.js'
 import { diagnosticsFor, withRequest, currentRequest, recordCommand } from '../steps/telemetry.js'
@@ -24,6 +26,8 @@ import type { WorkStore } from '../store/work-store.js'
 import { approveSetting, SettingValidationError } from '../setting-review.js'
 import { approveBeat } from '../beat-review.js'
 import { observeBeat, BeatCommandError, beatFailureCode } from '../beat-command.js'
+import { approveProse, saveProse } from '../prose-review.js'
+import { observeProse, ProseCommandError, proseFailureCode, proseResponseError } from '../prose-command.js'
 import { safeLog } from '../safe-log.js'
 
 const workCreateSchema = z.object({
@@ -125,6 +129,8 @@ function routeError(c: Context, err: unknown): Response {
       case 'setting-approval-required':
       case 'beat-approval-required':
       case 'beat-gate-not-ready':
+      case 'prose-approval-required':
+      case 'prose-gate-not-ready':
       case 'direction-not-selected':
         return c.json(body, 409)
       case 'llm-invalid-output':
@@ -187,10 +193,13 @@ function workflowOf(
       if (gate === 'beat') {
         return { workflowState: 'awaiting-beat-review', allowedActions: ['approve', 'regenerate'] }
       }
+      if (gate === 'prose') {
+        return { workflowState: 'awaiting-prose-review', allowedActions: ['save-draft', 'approve', 'regenerate'] }
+      }
       throw new Error(`unknown gate kind: ${gate ?? 'none'}`)
     }
     case 'complete':
-      return { workflowState: completionKind === 'beat' ? 'beat-approved' : completionKind === 'setting' ? 'setting-approved' : 'outline-approved', allowedActions: [] }
+      return { workflowState: completionKind === 'prose' ? 'prose-approved' : completionKind === 'beat' ? 'beat-approved' : completionKind === 'setting' ? 'setting-approved' : 'outline-approved', allowedActions: completionKind === 'prose' ? ['save-draft'] : [] }
     case 'blocked':
       return { workflowState: 'ready-to-generate', allowedActions: [] }
   }
@@ -252,6 +261,68 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
       const status = code === 'invalid-content' || code === 'input-budget-exceeded' ? 422 : code === 'work-not-found' || code === 'artifact-not-found' ? 404
         : code === 'llm-invalid-output' ? 502 : code === 'llm-unavailable' ? 503 : code === 'llm-timeout' ? 504 : known ? 409 : 500
       return c.json(beatCommandErrorSchema.parse({
+        code, message: code, retryable: known?.retryable ?? false, command: err.command, telemetry: currentRequest()!.telemetry,
+        ...(known?.inputBudget ? { inputBudget: known.inputBudget } : {}),
+        ...(invalid && code === 'invalid-content' ? { issues: invalid.issues.slice(0, 128).map(issue => ({ path: issue.path[0] === 'content' || issue.path[0] === 'instructions' ? issue.path : ['content', ...issue.path], code: issue.code, message: 'invalid field' })) } : {}),
+      }), status)
+    }
+  })
+
+  app.use('/api/works/:id/artifacts/prose/*', async (_c, next) => withRequest(crypto.randomUUID(), meta?.demo ?? true, next))
+  const rejectProseRequest = (c: Context, code: 'bad-json' | 'invalid-input' | 'unsupported-chapter' | 'payload-too-large') => {
+    const scope = currentRequest()!
+    const failure = proseCommandErrorSchema.parse({
+      code, message: code, retryable: false,
+      command: { kind: 'request-rejected', requestId: scope.requestId, operation: c.req.path.endsWith('/save') ? 'save-prose' : c.req.path.endsWith('/regenerate') ? 'regenerate-prose' : 'approve-prose',
+        executionMode: scope.executionMode, latencyMs: Date.now() - scope.startedAt, writeOutcome: 'not-committed', failureStage: 'request', attemptIds: [] },
+    })
+    const workId = c.req.param('id')
+    if (workId) recordCommand(workId, failure.command, code)
+    return c.json(failure, code === 'payload-too-large' ? 413 : 400)
+  }
+  for (const operation of ['approve', 'regenerate', 'save'] as const) app.post(`/api/works/:id/artifacts/prose/${operation}`, bodyLimit({
+    maxSize: proseLimits.bodyBytes, onError: c => rejectProseRequest(c, 'payload-too-large'),
+  }), async c => {
+    let body: unknown
+    try { body = await c.req.json() } catch { return rejectProseRequest(c, 'bad-json') }
+    const head = (operation === 'save' ? proseRequestHeadSchema.extend({ expectedHumanStatus: z.enum(['pending', 'approved']) }) : proseRequestHeadSchema).passthrough().safeParse(body)
+    if (!head.success) {
+      const unsupported = head.error.issues.some(issue => issue.path[0] === 'chapter')
+      return rejectProseRequest(c, unsupported ? 'unsupported-chapter' : 'invalid-input')
+    }
+    const parsed = (operation === 'approve' ? proseApproveRequestSchema : operation === 'save' ? proseSaveRequestSchema : proseRegenerateRequestSchema).safeParse(body)
+    if (!parsed.success && parsed.error.issues.some(issue => issue.path[0] !== 'content' && issue.path[0] !== 'instructions')) return rejectProseRequest(c, 'invalid-input')
+    const workId = c.req.param('id')
+    try {
+      if (!parsed.success) await observeProse(workId, operation === 'approve' ? 'approve-prose' : operation === 'save' ? 'save-prose' : 'regenerate-prose', {
+        artifactId: head.data.expectedArtifactId, version: head.data.expectedHeadVersion,
+        ...(operation === 'save' ? { humanStatus: head.data.expectedHumanStatus as 'pending' | 'approved' } : {}),
+      }, execution => {
+        execution.stage = 'input'
+        throw parsed.error
+      })
+      if (!parsed.success) throw new Error('unreachable')
+      const result = operation === 'approve'
+        ? await approveProse(store, workId, proseApproveRequestSchema.parse(parsed.data))
+        : operation === 'save' ? await saveProse(store, workId, proseSaveRequestSchema.parse(parsed.data))
+          : await pipeline.regenerateProse(workId, proseRegenerateRequestSchema.parse(parsed.data))
+      try {
+        const state = pipeline.getState(workId)
+        return c.json(proseCommandResponseSchema.parse({ ...result,
+          workflow: { ...workflowOf(state, pipeline.failureOf(workId), pipeline.completionKind), nextStepId: state.nextStepId },
+          telemetry: currentRequest()!.telemetry,
+        }))
+      } catch (cause) {
+        throw proseResponseError(workId, result.command, cause)
+      }
+    } catch (err) {
+      if (!(err instanceof ProseCommandError)) return c.json(errorBody('internal-error', 'prose response unavailable'), 500)
+      const known = err.command.failureStage !== 'response' && err.cause instanceof KnownError ? err.cause : undefined
+      const invalid = err.command.failureStage !== 'response' && err.cause instanceof z.ZodError ? err.cause : undefined
+      const code = proseFailureCode(err.cause, err.command.failureStage ?? 'response')
+      const status = code === 'invalid-content' || code === 'input-budget-exceeded' ? 422 : code === 'work-not-found' || code === 'artifact-not-found' ? 404
+        : code === 'llm-invalid-output' ? 502 : code === 'llm-unavailable' ? 503 : code === 'llm-timeout' ? 504 : known ? 409 : 500
+      return c.json(proseCommandErrorSchema.parse({
         code, message: code, retryable: known?.retryable ?? false, command: err.command, telemetry: currentRequest()!.telemetry,
         ...(known?.inputBudget ? { inputBudget: known.inputBudget } : {}),
         ...(invalid && code === 'invalid-content' ? { issues: invalid.issues.slice(0, 128).map(issue => ({ path: issue.path[0] === 'content' || issue.path[0] === 'instructions' ? issue.path : ['content', ...issue.path], code: issue.code, message: 'invalid field' })) } : {}),
@@ -396,8 +467,12 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
     const workId = c.req.param('id')
     const requestId = crypto.randomUUID()
     const started = Date.now()
+    let telemetry: LlmTelemetry[] = []
     try {
-      const { outcome, telemetry } = await withRequest(requestId, meta?.demo ?? true, async scope => ({ outcome: await pipeline.advance(workId), telemetry: scope.telemetry }))
+      const outcome = await withRequest(requestId, meta?.demo ?? true, scope => {
+        telemetry = scope.telemetry
+        return pipeline.advance(workId)
+      })
       safeLog({
           event: 'pipeline.advance',
           requestId,
@@ -407,6 +482,9 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
         })
       return c.json({ ...outcome, telemetry })
     } catch (err) {
+      if (err instanceof ProseCommandError) return c.json(proseCommandErrorSchema.parse({
+        code: 'internal-error', message: 'internal-error', retryable: false, command: err.command, telemetry,
+      }), 500)
       if (err instanceof KnownError && err.code === 'advance-in-progress') {
         safeLog({ event: 'pipeline.lock-conflict', requestId, workId })
       }

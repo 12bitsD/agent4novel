@@ -1,4 +1,4 @@
-import { runStep, perChapterKinds, beatContentSchema, beatRegenerateRequestSchema } from '@agent4novel/contracts'
+import { runStep, perChapterKinds, beatContentSchema, beatRegenerateRequestSchema, proseContentSchema, proseRegenerateRequestSchema } from '@agent4novel/contracts'
 import type {
   AgentConfig,
   Artifact,
@@ -13,9 +13,11 @@ import type {
 import { KnownError } from '../errors.js'
 import type { ArtifactPrecondition, WorkStore } from '../store/work-store.js'
 import { observeBeat, BeatCommandError, beatFailureCode, type BeatExecution } from '../beat-command.js'
-import type { BeatCommandObservation } from '@agent4novel/contracts'
-import type { BeatRegenerateRequest } from '@agent4novel/contracts'
+import { observeProse, ProseCommandError, proseFailureCode, proseResponseError } from '../prose-command.js'
+import type { BeatCommandObservation, ProseExecutionObservation } from '@agent4novel/contracts'
+import type { BeatRegenerateRequest, ProseRegenerateRequest } from '@agent4novel/contracts'
 import { prepareBeatReview } from '../beat-review.js'
+import { prepareProseReview } from '../prose-review.js'
 import { assertBeatIds, assignBeatIds } from '../beat-content.js'
 import { safeLog } from '../safe-log.js'
 export type { AdvanceOutcome, GateRef, PipelineStage, PipelineState } from '@agent4novel/contracts'
@@ -177,15 +179,20 @@ export class Pipeline {
         }
         const entry = this.definition.find((d) => d.stepId === state.nextStepId)!
         let beatCommand: BeatCommandObservation | undefined
+        let proseCommand: ProseExecutionObservation | undefined
         try {
           if (entry.outputKind === 'beat') {
             const result = await observeBeat(workId, 'generate-beat', null, execution => this.runEntry(workId, entry, execution))
             beatCommand = result.command
+          } else if (entry.outputKind === 'prose') {
+            const result = await observeProse(workId, 'generate-prose', null, execution => this.runEntry(workId, entry, execution))
+            proseCommand = result.command
           } else await this.runEntry(workId, entry)
         } catch (err) {
-          const cause = err instanceof BeatCommandError ? err.cause : err
+          const cause = err instanceof BeatCommandError || err instanceof ProseCommandError ? err.cause : err
           const known = cause instanceof KnownError ? cause : null
-          const code = err instanceof BeatCommandError ? beatFailureCode(cause, err.command.failureStage ?? 'response') : known?.code ?? 'llm-unavailable'
+          const code = err instanceof BeatCommandError ? beatFailureCode(cause, err.command.failureStage ?? 'response')
+            : err instanceof ProseCommandError ? proseFailureCode(cause, err.command.failureStage ?? 'response') : known?.code ?? 'llm-unavailable'
           // 丢弃旧输入上的生成结果后可手动重试；尚未通过的上游仍由 getState 阻挡。
           const retryable = known?.code === 'upstream-changed' || (known?.retryable ?? true)
           this.lastFailure.set(workId, {
@@ -201,13 +208,19 @@ export class Pipeline {
             attemptId: known?.attemptId,
             state: this.getState(workId),
             beatCommand: err instanceof BeatCommandError ? err.command : undefined,
+            proseCommand: err instanceof ProseCommandError ? err.command : undefined,
             ...(known?.inputBudget ? { inputBudget: known.inputBudget } : {}),
           }
         }
         this.lastFailure.delete(workId)
         lastStepId = entry.stepId
         if (entry.gateAfter) {
-          return { kind: 'advanced', stepId: entry.stepId, state: this.getState(workId), beatCommand }
+          try {
+            return { kind: 'advanced', stepId: entry.stepId, state: this.getState(workId), beatCommand, proseCommand }
+          } catch (cause) {
+            if (proseCommand) throw proseResponseError(workId, proseCommand, cause)
+            throw cause
+          }
         }
       }
       // 防御:循环上界被触达说明 definition 长度内未收敛
@@ -257,6 +270,38 @@ export class Pipeline {
     return this.definition.at(-1)?.outputKind
   }
 
+  async regenerateProse(workId: string, request: ProseRegenerateRequest) {
+    return observeProse(workId, 'regenerate-prose', { artifactId: request.expectedArtifactId, version: request.expectedHeadVersion }, async execution => {
+      if (this.advancing.has(workId)) throw new KnownError('advance-in-progress', 'generation already running', { retryable: true })
+      this.advancing.add(workId)
+      try {
+        const { work, baseline, preconditions } = prepareProseReview(this.store, workId, request)
+        const state = this.getState(workId)
+        if (state.stage !== 'awaiting-approval' || state.pendingGate?.kind !== 'prose' || state.pendingGate.chapter !== 1) {
+          throw new KnownError('prose-gate-not-ready', 'prose gate not ready')
+        }
+        const entry = this.definition.find(d => d.outputKind === 'prose' && d.chapter === 1)
+        if (!entry) throw new KnownError('prose-gate-not-ready', 'prose step not configured')
+        execution.stage = 'input'
+        const parsed = proseRegenerateRequestSchema.parse(request)
+        const upstream = Object.fromEntries((entry.consumes ?? []).map(kind => {
+          const chapter = this.definition.find(d => d.outputKind === kind)?.chapter
+          return [kind, work.artifacts.find(a => a.kind === kind && a.chapter === chapter)!.content]
+        }))
+        execution.stage = 'model'
+        const output = await runStep(this.steps.get(entry.stepId)!, {
+          workId, seed: work.seed, upstream, chapter: 1, regeneration: { content: parsed.content, instructions: parsed.instructions },
+        }, this.resolveConfig(work, entry.stepId))
+        execution.stage = 'output'
+        const candidate = proseContentSchema.parse(output.content)
+        execution.stage = 'commit'
+        return this.store.appendArtifact(workId, 'prose', candidate, { chapter: 1, preconditions: [
+          ...preconditions, { kind: 'prose', chapter: 1, head: { artifactId: baseline.id, version: baseline.version, humanStatus: 'pending' } },
+        ] })
+      } finally { this.advancing.delete(workId) }
+    })
+  }
+
   // 读模型用:最近一次失败(无 → null)。审批等人工动作也会清掉它。
   failureOf(workId: string): { stepId: string; code: string; retryable: boolean } | null {
     return this.lastFailure.get(workId) ?? null
@@ -293,11 +338,11 @@ export class Pipeline {
         })
       }
     }
-    if (entry.outputKind === 'beat') {
+    if (entry.outputKind === 'beat' || entry.outputKind === 'prose') {
       for (const prior of this.definition.slice(0, this.definition.indexOf(entry))) {
         const head = work.artifacts.find(a => a.kind === prior.outputKind && a.chapter === prior.chapter)
         if (!head || head.humanStatus !== 'approved' || !this.guardOk(head.kind, head)) {
-          throw new KnownError('beat-gate-not-ready', 'earlier gate not ready')
+          throw new KnownError(entry.outputKind === 'prose' ? 'prose-gate-not-ready' : 'beat-gate-not-ready', 'earlier gate not ready')
         }
         if (!preconditions.some(p => p.kind === head.kind && p.chapter === head.chapter)) {
           preconditions.push({ kind: head.kind, chapter: head.chapter, head: { artifactId: head.id, version: head.version, humanStatus: 'approved' } })
@@ -309,6 +354,9 @@ export class Pipeline {
     if (execution) execution.stage = 'output'
     if (entry.outputKind === 'beat' && !beatContentSchema.safeParse(output.content).success) {
       throw new KnownError('llm-invalid-output', 'invalid beat output', { retryable: true })
+    }
+    if (entry.outputKind === 'prose' && !proseContentSchema.safeParse(output.content).success) {
+      throw new KnownError('llm-invalid-output', 'invalid prose output', { retryable: true })
     }
     if (execution) execution.stage = 'commit'
     const artifact = this.store.appendArtifact(workId, entry.outputKind, output.content, { preconditions, chapter: entry.chapter })
@@ -335,6 +383,7 @@ export class Pipeline {
   }
 
   approve(workId: string, kind: ArtifactKind, chapter?: number): void {
+    if (kind === 'prose') throw new KnownError('prose-approval-required', 'prose must use its full-content approval command')
     if (kind === 'beat') throw new KnownError('beat-approval-required', 'beat must use its full-content approval command')
     if (kind === 'setting') {
       throw new KnownError('setting-approval-required', 'setting must use its full-content approval command')

@@ -1,5 +1,5 @@
 import { readFileSync, openSync, readSync, closeSync } from 'node:fs'
-import { artifactKinds, beatLimits, diagnosticQuerySchema } from '@agent4novel/contracts'
+import { artifactKinds, beatLimits, proseLimits, diagnosticQuerySchema } from '@agent4novel/contracts'
 import type { ArtifactKind } from '@agent4novel/contracts'
 import { CliError, createClient, parseCliTimeoutMs } from './client.js'
 import * as cmd from './commands.js'
@@ -82,27 +82,35 @@ async function main(): Promise<void> {
       break
     }
     case 'approve-beat':
-    case 'regenerate-beat': {
+    case 'regenerate-beat':
+    case 'approve-prose':
+    case 'save-prose':
+    case 'regenerate-prose': {
+      const isProse = command === 'approve-prose' || command === 'regenerate-prose' || command === 'save-prose'
+      const limit = isProse ? proseLimits.bodyBytes : beatLimits.bodyBytes
+      const label = isProse ? 'Prose' : 'Beat'
       let source: string
       let descriptor: number | undefined
       try {
         descriptor = openSync(flags.file, 'r')
-        const buffer = Buffer.alloc(beatLimits.bodyBytes + 1)
+        const buffer = Buffer.alloc(limit + 1)
         let length = 0
         while (length < buffer.length) {
           const read = readSync(descriptor, buffer, length, buffer.length - length, null)
           if (read === 0) break
           length += read
         }
-        if (length > beatLimits.bodyBytes) throw new CliError('Beat request file exceeds byte limit', 'payload-too-large')
-        source = buffer.subarray(0, length).toString('utf8')
+        if (length > limit) throw new CliError(`${label} request file exceeds byte limit`, 'payload-too-large')
+        try {
+          source = isProse ? new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, length)) : buffer.subarray(0, length).toString('utf8')
+        } catch { throw new CliError(`${label} request file must contain valid UTF-8`, 'invalid-input') }
       } catch (error) {
         if (error instanceof CliError) throw error
-        throw new CliError('Unable to read the Beat request file', 'usage')
+        throw new CliError(`${label} request file could not be read`, 'usage')
       } finally { if (descriptor !== undefined) closeSync(descriptor) }
       let input: unknown
-      try { input = JSON.parse(source) } catch { throw new CliError('Beat request file must contain valid JSON', 'invalid-input') }
-      result = await cmd.runBeatCommand(client, pos[0], command, input)
+      try { input = JSON.parse(source) } catch { throw new CliError(`${label} request file must contain valid JSON`, 'invalid-input') }
+      result = isProse ? await cmd.runProseCommand(client, pos[0], command, input) : await cmd.runBeatCommand(client, pos[0], command, input)
       break
     }
     case 'logs':

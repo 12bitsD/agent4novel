@@ -13,7 +13,7 @@ agent4novel 的领域数据模型。代码英文 id ↔ 领域中文词（见 [C
 | `outline` | 大纲（#4，两层，与章节解耦）：`{arcs:[{arcId, title, conflict, development, resolution, segments:[{segmentId, title, summary, outcome}]}]}`；弧线 3~8、每弧剧情点 2~8；`arcId`/`segmentId` 由 server 注入；章数不在本层（归 #5） | 每作品一份 |
 | `setting` | 完整设定（#13）：`{overview, world[], characters[], factions[], relationships[], extensions[]}`；固定栏目通用卡片 + 动态补充栏目，具体规则见下方 | 每作品一份 |
 | `beat` | 章纲；当前第一章形态与协议见[下方](#beat5-当前契约)，已接入生产链 | 每作品 × 每章一份 |
-| `prose` | 正文 | 每作品 × 每章一份 |
+| `prose` | 第一章正文 `{text}`；内容、保存与通过协议见[下方](#prose22-当前契约) | 每作品 × 每章一份 |
 
 **卖点 / 梗概 不是独立产物**：卖点 = 创意稿方向包的 `hook` / `payoffs`，梗概 = `synopsis`。创意稿里的人物/设定/大纲是 **hint（粗）**；`outline` / `setting` 节点产出的**完整版（细）**是独立产物。各 kind 的 zod schema 见 packages/contracts（caption.ts / creative.ts / outline.ts / setting.ts）。
 
@@ -39,7 +39,7 @@ Work = {
 
 ### 单节点实验协议
 
-`stepExperimentRequestSchema` 是本地 CLI 与独立 worker 的协议，不是作品 REST 写入接口。请求为 `{ stepId, input: { seed, upstream?, chapter?, regeneration? }, systemPrompt?, config? }`；节点限 caption/creative/outline/setting/beat。Beat 必须 chapter=1，其他节点不接受 chapter 或 regeneration；下游仍按生产 Step 的输入 schema 与消费守卫校验。
+`stepExperimentRequestSchema` 是本地 CLI 与独立 worker 的协议，不是作品 REST 写入接口。请求为 `{ stepId, input: { seed, upstream?, chapter?, regeneration? }, systemPrompt?, config? }`；节点限 caption/creative/outline/setting/beat/prose。Beat 与 Prose 必须 chapter=1，可选 regeneration 必须匹配对应节点的草稿形状；其他节点不接受 chapter 或 regeneration。Prose 的 upstream 为完整 `{beat, setting}`；下游仍按生产 Step 的输入 schema 与消费守卫校验。
 
 实验 config 只接受 model、directionCount 及三项生成参数，拒绝未知字段；SP 必须非空且最多 100000 字符，seed 受共享素材预算限制。成功结果为 `{ kind: "succeeded", runId, stepId, executionMode: "live", model, content, telemetry }`；失败以 `kind: "failed"`、code、retryable 替代 content，公共响应不含模型 raw 文本。可执行定义见 [step-experiment.ts](../packages/contracts/src/step-experiment.ts)，命令与文件限制见 [Wiki 014](./wiki/014-agent-cli-telemetry.md)。
 
@@ -70,6 +70,7 @@ Artifact = {
 - `appendArtifact` 追加新版本（version+1），旧版本保留；当前公开读模型只返回各地址的 head，尚无历史回看／回退入口
 - `humanStatus` 语义：`pending` = 待作者把关（关卡中）；`approved` = 已通过
 - 人工保存语义分节点：caption 落库即 `approved`（无关卡）；creative 保存草稿 = 新版本 + `pending`（`saveCreativeDraft`），显式选定方向 = 单方向新版本 + `approved`（`selectCreativeDirection`）；outline（#4）保存草稿 = 新版本 + `pending`（`saveOutlineDraft`，新增弧线/剧情点的 id 由 server 补注入），通过 = 通用 `/approve`；setting（#13）不保存中间草稿，专用完成命令将同 id／version 的内容和状态原子定稿，不追加 V2
+- Prose 保存追加新 ID／版本并保留匹配基线的 `humanStatus`；pending 草稿可为空，approved 内容必须非空。通过仍是同 ID／版本原子定稿。通过后可编辑是 Prose 的明确例外，不改变 Setting／Beat 通过后只读的语义。
 - 关卡在步骤边界：`gateAfter` 的步骤产出后置 `pending` 等 approve；`gateBefore` 的步骤要求目标产物已 `approved`；`consumes` 的上游产物读最新版且必须 `approved`
 
 ## Setting：#13 已确认设计
@@ -170,7 +171,7 @@ type SettingApiError = ApiError & { issues?: ValidationIssue[] }
 
 `SettingArtifact` 的运行时 schema 禁止 `chapter`；仅 TypeScript `Omit` 不足以执行此限制。存储对象可有 `chapter: undefined`，JSON 响应省略它；其他 envelope 字段和按章规则从共享 Artifact schema 派生。
 
-`WorkView` 包含 `nextStepId: string | null`，其值来自 Pipeline 状态；新增 `awaiting-setting-review`、`setting-approved` 两个工作流状态。通用 `ready-to-generate`、`failed` 继续复用，不为每种产物复制一组状态。`outline-approved` 保留给以 Outline 结束的旧定义／测试；生产五步定义在大纲通过后进入 ready，具体可生成步骤由 `nextStepId` 标识。
+`WorkView` 包含 `nextStepId: string | null`，其值来自 Pipeline 状态；新增 `awaiting-setting-review`、`setting-approved` 两个工作流状态。通用 `ready-to-generate`、`failed` 继续复用，不为每种产物复制一组状态。`outline-approved` 保留给以 Outline 结束的旧定义／测试；生产定义在大纲通过后进入 ready，具体可生成步骤由 `nextStepId` 标识。
 
 #13 已集中本次经过的 WorkView／Artifact envelope 与 advance 响应（含既有 state、telemetry）定义，并复用 AgentConfig／telemetry schema。Setting 内容执行精确校验；其他 kind 的具体内容仍按现有各自入口校验，全 kind 注册表及剩余协议收敛归 #19。
 
@@ -376,3 +377,59 @@ CLI 在失败 JSON 中保留原始安全 `code` 为 `causeCode`、operation、�
 #5 将 Work／Artifact 身份分别改为 `work-<UUID>`／`artifact-<UUID>`，避免重启后重新从零计数使旧请求误中新作品；客户端只把 ID 当作不透明身份。当前 Store 使用 UUID；旧序号数据无持久迁移需求，因为存储仍是进程内存。Beat 新卡为 `beat-item-<UUID>`，人工同版编辑保留旧卡身份，AI 再生采用全新卡身份。
 
 首次生成追加 v1 pending，整份再生成功追加下一版 pending；人工通过原子更新当前完整内容与 approved 状态，保留 id/version/createdAt。通用 approve/setStatus 不接受 Beat，不提供保存中间草稿、已通过修改或退回 pending；详见 [Wiki 005 写入一致性](./wiki/005-beat-generation-review.md#5-写入一致性生成追加通过同版本定稿)。本票仍用内存 WorkStore；SQL 表与持久化不在本节实施。
+
+## Prose：#22 当前契约
+
+可执行定义为 `packages/contracts/src/prose.ts`、`prose-command.ts`、`prose-submission.ts`；工程上下文与交付状态见 [Wiki 022](./wiki/022-prose-generation-review.md)。本节描述本轮实现的首章接口，不表示 #22 已完成审核或发布。
+
+### 内容与生成
+
+正文内容为严格对象 `{text: string}`，外层为 `kind: 'prose', chapter: 1` 的 Artifact。章标题来自已通过 Beat，不在正文内容里重复存储。text 为纯文本，保留全部空白、缩进和换行；不渲染 HTML，不做 trim 转换。
+
+- `ProseEditDraft` 允许空字符串，供保存 pending 草稿与整章重写输入使用。
+- `ProseContent` 用去除空白后的值判非空，供模型最终输出、通过请求和 approved 内容使用。
+- `ProseArtifact`／WorkView 按状态验证：pending 可以是空草稿，approved 必须是完整非空正文。生成／重写成功响应仍要求完整正文。
+
+生产第六步 `prose#1` 消费作者最终通过的 `beat#1` 与完整 `setting`。首次生成及整章重写均追加 pending，停在独立正文关卡；重写使用请求里的当前全文与修改意见，保持章纲不变。2000–4000 字是软目标；技术上限为正文 100000、意见 10000 个 JavaScript 字符单位，写请求 body 1 MiB（UTF-8），实际 system+prompt 400000 字符。模型输出预算为16000 tokens、SDK maxRetries=0；结构化上游不静默截断。
+
+### 保存、通过与并发
+
+三个专用命令都提交完整文本和客户端实际读取的基线，不替换为服务器最新版：
+
+```ts
+type ProseHeadRequest = {
+  chapter: 1
+  expectedArtifactId: string
+  expectedHeadVersion: number
+}
+// POST /api/works/:workId/artifacts/prose/save
+type ProseSaveRequest = ProseHeadRequest & {
+  expectedHumanStatus: 'pending' | 'approved'
+  content: { text: string }
+}
+// POST /api/works/:workId/artifacts/prose/approve
+type ProseApproveRequest = ProseHeadRequest & { content: { text: string } }
+// POST /api/works/:workId/artifacts/prose/regenerate
+type ProseRegenerateRequest = ProseHeadRequest & {
+  content: { text: string }
+  instructions: string
+}
+```
+
+保存经 `WorkStore.saveArtifact` 原子追加新 ID／version+1／createdAt，保留基线状态；pending 可保存空草稿，approved 保存空白内容返回422并保留原文。Web 自动保存成功后的文本可在刷新后从服务端恢复。approved 默认阅读，进入编辑后自动保存且仍 approved；本轮不更新设定或 Wiki。
+
+通过只接受 pending 和完整非空全文，经 finalize 原子写入本次实际提交的文本并置为 approved，保持 id/version/createdAt。通用 approve/setStatus 不接受 Prose。通过后的全文编辑使用 save，不能借重复 approve 或 regenerate 修改。
+
+save 必须校验 `expectedHumanStatus`：通过不增加版本，审批前发出的旧 pending 自动保存即使仍携带相同 id/version，也不能覆盖刚通过的文本。两个 save、save 与 approve／regenerate 均以目标条件写入裁决；旧基线409且不自动重放。advance／Beat再生／Prose重写共享作品生成锁；保存可以使进行中的重写基线过时，该模型结果在 commit 时被拒绝。首次生成、重写、保存与通过均校验所需的前置 approved heads，避免把旧输入上的结果提交到已变化的作品。
+
+### 读模型、诊断与恢复
+
+生产链结束于 `prose-approved`，`nextStepId:null`；pending 为 `awaiting-prose-review`，可用动作 `save-draft/approve/regenerate`，approved 仍允许 `save-draft`。`listWorks.chapterCount` 只计当前 head 为 approved 的正文，保存 approved 新版本仍计一章。当前只返回各产物 head，不提供历史版本读取、第二章或跨章导航；旧五步定义保留 `beat-approved`。
+
+成功响应为 `{artifact, command, workflow, telemetry}`，command.operation 为 `save-prose/approve-prose/regenerate-prose`；首次生成在 advance outcome 中提供可选 `proseCommand`。save 的 expectedHead 额外含 humanStatus；save／approve 没有模型 attemptIds。保存结果必须新 ID、基线版本+1且状态不变；通过结果必须同 ID／版本且 approved；重写结果必须新 ID、版本+1且 pending。Prose 预算字段使用 `beatChars`，不借用 Beat 的 `outlineChars`。
+
+失败提供 `writeOutcome:not-committed|unknown` 与阶段；写入后 adapter 异常或响应构造失败都为 unknown，不能据 HTTP 失败认定未落库。内容错误422、身份／状态／上游冲突409、请求格式400、body过大413；日志只记录安全身份、长度、hash和分类。
+
+共享 `recoverProseSubmission` 把保存回读的作品／章节、下一版本、新身份、相同状态和逐字符全文与冻结请求匹配；精确匹配可确认保存结果，较新或不同内容按冲突保留本地输入。通过确认要求同 id/version/createdAt 和逐字符全文。未知重写不能仅凭 GET 新版认领成功；更早 unknown 也不会被后续 not-committed 清除。客户端最多自动回读一次，重试使用冻结基线，不自动改版本覆盖服务器。
+
+当前 WorkStore 和诊断均在进程内；浏览器刷新后的恢复不等于服务重启持久化。SQLite／真实重启恢复归 #9。设定检索与工具执行 #28、作品 Wiki 档案演进及联合通过 #29 均为后续扩展，不属于本票保存语义。

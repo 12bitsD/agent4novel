@@ -10,7 +10,7 @@ import type {
   WorkSummary,
 } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
-import type { AppendOptions, ArtifactPrecondition, FinalizeArtifactInput, WorkStore } from './work-store.js'
+import type { AppendOptions, ArtifactPrecondition, FinalizeArtifactInput, SaveArtifactInput, WorkStore } from './work-store.js'
 
 type Bucket = { kind: ArtifactKind; chapter?: number; versions: Artifact[] }
 
@@ -77,7 +77,7 @@ export class InMemoryStore implements WorkStore {
   listWorks(): WorkSummary[] {
     return [...this.works.values()].map((w) => {
       const buckets = this.buckets.get(w.id) ?? []
-      const chapterCount = buckets.filter((b) => b.kind === 'prose').length
+      const chapterCount = buckets.filter((b) => b.kind === 'prose' && b.versions.at(-1)?.humanStatus === 'approved').length
       return {
         id: w.id,
         title: w.title,
@@ -151,12 +151,31 @@ export class InMemoryStore implements WorkStore {
     return snapshot
   }
 
+  saveArtifact(input: SaveArtifactInput): Artifact {
+    const request = structuredClone(input)
+    const { workId, kind, chapter } = request
+    if (!this.works.has(workId)) throw new KnownError('work-not-found', `work not found: ${workId}`)
+    assertBucketAddress(kind, chapter)
+    const bucket = this.findBucket(workId, kind, chapter)
+    const head = bucket?.versions.at(-1)
+    if (!bucket || !head || head.id !== request.expectedArtifactId || head.version !== request.expectedHeadVersion || head.humanStatus !== request.expectedHumanStatus) {
+      throw new KnownError('version-conflict', `artifact head changed: ${workId}/${kind}`)
+    }
+    this.assertPreconditions(workId, kind, chapter, request.preconditions)
+    const artifact: Artifact = { ...head, id: this.nextId('artifact'), version: head.version + 1, content: request.content, createdAt: new Date().toISOString() }
+    const snapshot = structuredClone(artifact)
+    const candidate: Bucket = { ...bucket, versions: [...bucket.versions, artifact] }
+    this.buckets.set(workId, this.buckets.get(workId)!.map(entry => entry === bucket ? candidate : entry))
+    return snapshot
+  }
+
   setStatus(
     workId: string,
     kind: ArtifactKind,
     status: HumanStatus,
     opts?: { chapter?: number },
   ): void {
+    if (kind === 'prose') throw new KnownError('prose-approval-required', 'prose requires the dedicated finalization command')
     if (kind === 'beat') throw new KnownError('beat-approval-required', 'beat requires the dedicated finalization command')
     if (kind === 'setting') {
       throw new KnownError('setting-approval-required', 'setting requires the dedicated finalization command')

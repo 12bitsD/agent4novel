@@ -1,4 +1,7 @@
 export * from './artifacts.js'
+export * from './prose.js'
+export * from './prose-command.js'
+export * from './prose-submission.js'
 export * from './beat.js'
 export * from './beat-command.js'
 export * from './beat-submission.js'

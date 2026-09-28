@@ -27,7 +27,7 @@
 
 Novel writing has long been a cottage craft: one author, one pen, hundreds of thousands of characters ground out word by word. agent4novel moves it onto a collaborative workflow — the AI works like an on-call editorial team, developing creative directions, structuring the outline, and filling out the setting; you are the editor-in-chief, with the final say at every author-facing gate. The goal: raw inspiration in, a finished book out.
 
-It is built for authors who have ideas but no writing training. The current chain turns a one-line idea (or an uploaded setting doc) into a distilled caption, creative directions to compare and pick, a book outline, and a complete setting and first-chapter Beat to edit and approve. [#5](https://github.com/12bitsD/agent4novel/issues/5) implements Beat editing and regeneration; prose remains separate future work in [#22](https://github.com/12bitsD/agent4novel/issues/22). The app and its store run locally: demo mode never calls a model service, while live mode sends the generation inputs to your configured model provider, whose privacy terms then apply.
+It is built for authors who have ideas but no writing training. The chain turns a one-line idea (or an uploaded setting doc) into a distilled caption, creative directions to compare and pick, a book outline, a complete setting, and first-chapter Beat and prose with separate author gates. [#22](https://github.com/12bitsD/agent4novel/issues/22) adds prose editing, autosave, whole-chapter rewriting, and approval. Delivery evidence is recorded in [Wiki 022](./docs/wiki/022-prose-generation-review.md). The app and its store run locally: demo mode never calls a model service, while live mode sends the generation inputs to your configured model provider, whose privacy terms then apply.
 
 ## Quick start
 
@@ -59,8 +59,8 @@ Generation and review are also drivable from the command line — successful com
 
 ```bash
 ./apps/cli/bin/a4n --help                       # command list, no I/O
-./apps/cli/bin/a4n approve-beat --help          # input shape, example, and effects
-./apps/cli/bin/a4n smoke --seed-file seed.txt   # full chain through edited Setting and Beat approval
+./apps/cli/bin/a4n save-prose --help            # input shape, example, and effects
+./apps/cli/bin/a4n smoke --seed-file seed.txt   # edit/save/approve chapter-one prose and read it back
 ./apps/cli/bin/a4n list                         # create / get / advance / select / approve / logs …
 ./apps/cli/bin/a4n get work-1 --kind setting    # replace work-1 with your work ID
 ./apps/cli/bin/a4n approve-setting work-1 --file setting-request.json
@@ -72,6 +72,8 @@ Help (`--help` / `-h`) at the top level or on any command exits 0 before reading
 
 Beat CLI also supports `get <workId> --kind beat --chapter 1`, `regenerate-beat <workId> --file request.json`, and `approve-beat <workId> --file request.json`. Files require `chapter: 1`, `expectedArtifactId`, `expectedHeadVersion`, and complete `content`; regeneration additionally requires `instructions` (which may be empty). It preserves the reviewed baseline and never automatically resubmits an uncertain write. See [Wiki 005](./docs/wiki/005-beat-generation-review.md).
 
+Prose uses `get <workId> --kind prose --chapter 1`, plus `save-prose`, `approve-prose`, and `regenerate-prose`, each with `<workId> --file request.json`. Content is `{ "text": "full chapter text" }`. Files carry the same chapter, artifact ID, and version baseline; saving also requires `expectedHumanStatus: "pending" | "approved"`, and rewriting requires `instructions`. Saving appends a version and preserves its review status; approval finalizes the pending version. Files are strict UTF-8 JSON, at most 1 MiB. An uncertain result may trigger one readback, never an automatic repeated write. See [Wiki 022](./docs/wiki/022-prose-generation-review.md).
+
 Run one production step with supplied inputs or a custom system prompt:
 
 ```bash
@@ -80,7 +82,7 @@ Run one production step with supplied inputs or a custom system prompt:
 ./apps/cli/bin/a4n run-step setting --input-file setting-input.json --config-file generation.json
 ```
 
-`run-step` supports `caption`, `creative`, `outline`, `setting`, and `beat` (chapter 1). It requires the installed full monorepo and a configured live provider, starts a local server worker, and needs no running HTTP server. It does not create or update a work. Choose exactly one of `--seed-file` and `--input-file`; downstream steps need JSON with `seed` and the required upstream `content`. A custom SP replaces only the system prompt; omitting it uses the production prompt. `--top-k` is explicitly unsupported.
+`run-step` supports `caption`, `creative`, `outline`, `setting`, `beat`, and `prose` (the latter two require chapter 1). It requires the installed full monorepo and a configured live provider, starts a local server worker, and needs no running HTTP server. It does not create or update a work. Choose exactly one of `--seed-file` and `--input-file`; downstream steps need JSON with `seed` and the required upstream `content`. Prose requires `chapter: 1` and `upstream: { beat, setting }`. A custom SP replaces only the system prompt; omitting it uses the production prompt. `--top-k` is explicitly unsupported.
 
 Success returns schema-validated `content` and safe `telemetry` as JSON; failures write a JSON error to stderr and exit 1. Raw model output and reasoning are not returned. The worker's default total deadline is 920 seconds, overridable with `--timeout-ms` or `A4N_CLI_TIMEOUT_MS`. See [single-step inputs, limits, and output](./docs/wiki/014-agent-cli-telemetry.md#单节点实验-run-step).
 
@@ -89,28 +91,32 @@ Agents opening this repo get the full recipe via the bundled skill `.claude/skil
 ## How it works
 
 <p align="center">
-  <img src="./docs/assets/pipeline.en.svg" alt="Current five-step pipeline through first-chapter Beat approval; prose #22 and chapter continuation #6 remain planned" width="960">
+  <img src="./docs/assets/pipeline.en.svg" alt="Six-step pipeline through first-chapter prose approval; later chapters remain planned" width="960">
 </p>
-<p align="center"><sub>Fig. 1 · Current five-step chain ends at beat-approved; dashed steps are future prose and chapter continuation</sub></p>
+<p align="center"><sub>Fig. 1 · Six steps end at prose-approved; dashed paths show future chapter continuation</sub></p>
 
-The internal caption interprets the source material, makes story-development judgments, and proposes concrete plot ideas, distinguishing source content from inferences and suggestions. It is auto-approved. Select a creative direction, approve the outline and setting, then edit or regenerate the first chapter’s Beat and approve it. The endpoint is `beat-approved`; approval does not generate prose or later chapters.
+The internal caption interprets the source material, makes story-development judgments, and proposes concrete plot ideas, distinguishing source content from inferences and suggestions. It is auto-approved. Select a creative direction, approve the outline and setting, then edit or regenerate the first chapter’s Beat. **Approve Beat and generate prose** explicitly starts prose once that Beat is confirmed approved. Opening or refreshing a ready work does not start generation; it offers a manual generate action. The endpoint is first-chapter `prose-approved`; no second chapter starts.
 
 A Beat contains a title, goal, ordered writing-plan cards, and ending. Pending edits and regeneration instructions stay in page memory; leaving asks before discarding them. Whole-plan regeneration consumes those edits and instructions, creating a new pending version. Approval stores the final content on the same ID/version and makes it read-only. Version comparison (#20) and post-approval chapter regeneration (#21) remain separate work.
 
 Edits to a pending setting live only in page memory: refreshing or leaving discards unsubmitted changes. Clicking **Approve** stores the edited content and approves the same artifact ID and version in one operation—there is no separate save-draft step or approval v2. The approved setting is read-only and remains the work's fixed reference; later changes and extensions belong to #17.
+
+Prose is plain text with its whitespace preserved. Pending text autosaves to the server and can be restored after a browser refresh; it may be temporarily empty, but approval requires nonblank full text. Whole-chapter rewriting uses the current edited text and optional instructions, creates a new pending version, and preserves your input on failure. Approved prose opens for reading; **Edit** enables autosave while keeping it approved. This exception applies only to prose: it does not reopen Beat or Setting, or update a work Wiki.
+
+Saved works can be reopened from the bookcase. Only approved prose counts as a completed chapter. Wait for a successful save before relying on refresh recovery; unsaved or uncertain input remains protected in the current page. Storage is still in memory: restarting the server loses works and edits. Durable storage across server restarts belongs to [#9](https://github.com/12bitsD/agent4novel/issues/9); history browsing and later chapters belong to #6.
 
 ## Architecture
 
 The architecture is built around **human-in-the-loop**: machines generate, authors judge, and author-facing artifacts must pass their review gates before the next step consumes them. The internal caption is the auto-approved preprocessing exception.
 
 <p align="center">
-  <img src="./docs/assets/workflow.en.svg" alt="Pipeline drives five steps through first-chapter Beat. Store atomically finalizes author-approved content; SQLite #9 remains planned" width="760">
+  <img src="./docs/assets/workflow.en.svg" alt="Pipeline drives six steps through first-chapter prose. Store saves versions and atomically approves full text; SQLite remains planned" width="760">
 </p>
-<p align="center"><sub>Fig. 2 · Pipeline controls five steps; Store atomically finalizes Setting and Beat. Prose and SQLite remain future work</sub></p>
+<p align="center"><sub>Fig. 2 · Six steps with separate author gates; versioned prose saves and atomic approval use the in-memory Store</sub></p>
 
-- **The orchestrator (Pipeline)** drives caption → creative → outline → setting → beat#1 in a fixed order and enforces gates with a state machine (ready → awaiting-approval → complete, derived from artifact status). Caption is auto-approved; creative, outline, setting, and Beat wait for the author's explicit action. Pipeline coordinates progression, while Store's conditional writes protect the committed artifacts.
+- **The orchestrator (Pipeline)** drives caption → creative → outline → setting → beat#1 → prose#1 in a fixed order and enforces gates with a state machine (ready → awaiting-approval → complete, derived from artifact status). Caption is auto-approved; each later artifact waits for the author's explicit action. Pipeline coordinates progression, while Store's conditional writes protect the committed artifacts.
 - **Steps** are contract-bound AI generations: `runStep` zod-validates both input and output, and prompts live in SKILL.md files so prompt iteration never touches code. A step doesn't know where it sits in the pipeline, which makes it independently testable and replaceable.
-- **Artifacts** are grouped by "work + kind + chapter" (`{kind, chapter?, version, content, humanStatus}`). Existing creative and outline save operations append versions; Setting and Beat approval instead replace content and status atomically on the same ID and version. The public API returns only the latest artifact in each group, not arbitrary historical versions.
+- **Artifacts** are grouped by "work + kind + chapter" (`{kind, chapter?, version, content, humanStatus}`). Creative, outline, and prose saves append versions. Prose saves match ID, version, and review status, then preserve that status; Setting, Beat, and Prose approval finalize content and status atomically on the same ID and version. The public API returns only the latest artifact in each group, not arbitrary historical versions.
 - **Swappable points**: the Pipeline's dependency seams are storage (in-memory out of the box ↔ SQLite persistence in #9) and Step (`FakeStep` ↔ `RealStep`). Inside `RealStep`, `ModelRuntime` owns provider routing, credentials, base URLs, and request timeout. Switching between registered providers changes only the provider-qualified model ID; adding a provider still requires its adapter, registry entry, and key contract. Tests use fake models or mocked provider transport; executable CLI integration uses a loopback test server, never a remote model.
 
 ## Stack
@@ -164,15 +170,19 @@ Every ticket runs the same loop: grill and align scope → establish its Wiki co
 | [#14](https://github.com/12bitsD/agent4novel/issues/14) | Agent CLI + LLM telemetry + project driving skill | ✅ |
 | [#16](https://github.com/12bitsD/agent4novel/issues/16) | Configurable ModelRuntime + LongCat provider | ✅ |
 | [#13](https://github.com/12bitsD/agent4novel/issues/13) | Full setting after outline approval; edit locally and approve once ([engineering context](./docs/wiki/013-setting-generation-review.md)) | ✅ implemented |
-| [#5](https://github.com/12bitsD/agent4novel/issues/5) | First-chapter Beat: edit, regenerate, approve ([context](./docs/wiki/005-beat-generation-review.md)) | [PR #23](https://github.com/12bitsD/agent4novel/pull/23) merged; closure verification in progress |
+| [#5](https://github.com/12bitsD/agent4novel/issues/5) | First-chapter Beat: edit, regenerate, approve ([context](./docs/wiki/005-beat-generation-review.md)) | ✅ Closed |
 | [#25](https://github.com/12bitsD/agent4novel/issues/25) | Safe CLI help and strict arguments ([context](./docs/wiki/025-cli-command-safety.md)) | Implemented |
-| [#22](https://github.com/12bitsD/agent4novel/issues/22) | First-chapter prose and author gate | Planned |
+| [#22](https://github.com/12bitsD/agent4novel/issues/22) | First-chapter prose: autosave, rewrite, approve, edit after approval ([context](./docs/wiki/022-prose-generation-review.md)) | Implemented; delivery status in #22 |
 | [#9](https://github.com/12bitsD/agent4novel/issues/9) | SQLite after artifact design/consolidation | Planned |
 | [#6](https://github.com/12bitsD/agent4novel/issues/6) | Continue writing + work detail + router | |
 | [#7](https://github.com/12bitsD/agent4novel/issues/7) | Agent configuration (style / genre / payoffs) | Planned; part of MVP |
 | [#8](https://github.com/12bitsD/agent4novel/issues/8) | Bad-example collection | Planned; part of MVP |
+| [#28](https://github.com/12bitsD/agent4novel/issues/28) | Setting search/read and bounded Agent tool execution | Future extension; does not block #22 |
+| [#29](https://github.com/12bitsD/agent4novel/issues/29) | Work Wiki, evolving profiles, joint prose/profile approval | Future extension; does not block #22 |
 
 [Contract consolidation #19](https://github.com/12bitsD/agent4novel/issues/19) follows Beat and prose design: #5 → #22 → #19 → #9 → #6. This is scheduling, not a new dependency edge. [Post-approval setting changes #17](https://github.com/12bitsD/agent4novel/issues/17) and [conflict clarification #18](https://github.com/12bitsD/agent4novel/issues/18) remain separate follow-up work; the [#13 design](./docs/wiki/013-setting-generation-review.md) records the scope. These are planned capabilities, not current UI or storage behavior.
+
+Work Wiki means the novel's setting and character records. #29 will define joint approval and later asynchronous updates after approved prose edits; #22 performs neither. Each future ticket requires its own scope alignment before implementation.
 
 ---
 

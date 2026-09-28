@@ -9,7 +9,8 @@ import { createCreativeStep } from './steps/creative-step.js'
 import { createOutlineStep } from './steps/outline-step.js'
 import { createSettingStep } from './steps/setting-step.js'
 import { createBeatStep } from './steps/beat-step.js'
-import { createFakeCaptionStep, createFakeCreativeStep, createFakeOutlineStep, createFakeSettingStep, createFakeBeatStep } from './steps/fake-step.js'
+import { createProseStep } from './steps/prose-step.js'
+import { createFakeCaptionStep, createFakeCreativeStep, createFakeOutlineStep, createFakeSettingStep, createFakeBeatStep, createFakeProseStep } from './steps/fake-step.js'
 import { modelRuntime } from './steps/llm.js'
 import { InMemoryStore } from './store/in-memory-store.js'
 
@@ -25,6 +26,7 @@ const steps = new Map<string, ArtifactStep>([
   ['outline', demo ? createFakeOutlineStep() : createOutlineStep()],
   ['setting', demo ? createFakeSettingStep() : createSettingStep()],
   ['beat', demo ? createFakeBeatStep() : createBeatStep()],
+  ['prose', demo ? createFakeProseStep() : createProseStep()],
 ])
 // #3c:caption(提炼稿,落库即 approved)→ creative(创意稿,gateAfter = 比较视图)
 // #4:outline(大纲,consumes 选定单方向 creative,gateAfter = 大纲 review)
@@ -35,6 +37,7 @@ const definition: PipelineDefinitionEntry[] = [
   { stepId: 'outline', outputKind: 'outline', consumes: ['creative'], gateAfter: { kind: 'outline' } },
   { stepId: 'setting', outputKind: 'setting', consumes: ['caption', 'creative', 'outline'], gateAfter: { kind: 'setting' } },
   { stepId: 'beat', outputKind: 'beat', chapter: 1, consumes: ['outline', 'setting'], gateAfter: { kind: 'beat', chapter: 1 } },
+  { stepId: 'prose', outputKind: 'prose', chapter: 1, consumes: ['beat', 'setting'], gateAfter: { kind: 'prose', chapter: 1 } },
 ]
 const pipeline = new Pipeline({
   store,

@@ -63,7 +63,7 @@ describe('Workspace Beat integration', () => {
         Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(goal, '作者未提交的最终目标')
         goal.dispatchEvent(new Event('input', { bubbles: true }))
       })
-      await act(async () => buttons().find(b => b.textContent === '通过章纲')!.click())
+      await act(async () => buttons().find(b => b.textContent === '通过章纲并生成正文')!.click())
       if (mode === 'deadline') await act(async () => vi.advanceTimersByTimeAsync(30_001))
       expect(host.textContent).toContain('提交结果尚未确认')
       expect(goal.value).toBe('作者未提交的最终目标')
@@ -93,7 +93,7 @@ describe('Workspace Beat integration', () => {
     const root = createRoot(host)
     try {
       await act(async () => root.render(<Workspace workId="work-test" onBack={() => {}} />))
-      const button = Array.from(host.querySelectorAll('button')).find(b => b.textContent === '通过章纲')!
+      const button = Array.from(host.querySelectorAll('button')).find(b => b.textContent === '通过章纲并生成正文')!
       await act(async () => button.click())
       expect(host.textContent).toContain('章纲已通过')
       expect(host.textContent).not.toContain('生成第一章章纲')

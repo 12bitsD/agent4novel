@@ -1,3 +1,4 @@
+import { proseStepInputSchema, proseStepOutputSchema } from './prose-io.js'
 import type { ArtifactStep } from '../pipeline/pipeline.js'
 import { captionStepInputSchema, captionStepOutputSchema } from './caption-io.js'
 import { creativeStepInputSchema, creativeStepOutputSchema } from './creative-io.js'
@@ -126,6 +127,22 @@ export function createFakeBeatStep(): ArtifactStep {
         ],
         ending: `(演示)朝「${segment.outcome}」迈出第一步，停在主角将要行动的位置，不提前完成整条弧线。`,
       }) }
+    },
+  }
+}
+
+export function createFakeProseStep(): ArtifactStep {
+  return {
+    id: 'prose', inputSchema: proseStepInputSchema, outputSchema: proseStepOutputSchema,
+    async run(input) {
+      const { upstream, regeneration } = proseStepInputSchema.parse(input)
+      return { content: { text: [
+        `(演示)${upstream.beat.title}。${upstream.beat.goal}`,
+        upstream.setting.world[0]!.content,
+        ...upstream.beat.writingPlan.map(item => item.content),
+        ...(regeneration ? [regeneration.content.text, `本次意见：${regeneration.instructions || '基于当前正文重新尝试。'}`] : []),
+        upstream.beat.ending,
+      ].join('\n\n') } }
     },
   }
 }

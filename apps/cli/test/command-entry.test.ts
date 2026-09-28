@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { createServer } from 'node:http'
 import { once } from 'node:events'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -76,7 +76,7 @@ describe('CLI command discovery and syntax', () => {
     expect(requests).toEqual([])
   })
 
-  it.each(['list', 'create', 'get', 'run-step', 'advance', 'select', 'save-outline', 'approve', 'approve-setting', 'approve-beat', 'regenerate-beat', 'config', 'logs', 'smoke'])
+  it.each(['list', 'create', 'get', 'run-step', 'advance', 'select', 'save-outline', 'approve', 'approve-setting', 'approve-beat', 'regenerate-beat', 'approve-prose', 'regenerate-prose', 'save-prose', 'config', 'logs', 'smoke'])
     ('offers scoped %s help before invalid configuration, arguments or files', async command => {
       for (const help of ['--help', '-h']) {
         const result = await invoke([command, help, '--file', '/missing/private-file', '--unknown'], {
@@ -91,6 +91,32 @@ describe('CLI command discovery and syntax', () => {
       }
       expect(requests).toEqual([])
     })
+
+  it('rejects malformed save files without HTTP and never leaks or rewrites their contents', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'a4n-prose-file-'))
+    const file = join(folder, 'private-request.json')
+    const request = { chapter: 1, expectedArtifactId: 'prose-1', expectedHeadVersion: 1, expectedHumanStatus: 'pending', content: { text: 'private-text' } }
+    const cases = [
+      { bytes: Buffer.from('private-broken-json'), code: 'invalid-input' },
+      { bytes: Buffer.from(JSON.stringify({ ...request, expectedHumanStatus: undefined })), code: 'invalid-input' },
+      { bytes: Buffer.from(JSON.stringify({ ...request, content: { text: 'private-text', extra: 'private-extra' } })), code: 'invalid-input' },
+      { bytes: Buffer.from(JSON.stringify({ ...request, chapter: 2 })), code: 'invalid-input' },
+      { bytes: Buffer.concat([Buffer.from(JSON.stringify(request).replace('private-text', '')), Buffer.alloc(1024 * 1024, 32)]), code: 'payload-too-large' },
+      { bytes: Buffer.concat([Buffer.from(JSON.stringify(request).split('private-text')[0]!), Buffer.from([0xc3, 0x28]), Buffer.from(JSON.stringify(request).split('private-text')[1]!)]), code: 'invalid-input' },
+    ]
+    try {
+      for (const candidate of cases) {
+        writeFileSync(file, candidate.bytes)
+        const result = await invoke(['save-prose', 'work-synthetic', '--file', file])
+        expect(result.code).toBe(1)
+        expect(result.stdout).toBe('')
+        expect(JSON.parse(result.stderr)).toMatchObject({ code: candidate.code })
+        expect(result.stderr).not.toMatch(/private-request|private-text|private-extra|private-broken-json/)
+        expect(requests).toEqual([])
+        expect(readFileSync(file)).toEqual(candidate.bytes)
+      }
+    } finally { rmSync(folder, { recursive: true, force: true }) }
+  })
 
   it.each([
     ['advance', 'work-synthetic', '--thinking', 'private-option-value'],

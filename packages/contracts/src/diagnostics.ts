@@ -1,12 +1,13 @@
 import { z } from 'zod'
 import { beatCommandObservationSchema } from './beat-command.js'
+import { proseCommandObservationSchema } from './prose-command.js'
 import { llmTelemetrySchema } from './telemetry.js'
 
 export const diagnosticQuerySchema = z.object({
   requestId: z.string().uuid().optional(), attemptId: z.string().min(1).max(128).regex(/^[a-zA-Z0-9_-]+$/).optional(),
 }).strict()
 export const commandSummarySchema = z.object({
-  command: beatCommandObservationSchema, code: z.string().min(1), recordedAt: z.string().datetime(),
+  command: z.union([beatCommandObservationSchema, proseCommandObservationSchema]), code: z.string().min(1), recordedAt: z.string().datetime(),
 }).strict()
 const bufferWindow = z.object({
   capacity: z.literal(1000), oldestSeq: z.number().int().positive().nullable(), latestSeq: z.number().int().positive().nullable(), truncated: z.boolean(),

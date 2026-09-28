@@ -65,7 +65,7 @@ describe('first chapter Beat', () => {
       steps: new Map([['beat', consumer], ['consumer', consumer]]),
       definition: [
         { stepId: 'beat', outputKind: 'beat', chapter: 1, gateAfter: { kind: 'beat', chapter: 1 } },
-        { stepId: 'consumer', outputKind: 'prose', chapter: 1, consumes: ['beat'] },
+        { stepId: 'consumer', outputKind: 'prose', chapter: 1, consumes: ['beat'], gateAfter: { kind: 'prose', chapter: 1 } },
       ],
     })
     expect((await downstream.advance(work.id)).kind).toBe('awaiting-approval')
