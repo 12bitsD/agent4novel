@@ -31,14 +31,14 @@ const commands: Record<string, CommandDefinition> = {
     effects: '创建作品，不调用模型。',
   },
   get: { positionals: [1, 1], flags: ['kind', 'chapter'],
-    syntax: 'get <workId> [--kind caption|creative|outline|setting|beat|prose] [--chapter 1]',
-    input: '省略 kind 返回作品快照；beat/prose 必须给 chapter，其他 kind 不带 chapter。',
+    syntax: 'get <workId> [--kind caption|creative|outline|setting|beat|prose] [--chapter <n>]',
+    input: '省略 kind 返回作品快照及章节目录；beat/prose 必须给正安全整数 chapter，其他 kind 不带 chapter。',
     example: 'a4n get work-id --kind beat --chapter 1',
     effects: '只读当前产物和允许动作。',
   },
   'run-step': { exactlyOne: ['input-file', 'seed-file'], positionals: [1, 1], flags: ['input-file', 'seed-file', 'system-prompt-file', 'config-file', 'thinking', 'temperature', 'top-p'],
     syntax: 'run-step <node> --input-file <f> | --seed-file <f> [--system-prompt-file <sp>] [--config-file <f>] [--thinking on|off] [--temperature 0..1] [--top-p 0..1]',
-    input: 'node: caption|creative|outline|setting|beat|prose。input-file: {"seed":"素材","upstream":{...}}；Beat/Prose 另需 chapter:1。config-file 仅接受 model/directionCount/thinking/temperature/topP，flags 按字段覆盖；top-p 必须大于 0，不支持 --top-k。',
+    input: 'node: caption|creative|outline|setting|beat|prose。input-file: {"seed":"素材","upstream":{...}}；Beat/Prose 另需正安全整数 chapter，chapter>1 必须提供 upstream.previousChapter={chapter:当前章号-1,beat:<完整章纲>,prose:{text:<前章最终正文>}}，首章不提供。Beat另需outline/setting，Prose另需beat/setting。config-file 仅接受 model/directionCount/thinking/temperature/topP，flags 按字段覆盖；top-p 必须大于 0，不支持 --top-k。',
     example: 'a4n run-step caption --seed-file seed.txt --thinking off',
     effects: '启动本地 worker，真实调用已配置 provider；不写作品。无需启动作品服务，不支持 --url。',
   },
@@ -47,6 +47,12 @@ const commands: Record<string, CommandDefinition> = {
     input: '推进到下一人工关卡；默认等待 1820000 ms。',
     example: 'a4n advance work-id',
     effects: '可能调用模型并写入产物；HTTP 200 的 kind:failed 仍 exit 0，必须检查 kind。',
+  },
+  'start-chapter': { required: ['file'], positionals: [1, 1], flags: ['file'],
+    syntax: 'start-chapter <workId> --file <f>',
+    input: 'UTF-8 JSON 文件≤1 MiB: {"chapter":2,"expectedPreviousProseId":"...","expectedPreviousProseVersion":3}；目标章号为≥2的安全整数，前章正文须已通过，基线取实际读取版本。',
+    example: 'a4n start-chapter work-id --file next-chapter.json',
+    effects: '显式生成目标章章纲并停在关卡；不自动通过或继续下一章，不替换文件基线、不自动重复POST。结果未知先get回读；HTTP 200 kind:failed仍exit 0，必须检查kind。',
   },
   select: { positionals: [1, 2], flags: [],
     syntax: 'select <workId> [directionId]',
@@ -94,7 +100,7 @@ const commands: Record<string, CommandDefinition> = {
     syntax: 'approve-prose <workId> --file <f>',
     input: '文件: {"chapter":1,"expectedArtifactId":"...","expectedHeadVersion":1,"content":{"text":"完整正文"}}。',
     example: 'a4n approve-prose work-id --file prose-request.json',
-    effects: '同版本定稿，第一章完成；通过后可用 save-prose 编辑且保留 approved，不生成第二章。未知时最多回读一次，不自动重发。',
+    effects: '同版本定稿，本章完成；通过后可用 save-prose 编辑且保留 approved，不自动生成下一章。未知时最多回读一次，不自动重发。',
   },
   'regenerate-prose': { required: ['file'], positionals: [1, 1], flags: ['file'],
     syntax: 'regenerate-prose <workId> --file <f>',
@@ -173,7 +179,7 @@ function commandForHelp(argv: string[]): string | undefined {
 export function helpFor(argv: string[]): string {
   const command = commandForHelp(argv)
   const definition = command ? commands[command] : undefined
-  const timeout = '--timeout-ms <milliseconds> 覆盖请求期限；普通 300000，advance 1820000，Beat/Prose 通过 30000、Prose 保存 30000、再生 920000/回读 10000，run-step 920000。'
+  const timeout = '--timeout-ms <milliseconds> 覆盖请求期限；普通 300000，advance 1820000，start-chapter 920000，Beat/Prose 通过 30000、Prose 保存 30000、再生 920000/回读 10000，run-step 920000。'
   const flags = `${command === 'run-step' ? '' : '--url <baseUrl> 覆盖作品服务地址（默认 A4N_BASE_URL 或 http://localhost:8787）。\n'}${timeout}`
   const convention = '--help / -h 是零副作用帮助，任意独立 token 优先；字面值请用 --seed=--help。帮助输出 stderr，正常结果 stdout 为 JSON。'
   if (definition) return `用法: a4n ${definition.syntax}\n输入: ${definition.input}\n示例: ${definition.example}\n副作用: ${definition.effects}\n选项: ${flags}\n${convention}`

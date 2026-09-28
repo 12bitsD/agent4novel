@@ -1,6 +1,7 @@
 import type { ArtifactKind, CreativeContent, OutlineDraft, WorkView } from '@agent4novel/contracts'
 import {
   matchesSettingSubmission, settingApproveRequestSchema, settingApproveResponseSchema, settingArtifactSchema,
+  startChapterRequestSchema,
   perChapterKinds,
   beatApproveRequestSchema, beatRegenerateRequestSchema, beatArtifactSchema, recoverBeatSubmission, beatCommandErrorSchema, beatCommandResponseSchema,
   matchesBeatSubmission,
@@ -35,6 +36,13 @@ export async function get(client: Client, workId: string, kind?: ArtifactKind, c
 
 export async function advance(client: Client, workId: string) {
   return client.advance(workId)
+}
+
+export async function startChapter(client: Client, workId: string, input: unknown) {
+  const request = startChapterRequestSchema.safeParse(input)
+  if (!request.success) throw new CliError('Invalid chapter start request; expected target chapter and previous Prose identity/version', 'invalid-input')
+  // Never replace the file's baseline or replay a possibly committed generation.
+  return client.startChapter(workId, request.data)
 }
 
 function headOf(work: WorkView, kind: ArtifactKind): number {
@@ -120,10 +128,10 @@ export async function runBeatCommand(client: Client, workId: string, operation: 
     parsed.error.issues.map(({ path, code }) => ({ path, code, message: 'invalid field' })))
   const submission: BeatSubmission = operation === 'approve-beat'
     ? { operation, request: beatApproveRequestSchema.parse(parsed.data) } : { operation, request: beatRegenerateRequestSchema.parse(parsed.data) }
-  const local = { operation, target: { workId, kind: 'beat', chapter: 1 }, expectedHead: { artifactId: submission.request.expectedArtifactId, version: submission.request.expectedHeadVersion } }
+  const local = { operation, target: { workId, kind: 'beat', chapter: submission.request.chapter }, expectedHead: { artifactId: submission.request.expectedArtifactId, version: submission.request.expectedHeadVersion } }
   const work = await client.getWork(workId)
-  const baseline = beatArtifactSchema.safeParse(work.artifacts.find(a => a.kind === 'beat' && a.chapter === 1))
-  if (!baseline.success) throw new CliError('No first-chapter Beat', 'artifact-not-found', 404, false, undefined, undefined, { ...local, resolution: 'rejected', nextActions: ['read-work'], observedHead: null })
+  const baseline = beatArtifactSchema.safeParse(work.artifacts.find(a => a.kind === 'beat' && a.chapter === submission.request.chapter))
+  if (!baseline.success) throw new CliError('No Beat for the requested chapter', 'artifact-not-found', 404, false, undefined, undefined, { ...local, resolution: 'rejected', nextActions: ['read-work'], observedHead: null })
   if (baseline.data.id !== submission.request.expectedArtifactId || baseline.data.version !== submission.request.expectedHeadVersion || baseline.data.humanStatus !== 'pending') {
     throw new CliError('Request baseline is no longer pending; the file was not modified or submitted', 'version-conflict', 409, false, undefined, undefined,
       { ...local, resolution: 'conflict', nextActions: ['read-work', 'load-server-version'], observedHead: { artifactId: baseline.data.id, version: baseline.data.version, humanStatus: baseline.data.humanStatus } })
@@ -154,11 +162,11 @@ export async function runProseCommand(client: Client, workId: string, operation:
   const submission: ProseSubmission = operation === 'approve-prose'
     ? { operation, request: proseApproveRequestSchema.parse(parsed.data) } : operation === 'save-prose'
       ? { operation, request: proseSaveRequestSchema.parse(parsed.data) } : { operation, request: proseRegenerateRequestSchema.parse(parsed.data) }
-  const local = { operation, target: { workId, kind: 'prose', chapter: 1 }, expectedHead: { artifactId: submission.request.expectedArtifactId, version: submission.request.expectedHeadVersion,
+  const local = { operation, target: { workId, kind: 'prose', chapter: submission.request.chapter }, expectedHead: { artifactId: submission.request.expectedArtifactId, version: submission.request.expectedHeadVersion,
     ...(submission.operation === 'save-prose' ? { humanStatus: submission.request.expectedHumanStatus } : {}) } }
   const work = await client.getWork(workId)
-  const baseline = proseArtifactSchema.safeParse(work.artifacts.find(a => a.kind === 'prose' && a.chapter === 1))
-  if (!baseline.success) throw new CliError('No first-chapter Prose', 'artifact-not-found', 404, false, undefined, undefined, { ...local, resolution: 'rejected', nextActions: ['read-work'], observedHead: null })
+  const baseline = proseArtifactSchema.safeParse(work.artifacts.find(a => a.kind === 'prose' && a.chapter === submission.request.chapter))
+  if (!baseline.success) throw new CliError('No Prose for the requested chapter', 'artifact-not-found', 404, false, undefined, undefined, { ...local, resolution: 'rejected', nextActions: ['read-work'], observedHead: null })
   if (baseline.data.id !== submission.request.expectedArtifactId || baseline.data.version !== submission.request.expectedHeadVersion || baseline.data.humanStatus !== (submission.operation === 'save-prose' ? submission.request.expectedHumanStatus : 'pending')) {
     throw new CliError('Request identity, version or status no longer matches; the file was not modified or submitted', 'version-conflict', 409, false, undefined, undefined,
       { ...local, resolution: 'conflict', nextActions: ['read-work', 'load-server-version'], observedHead: { artifactId: baseline.data.id, version: baseline.data.version, humanStatus: baseline.data.humanStatus } })

@@ -47,11 +47,11 @@ export type BeatDraft = z.infer<typeof beatDraftSchema>
 export type BeatEditDraft = z.infer<typeof beatEditDraftSchema>
 export type BeatReviewDraft = z.infer<typeof beatReviewDraftSchema>
 export const beatArtifactSchema = artifactEnvelopeSchema.extend({
-  kind: z.literal('beat'), chapter: z.literal(1), content: beatContentSchema,
+  kind: z.literal('beat'), chapter: z.number().int().positive().safe(), content: beatContentSchema,
 }).strict()
 export type BeatArtifact = z.infer<typeof beatArtifactSchema>
 export const beatRequestHeadSchema = z.object({
-  chapter: z.literal(1), expectedArtifactId: z.string().min(1).max(128), expectedHeadVersion: z.number().int().positive().safe(),
+  chapter: z.number().int().positive().safe(), expectedArtifactId: z.string().min(1).max(128), expectedHeadVersion: z.number().int().positive().safe(),
 }).strict()
 export const beatApproveRequestSchema = beatRequestHeadSchema.extend({ content: beatReviewDraftSchema }).strict()
 export const beatRegenerateRequestSchema = beatRequestHeadSchema.extend({ content: beatEditDraftSchema, instructions: z.string().max(beatLimits.instructions) }).strict()

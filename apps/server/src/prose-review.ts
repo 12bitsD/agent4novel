@@ -4,17 +4,17 @@ import { consumeGuards } from './pipeline/consume-guards.js'
 import { observeProse } from './prose-command.js'
 import type { ArtifactPrecondition, WorkStore } from './store/work-store.js'
 
-export function prepareProseReview(store: WorkStore, workId: string, request: Pick<ProseRegenerateRequest, 'expectedArtifactId' | 'expectedHeadVersion'>, expectedHumanStatus?: HumanStatus) {
+export function prepareProseReview(store: WorkStore, workId: string, request: Pick<ProseRegenerateRequest, 'chapter' | 'expectedArtifactId' | 'expectedHeadVersion'>, expectedHumanStatus?: HumanStatus) {
   const work = store.getWork(workId)
   if (!work) throw new KnownError('work-not-found', 'work not found')
-  const target = work.artifacts.find(a => a.kind === 'prose' && a.chapter === 1)
+  const target = work.artifacts.find(a => a.kind === 'prose' && a.chapter === request.chapter)
   if (!target) throw new KnownError('artifact-not-found', 'prose not found')
   if (target.id !== request.expectedArtifactId || target.version !== request.expectedHeadVersion) throw new KnownError('version-conflict', 'prose head changed')
   if (expectedHumanStatus !== undefined && target.humanStatus !== expectedHumanStatus) throw new KnownError('version-conflict', 'prose review state changed')
   if (expectedHumanStatus === undefined && target.humanStatus !== 'pending') throw new KnownError('artifact-already-approved', 'prose already approved')
   const preconditions: ArtifactPrecondition[] = []
   for (const kind of ['caption', 'creative', 'outline', 'setting', 'beat'] as const) {
-    const chapter = kind === 'beat' ? 1 : undefined
+    const chapter = kind === 'beat' ? request.chapter : undefined
     const upstream = work.artifacts.find(a => a.kind === kind && a.chapter === chapter)
     try {
       if (!upstream || upstream.humanStatus !== 'approved') throw new Error('pending')
@@ -33,10 +33,10 @@ export function saveProse(store: WorkStore, workId: string, request: ProseSaveRe
     execution.stage = 'input'
     const content = proseSaveRequestSchema.parse(request).content
     execution.stage = 'commit'
-    return store.saveArtifact({ workId, kind: 'prose', chapter: 1,
+    return store.saveArtifact({ workId, kind: 'prose', chapter: request.chapter,
       expectedArtifactId: baseline.id, expectedHeadVersion: baseline.version, expectedHumanStatus: request.expectedHumanStatus, content, preconditions,
     })
-  })
+  }, request.chapter)
 }
 
 export function approveProse(store: WorkStore, workId: string, request: ProseApproveRequest) {
@@ -45,8 +45,8 @@ export function approveProse(store: WorkStore, workId: string, request: ProseApp
     execution.stage = 'input'
     const content = proseApproveRequestSchema.parse(request).content
     execution.stage = 'commit'
-    return store.finalizeArtifact({ workId, kind: 'prose', chapter: 1,
+    return store.finalizeArtifact({ workId, kind: 'prose', chapter: request.chapter,
       expectedArtifactId: baseline.id, expectedHeadVersion: baseline.version, content, preconditions,
     })
-  })
+  }, request.chapter)
 }

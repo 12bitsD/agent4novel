@@ -142,3 +142,9 @@ button {
 .setting-modal .setting-actions { justify-content: flex-end; }
 .setting-modal-close { position: absolute; right: 14px; top: 12px; border: 0; background: transparent; color: var(--ink-2); font-size: 24px; cursor: pointer; }
 .setting-modal-mark { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; background: var(--warn-bg); color: var(--warn-ink); font-size: 24px; font-weight: 600; }
+
+.chapter-directory { padding: 18px 0; margin-bottom: 24px; border-bottom: 1px solid var(--line); }
+.chapter-directory h2 { font-size: 18px; margin-top: 0; }
+.chapter-directory [aria-current='page'] { border-color: var(--accent) !important; background: var(--bg-sunken) !important; }
+.chapter-directory button:disabled { cursor: not-allowed !important; opacity: .5; }
+.chapter-directory :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

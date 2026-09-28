@@ -19,7 +19,7 @@ export function matchesBeatSubmission(baseline: BeatArtifact, submitted: BeatApp
   if (!base.success || !request.success || !result.success) return false
   const original = base.data
   const actual = result.data
-  if (original.humanStatus !== 'pending' || actual.humanStatus !== 'approved' || actual.workId !== original.workId
+  if (original.humanStatus !== 'pending' || actual.humanStatus !== 'approved' || actual.chapter !== original.chapter || request.data.chapter !== original.chapter || actual.workId !== original.workId
     || actual.id !== original.id || actual.version !== original.version || actual.createdAt !== original.createdAt
     || request.data.expectedArtifactId !== original.id || request.data.expectedHeadVersion !== original.version) return false
   const expected = request.data.content
@@ -47,18 +47,18 @@ export function recoverBeatSubmission(input: {
     && input.response?.status === (failure.data.code === 'payload-too-large' ? 413 : 400)
   const rejectedExecution = command?.kind === 'execution-result' && command.operation === input.submission.operation
     && failure?.success && rejectionStatus[failure.data.code] === input.response?.status
-    && command.target.workId === input.baseline.workId && command.expectedHead?.artifactId === input.submission.request.expectedArtifactId
+    && command.target.chapter === input.baseline.chapter && input.submission.request.chapter === input.baseline.chapter && command.target.workId === input.baseline.workId && command.expectedHead?.artifactId === input.submission.request.expectedArtifactId
     && command.expectedHead.version === input.submission.request.expectedHeadVersion && command.writeOutcome === 'not-committed'
   const unknown = input.hasUnknownWrite || !(rejectedRequest || rejectedExecution)
   const view = workViewSchema.safeParse(input.work)
   const candidate = view.success && view.data.id === input.baseline.workId
-    ? view.data.artifacts.find(a => a.kind === 'beat' && a.chapter === 1) : undefined
+    ? view.data.artifacts.find(a => a.kind === 'beat' && a.chapter === input.baseline.chapter) : undefined
   const observed = view.success && view.data.id === input.baseline.workId
     ? { observedHead: candidate ? { artifactId: candidate.id, version: candidate.version, humanStatus: candidate.humanStatus } : null } : {}
   const success = input.response?.status === 200 ? beatCommandResponseSchema.safeParse(input.response.body) : undefined
   if (success?.success && success.data.command.kind === 'execution-result') {
     const { artifact, command: resultCommand } = success.data
-    const bound = resultCommand.operation === input.submission.operation && resultCommand.target.workId === input.baseline.workId
+    const bound = resultCommand.operation === input.submission.operation && resultCommand.target.chapter === input.baseline.chapter && artifact.chapter === input.baseline.chapter && input.submission.request.chapter === input.baseline.chapter && resultCommand.target.workId === input.baseline.workId
       && resultCommand.expectedHead?.artifactId === input.baseline.id && resultCommand.expectedHead.version === input.baseline.version
       && input.submission.request.expectedArtifactId === input.baseline.id && input.submission.request.expectedHeadVersion === input.baseline.version
     const priorIds = new Set(input.baseline.content.writingPlan.map(item => item.itemId))
@@ -80,7 +80,7 @@ export function recoverBeatSubmission(input: {
     const sameBaseline = candidate?.id === input.baseline.id && candidate.version === input.baseline.version && candidate.humanStatus === 'pending'
       && JSON.stringify(candidate.content) === JSON.stringify(input.baseline.content)
     const canEdit = rejectedRequest || (failure?.success && failure.data.code === 'invalid-content')
-      || (input.workIsReadback === true && sameBaseline && view.success && view.data.workflowState === 'awaiting-beat-review' && view.data.allowedActions.includes(input.submission.operation === 'approve-beat' ? 'approve' : 'regenerate'))
+      || (input.workIsReadback === true && sameBaseline && view.success && view.data.workflowState === 'awaiting-beat-review' && (view.data.chapters.find(c => c.chapter === input.baseline.chapter)?.allowedActions ?? view.data.allowedActions).includes(input.submission.operation === 'approve-beat' ? 'approve' : 'regenerate'))
     return { ...observed, resolution: 'rejected', nextActions: canEdit ? ['edit-input'] : ['read-work', 'inspect-diagnostics'], hasUnknownWrite: false }
   }
   return { ...observed, resolution: 'uncertain', nextActions: ['read-work', 'retry-frozen-request'], hasUnknownWrite: true }

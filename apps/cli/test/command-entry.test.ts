@@ -76,7 +76,7 @@ describe('CLI command discovery and syntax', () => {
     expect(requests).toEqual([])
   })
 
-  it.each(['list', 'create', 'get', 'run-step', 'advance', 'select', 'save-outline', 'approve', 'approve-setting', 'approve-beat', 'regenerate-beat', 'approve-prose', 'regenerate-prose', 'save-prose', 'config', 'logs', 'smoke'])
+  it.each(['list', 'create', 'get', 'run-step', 'advance', 'start-chapter', 'select', 'save-outline', 'approve', 'approve-setting', 'approve-beat', 'regenerate-beat', 'approve-prose', 'regenerate-prose', 'save-prose', 'config', 'logs', 'smoke'])
     ('offers scoped %s help before invalid configuration, arguments or files', async command => {
       for (const help of ['--help', '-h']) {
         const result = await invoke([command, help, '--file', '/missing/private-file', '--unknown'], {
@@ -100,7 +100,7 @@ describe('CLI command discovery and syntax', () => {
       { bytes: Buffer.from('private-broken-json'), code: 'invalid-input' },
       { bytes: Buffer.from(JSON.stringify({ ...request, expectedHumanStatus: undefined })), code: 'invalid-input' },
       { bytes: Buffer.from(JSON.stringify({ ...request, content: { text: 'private-text', extra: 'private-extra' } })), code: 'invalid-input' },
-      { bytes: Buffer.from(JSON.stringify({ ...request, chapter: 2 })), code: 'invalid-input' },
+      { bytes: Buffer.from(JSON.stringify({ ...request, chapter: 0 })), code: 'invalid-input' },
       { bytes: Buffer.concat([Buffer.from(JSON.stringify(request).replace('private-text', '')), Buffer.alloc(1024 * 1024, 32)]), code: 'payload-too-large' },
       { bytes: Buffer.concat([Buffer.from(JSON.stringify(request).split('private-text')[0]!), Buffer.from([0xc3, 0x28]), Buffer.from(JSON.stringify(request).split('private-text')[1]!)]), code: 'invalid-input' },
     ]
@@ -118,6 +118,34 @@ describe('CLI command discovery and syntax', () => {
     } finally { rmSync(folder, { recursive: true, force: true }) }
   })
 
+  it('starts exactly the requested chapter and rejects malformed continuation files without HTTP or secret echo', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'a4n-start-file-'))
+    const file = join(folder, 'private-request.json')
+    const request = { chapter: 2, expectedPreviousProseId: 'prose-1', expectedPreviousProseVersion: 3 }
+    try {
+      for (const candidate of [
+        { bytes: Buffer.from('private-broken-json'), code: 'invalid-input' },
+        { bytes: Buffer.from(JSON.stringify({ ...request, chapter: 1 })), code: 'invalid-input' },
+        { bytes: Buffer.from(JSON.stringify({ ...request, extra: 'private-extra' })), code: 'invalid-input' },
+        { bytes: Buffer.alloc(1024 * 1024 + 1, 32), code: 'payload-too-large' },
+        { bytes: Buffer.from([0xc3, 0x28]), code: 'invalid-input' },
+      ]) {
+        writeFileSync(file, candidate.bytes)
+        const result = await invoke(['start-chapter', 'work-synthetic', '--file', file])
+        expect(result.code).toBe(1)
+        expect(JSON.parse(result.stderr)).toMatchObject({ code: candidate.code })
+        expect(result.stderr).not.toContain('private-')
+        expect(requests).toEqual([])
+        expect(readFileSync(file)).toEqual(candidate.bytes)
+      }
+      writeFileSync(file, JSON.stringify(request))
+      const result = await invoke(['start-chapter', 'work-synthetic', '--file', file])
+      expect(result.code, result.stderr).toBe(0)
+      expect(requests).toEqual([{ method: 'POST', url: '/api/works/work-synthetic/chapters/start', body: JSON.stringify(request) }])
+      expect(readFileSync(file, 'utf8')).toBe(JSON.stringify(request))
+    } finally { rmSync(folder, { recursive: true, force: true }) }
+  })
+
   it.each([
     ['advance', 'work-synthetic', '--thinking', 'private-option-value'],
     ['get', 'work-synthetic', '--knd', 'private-option-value'],
@@ -131,6 +159,7 @@ describe('CLI command discovery and syntax', () => {
     ['get', 'work-synthetic', '--kind', 'private-invalid-kind'],
     ['approve', 'work-synthetic', 'private-invalid-kind'],
     ['advance', 'work-synthetic', '--private-option-name', 'private-option-value'],
+    ['start-chapter', 'work-synthetic', '--file', '/missing/private-file', '--chapter', '2'],
   ])('rejects invalid syntax before any HTTP request: %j', async (...args) => {
     const result = await invoke(args)
     expect(requests).toEqual([])
@@ -148,6 +177,7 @@ describe('CLI command discovery and syntax', () => {
     ['smoke', '--seed', 'synthetic', 'private-extra'],
     ['get', 'work-synthetic', 'private-extra'],
     ['advance', 'work-synthetic', 'private-extra'],
+    ['start-chapter', 'work-synthetic', '--file', '/missing/private-file', 'private-extra'],
     ['select', 'work-synthetic', 'direction-synthetic', 'private-extra'],
     ['approve', 'work-synthetic', 'outline', 'private-extra'],
     ['save-outline', 'work-synthetic', '--file', '/missing/private-file', 'private-extra'],
@@ -157,6 +187,7 @@ describe('CLI command discovery and syntax', () => {
     ['logs', 'work-synthetic', 'private-extra'],
     ['run-step', 'caption', '--seed-file', '/missing/private-file', 'private-extra'],
     ['get'], ['advance'], ['select'], ['approve', 'work-synthetic'],
+    ['start-chapter', '--file', '/missing/private-file'],
     ['save-outline', '--file', '/missing/private-file'],
     ['approve-setting', '--file', '/missing/private-file'],
     ['approve-beat', '--file', '/missing/private-file'],
@@ -179,6 +210,7 @@ describe('CLI command discovery and syntax', () => {
     ['smoke', '--seed', 'private-seed', '--seed-file', '/missing/private-file'],
     ['run-step', 'caption', '--input-file', '/missing/private-input', '--seed-file', '/missing/private-file'],
     ['save-outline', 'work-synthetic'], ['approve-setting', 'work-synthetic'],
+    ['start-chapter', 'work-synthetic'],
     ['approve-beat', 'work-synthetic'], ['regenerate-beat', 'work-synthetic'],
   ])('rejects missing or mutually exclusive inputs before execution: %j', async (...args) => {
     const result = await invoke(args)
@@ -239,6 +271,7 @@ describe('CLI command discovery and syntax', () => {
         ['approve-setting', 'work-synthetic', '--file', file],
         ['approve-beat', 'work-synthetic', '--file', file],
         ['regenerate-beat', 'work-synthetic', '--file', file],
+        ['start-chapter', 'work-synthetic', '--file', file],
       ]) {
         const help = await invoke([...args, '--help'])
         expect(help.code).toBe(0)

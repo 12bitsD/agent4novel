@@ -18,7 +18,7 @@ describe('Prose editor public state', () => {
     expect(state.notice).toContain('400001 / 400000')
     expect(state.notice).toContain('未调用模型')
   })
-  const work = (artifacts: ProseArtifact[]): WorkView => ({ id: baseline.workId, title: 'test', seed: 'synthetic', config: {}, createdAt: baseline.createdAt, artifacts, workflowState: 'awaiting-prose-review', nextStepId: null, allowedActions: ['approve', 'regenerate'] })
+  const work = (artifacts: ProseArtifact[]): WorkView => ({ id: baseline.workId, title: 'test', seed: 'synthetic', config: {}, createdAt: baseline.createdAt, artifacts, currentChapter: 1, chapters: [], workflowState: 'awaiting-prose-review', nextStepId: null, allowedActions: ['approve', 'regenerate'] })
   it('requires a successful post-command read before restoring revoked gate permissions', () => {
     let state = reduceProseReview(initProseReview(baseline), { type: 'observe', work: work([baseline]) })
     state = reduceProseReview(state, { type: 'start', operation: 'regenerate-prose' })

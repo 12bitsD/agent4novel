@@ -81,6 +81,7 @@ async function main(): Promise<void> {
       result = await cmd.approveSetting(client, pos[0], input)
       break
     }
+    case 'start-chapter':
     case 'approve-beat':
     case 'regenerate-beat':
     case 'approve-prose':
@@ -88,7 +89,7 @@ async function main(): Promise<void> {
     case 'regenerate-prose': {
       const isProse = command === 'approve-prose' || command === 'regenerate-prose' || command === 'save-prose'
       const limit = isProse ? proseLimits.bodyBytes : beatLimits.bodyBytes
-      const label = isProse ? 'Prose' : 'Beat'
+      const label = command === 'start-chapter' ? 'Chapter' : isProse ? 'Prose' : 'Beat'
       let source: string
       let descriptor: number | undefined
       try {
@@ -102,7 +103,7 @@ async function main(): Promise<void> {
         }
         if (length > limit) throw new CliError(`${label} request file exceeds byte limit`, 'payload-too-large')
         try {
-          source = isProse ? new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, length)) : buffer.subarray(0, length).toString('utf8')
+          source = isProse || command === 'start-chapter' ? new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, length)) : buffer.subarray(0, length).toString('utf8')
         } catch { throw new CliError(`${label} request file must contain valid UTF-8`, 'invalid-input') }
       } catch (error) {
         if (error instanceof CliError) throw error
@@ -110,7 +111,8 @@ async function main(): Promise<void> {
       } finally { if (descriptor !== undefined) closeSync(descriptor) }
       let input: unknown
       try { input = JSON.parse(source) } catch { throw new CliError(`${label} request file must contain valid JSON`, 'invalid-input') }
-      result = isProse ? await cmd.runProseCommand(client, pos[0], command, input) : await cmd.runBeatCommand(client, pos[0], command, input)
+      result = command === 'start-chapter' ? await cmd.startChapter(client, pos[0], input)
+        : isProse ? await cmd.runProseCommand(client, pos[0], command, input) : await cmd.runBeatCommand(client, pos[0], command, input)
       break
     }
     case 'logs':

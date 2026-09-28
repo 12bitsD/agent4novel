@@ -7,10 +7,11 @@ import type {
   Work,
   WorkSummary,
   WorkView,
+  StartChapterRequest,
 } from '@agent4novel/contracts'
 import { advanceOutcomeDtoSchema, workViewSchema } from '@agent4novel/contracts'
 import { withDeadline } from './request-deadline.js'
-export type { AdvanceOutcomeDto } from '@agent4novel/contracts'
+export type { AdvanceOutcomeDto, StartChapterRequest } from '@agent4novel/contracts'
 
 export type AppConfig = { demo: boolean }
 
@@ -20,7 +21,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     // 统一错误形 { code, retryable, attemptId, message };读不到就退化为状态码
     const body = (await res.json().catch(() => null)) as { code?: string; message?: string } | null
     const err = new Error(body?.message ?? `${init?.method ?? 'GET'} ${url} failed: ${res.status}`)
-    if (body?.code) (err as Error & { code: string }).code = body.code
+    Object.assign(err, { status: res.status, ...(body?.code ? { code: body.code } : {}) })
     throw err
   }
   return res.json()
@@ -78,6 +79,16 @@ export function selectCreativeDirection(
 export async function advance(workId: string): Promise<AdvanceOutcomeDto> {
   return withDeadline(1_820_000, async signal => {
     const result = advanceOutcomeDtoSchema.parse(await request<unknown>(`/api/works/${encodeURIComponent(workId)}/advance`, { method: 'POST', signal }))
+    if (result.state.workId !== workId) throw new Error('服务器返回了不同作品')
+    return result
+  })
+}
+
+export async function startChapter(workId: string, input: StartChapterRequest): Promise<AdvanceOutcomeDto> {
+  return withDeadline(1_820_000, async signal => {
+    const result = advanceOutcomeDtoSchema.parse(await request<unknown>(`/api/works/${encodeURIComponent(workId)}/chapters/start`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(input), signal,
+    }))
     if (result.state.workId !== workId) throw new Error('服务器返回了不同作品')
     return result
   })

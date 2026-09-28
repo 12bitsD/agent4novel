@@ -118,6 +118,7 @@ export class InMemoryStore implements WorkStore {
       content: storedContent,
       humanStatus: 'pending',
       createdAt: new Date().toISOString(),
+      ...(options?.inputs ? { inputs: options.inputs } : {}),
     }
     const snapshot = structuredClone(artifact)
     const candidate: Bucket = { kind, chapter, versions: [...(bucket?.versions ?? []), artifact] }

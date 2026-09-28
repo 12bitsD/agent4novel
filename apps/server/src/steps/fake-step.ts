@@ -114,18 +114,20 @@ export function createFakeBeatStep(): ArtifactStep {
   return {
     id: 'beat', inputSchema: beatStepInputSchema, outputSchema: beatStepOutputSchema,
     async run(input) {
-      const { upstream, regeneration } = beatStepInputSchema.parse(input)
+      const { chapter, upstream, regeneration } = beatStepInputSchema.parse(input)
       const segment = upstream.outline.arcs[0]!.segments[0]!
       return { content: assignBeatIds({
-        title: '(演示)第一章：初遇变局',
+        title: chapter === 1 ? '(演示)第一章：初遇变局' : `(演示)第 ${chapter} 章：继续追寻`,
         goal: regeneration
-          ? `(演示再生)${regeneration.content.goal}\n修改意见：${regeneration.instructions || '重新安排开局'}`
-          : `(演示)围绕「${segment.title}」展开：${segment.summary}`,
+          ? `(演示再生)${regeneration.content.goal}\n修改意见：${regeneration.instructions || '重新安排本章'}`
+          : upstream.previousChapter ? `(演示)承接第 ${upstream.previousChapter.chapter} 章已通过正文（${upstream.previousChapter.prose.text.length} 字），继续当前情境。`
+            : `(演示)围绕「${segment.title}」展开：${segment.summary}`,
         writingPlan: [
-          { title: '建立处境', content: `- 展示故事世界中的日常。\n- 让主要人物在行动中出现。\n\n${upstream.setting.world[0]!.content}` },
+          { title: upstream.previousChapter ? '延续处境' : '建立处境', content: `${upstream.previousChapter ? '- 延续上一章留下的行动，不重复故事开篇。' : '- 展示故事世界中的日常。\n- 让主要人物在行动中出现。'}\n\n${upstream.setting.world[0]!.content}` },
           { title: '遇到变化并选择', content: '引入打破日常的线索，让主角作出一个有代价的选择；留下后续追问。' },
         ],
-        ending: `(演示)朝「${segment.outcome}」迈出第一步，停在主角将要行动的位置，不提前完成整条弧线。`,
+        ending: chapter === 1 ? `(演示)朝「${segment.outcome}」迈出第一步，停在主角将要行动的位置，不提前完成整条弧线。`
+          : `(演示)完成本章行动后出现新的线索，保持故事继续推进。`,
       }) }
     },
   }
@@ -139,6 +141,7 @@ export function createFakeProseStep(): ArtifactStep {
       return { content: { text: [
         `(演示)${upstream.beat.title}。${upstream.beat.goal}`,
         upstream.setting.world[0]!.content,
+        ...(upstream.previousChapter ? [`(演示)承接第 ${upstream.previousChapter.chapter} 章最终正文（${upstream.previousChapter.prose.text.length} 字），继续人物的行动。`] : []),
         ...upstream.beat.writingPlan.map(item => item.content),
         ...(regeneration ? [regeneration.content.text, `本次意见：${regeneration.instructions || '基于当前正文重新尝试。'}`] : []),
         upstream.beat.ending,

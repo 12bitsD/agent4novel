@@ -8,7 +8,7 @@ topics: ["agent-cli", "isolated-step", "system-prompt", "llm-telemetry", "workfl
 code_paths: ["apps/cli/src/client.ts", "apps/cli/src/commands.ts", "apps/cli/src/main.ts", "apps/cli/src/local-step.ts", "apps/server/src/step-lab-main.ts", "apps/server/src/steps/isolated-runner.ts", "packages/contracts/src/step-experiment.ts", "packages/contracts/src/telemetry.ts", "apps/server/src/steps/llm-call.ts", ".claude/skills/agent4novel-drive/SKILL.md"]
 symbols: ["createClient", "CliError", "run-step", "runLocalStep", "runIsolatedStep", "stepExperimentRequestSchema", "smoke", "LlmTelemetry", "recordTelemetry", "telemetryFor", "callLlm"]
 inherits: ["004", "011"]
-changed_by: ["016", "013", "005", "025", "022"]
+changed_by: ["016", "013", "005", "025", "022", "006"]
 read_when: ["drive-workflow-from-cli", "run-isolated-step", "compare-system-prompts", "debug-llm-failure", "change-cli-command", "change-telemetry", "run-end-to-end-smoke"]
 last_context_reviewed: "2026-09-29"
 ---
@@ -19,10 +19,10 @@ last_context_reviewed: "2026-09-29"
 
 - **读取时机**：用命令行驱动作品、独立运行节点或对照 SP、修改 CLI、分析 LLM 失败、扩展遥测或维护 smoke 探针时读取。
 - **原始目的**：消除 Agent 手拼 curl 和手记 expectedHeadVersion 的易错操作，并让一次 advance 同时返回结果与诊断。
-- **实际落地**：a4n 提供作品命令与本地 worker 单节点实验，支持自定义 SP、生成参数、校验后的 content 与安全 telemetry。#22 将 run-step 扩至六节点，新增 Prose 保存／通过／重写文件命令，smoke 延伸至正文保存、通过与逐字符回读；本页旧五节点验证只属对应历史候选。
+- **实际落地**：a4n 提供作品命令与本地 worker 单节点实验，支持自定义 SP、生成参数、校验后的 content 与安全 telemetry。#22 将 run-step 扩至六节点，新增 Prose 保存／通过／重写文件命令，smoke 延伸至正文保存、通过与逐字符回读；[Wiki 006](./006-chapter-continuation.md) 进一步加入 start-chapter 和任意合法章号的 Beat/Prose 独立输入；默认 smoke 仍停在首章。本页旧五节点与首章验证只属对应历史候选。
 - **当前价值**：本文拥有 CLI 命令语义、单节点输入与结果边界、遥测契约、smoke 流程和 outline 截断的排障经验；生成参数与 timeout 默认值由 Wiki 016 维护。
 - **后续变化**：[Wiki 016](./016-model-runtime-provider-config.md) 接管模型配置与 timeout 默认值；[Wiki 013](./013-setting-generation-review.md) 拥有 Setting 完整显式版本请求与结果对账规则，不沿用 Outline 自动补版本。
-  [Wiki 005](./005-beat-generation-review.md) 增加按章命令、请求关联与写入结果，移除共享原始错误内容传播；Beat 恢复语义以该页为准。[Wiki 022](./022-prose-generation-review.md) 接管 Prose 专用请求、状态保留保存与未知提交恢复；旧五步 smoke 终点及五节点测试不代表当前完整范围。
+  [Wiki 005](./005-beat-generation-review.md) 增加按章命令、请求关联与写入结果，移除共享原始错误内容传播；Beat 恢复语义以该页为准。[Wiki 022](./022-prose-generation-review.md) 接管 Prose 专用请求、状态保留保存与未知提交恢复；旧五步 smoke 终点及五节点测试不代表当前完整范围。[Wiki 006](./006-chapter-continuation.md) 接管明确目标章的开始命令、前章输入和多章验证边界。
 - **入口语法变化**：[Wiki 025](./025-cli-command-safety.md) 将子命令帮助和严格语法校验前置到任何 I/O；本文的业务结果、遥测和单节点语义保持不变。
 - **代码入口**：[CLI commands](../../apps/cli/src/commands.ts)、[local-step](../../apps/cli/src/local-step.ts)、[isolated-runner](../../apps/server/src/steps/isolated-runner.ts)、[telemetry ledger](../../apps/server/src/steps/telemetry.ts)、[LLM call](../../apps/server/src/steps/llm-call.ts)、[drive skill](../../.claude/skills/agent4novel-drive/SKILL.md)。
 
@@ -58,11 +58,13 @@ Agent 操作面必须满足三个条件：命令可组合、输出可解析、�
 ./apps/cli/bin/a4n <command>
 ~~~
 
-作品命令为 config、list、create、get、advance、select、save-outline、approve、approve-setting、approve-beat、regenerate-beat、save-prose、approve-prose、regenerate-prose、logs、smoke；独立节点实验使用下节 run-step。Beat 文件显式保留章号、Artifact ID 与版本；get 按 kind/chapter 精确读取。select/save-outline 自动回填 head version；approve-setting 文件必须显式携带完整 content 与读取时 expectedHeadVersion，最多自动回读一次，不自动重写。pnpm -s cli 等价，但必须带 -s 以免横幅污染 stdout；地址与 timeout 默认值见 [Wiki 016](./016-model-runtime-provider-config.md)，Setting 恢复规则见 [Wiki 013](./013-setting-generation-review.md#提交结果确认)。
+作品命令为 config、list、create、get、advance、start-chapter、select、save-outline、approve、approve-setting、approve-beat、regenerate-beat、save-prose、approve-prose、regenerate-prose、logs、smoke；独立节点实验使用下节 run-step。Beat 文件显式保留章号、Artifact ID 与版本；get 按 kind/chapter 精确读取。select/save-outline 自动回填 head version；approve-setting 文件必须显式携带完整 content 与读取时 expectedHeadVersion，最多自动回读一次，不自动重写。pnpm -s cli 等价，但必须带 -s 以免横幅污染 stdout；地址与 timeout 默认值见 [Wiki 016](./016-model-runtime-provider-config.md)，Setting 恢复规则见 [Wiki 013](./013-setting-generation-review.md#提交结果确认)。
 
 Prose 文件与恢复规则见 [Wiki 022](./022-prose-generation-review.md)：保存必须携带显式 id/version/status 基线，不能沿用 Outline 自动补版本。
 
-CliError 保留 server 返回的 code、status、retryable、attemptId 与可选 issues。命令函数只返回可 JSON 序列化值，main 统一负责打印与 exit code。CLI 主动 deadline 覆盖 fetch 和响应体，Beat／Prose 默认通过 30s、重写 920s，Prose 保存 30s、恢复 GET 10s；其他默认值见 Wiki 016；超时不代表服务器回滚。
+`start-chapter <workId> --file request.json` 提交 `{chapter, expectedPreviousProseId, expectedPreviousProseVersion}`：chapter 至少为2，前章正文需已通过，目标连续。文件为严格 UTF-8 JSON、最多1 MiB；HTTP仅发送校验后的三字段对象。命令不自动回填基线、不自动回读或重发；结果未知时用 get 检查作品。返回 AdvanceOutcomeDto，必须同时检查业务 kind；已有目标只回读现状，不多生成一章。当前工作章由 advance 推进，完整契约及验收从 [Wiki 006](./006-chapter-continuation.md) 进入。
+
+CliError 保留 server 返回的 code、status、retryable、attemptId 与可选 issues。命令函数只返回可 JSON 序列化值，main 统一负责打印与 exit code。CLI 主动 deadline 覆盖 fetch 和响应体，Beat／Prose 默认通过 30s、重写 920s，Prose 保存 30s、start-chapter 920s、恢复 GET 10s；其他默认值见 Wiki 016；超时不代表服务器回滚。
 
 ### 单节点实验 run-step
 
@@ -84,8 +86,10 @@ CliError 保留 server 返回的 code、status、retryable、attemptId 与可选
 | creative | caption | 方向数量用 config 的 directionCount 控制 |
 | outline | creative | creative.directions 必须恰好一个 |
 | setting | caption、creative、outline | creative.directions 必须恰好一个 |
-| beat | outline、setting | 必须有 chapter: 1；可带 regeneration: { content, instructions } |
-| prose | beat、setting | 必须有 chapter: 1；可带 regeneration: { content: { text }, instructions } |
+| beat | outline、setting；后续章另需 previousChapter | chapter 为正安全整数；可带 regeneration: { content, instructions } |
+| prose | 同章 beat、setting；后续章另需 previousChapter | chapter 为正安全整数；可带 regeneration: { content: { text }, instructions } |
+
+后续章必须提供 `upstream.previousChapter: {chapter, beat, prose}`，其章号恰为目标章减1，beat/prose 均为完整 content；第一章禁止该字段。只承接上一章，不拼接全部历史正文。前章内容计入实际输入总预算，超限拒绝。
 
 `regeneration.content` 按节点使用 Beat 或 Prose 编辑草稿契约，`instructions` 可以为空；这里只生成独立结果，不校验或写回作品版本。输入与输出仍经过生产 Step schema 和消费守卫；没有 store 可证明输入是某作品的最新版或已通过版本。当前数据形状见 [schema](../schema.md)，请求允许字段见 [step-experiment.ts](../../packages/contracts/src/step-experiment.ts)。
 
@@ -125,7 +129,7 @@ server stdout 的 llm.error 只含安全分类、长度、tokens、finishReason�
 
 ### Smoke 探针
 
-smoke 执行 config → create → caption/creative → select → outline/通过 → setting/编辑并通过 → beat#1/编辑并通过 → prose#1/保存作者全文并通过 → get final，核对 `prose-approved`、Setting／Beat／Prose 的实际全文、保存后同版本通过且无第二章。旧五步 smoke 仅对应 #5 历史范围；#22 当前实现与验收入口见 [Wiki 022](./022-prose-generation-review.md)。成功 stdout 给出 steps/final；失败 stderr 保留部分 steps、运行模式及可用诊断，exit 非零。HTTP 200 failed 同样停止，不自动重跑模型。
+smoke 执行 config → create → caption/creative → select → outline/通过 → setting/编辑并通过 → beat#1/编辑并通过 → prose#1/保存作者全文并通过 → get final，核对 `prose-approved`、Setting／Beat／Prose 的实际全文、保存后同版本通过且无第二章。#6 保留此默认首章探针，续章由可执行 CLI 经 HTTP 的多章集成及本票验收单独覆盖，证据见 [Wiki 006](./006-chapter-continuation.md)。旧五步 smoke 仅对应 #5 历史范围；#22 当前实现与验收入口见 [Wiki 022](./022-prose-generation-review.md)。成功 stdout 给出 steps/final；失败 stderr 保留部分 steps、运行模式及可用诊断，exit 非零。HTTP 200 failed 同样停止，不自动重跑模型。
 
 ## 代码落点
 
@@ -168,10 +172,18 @@ CLI 测试以注入 fetch 覆盖 REST 映射、自动回填版本、首方向缺
 - telemetry 与作品不持久化；账本最多 1000 条，重启或淘汰后不可查。
 - smoke 自动选首方向并通过大纲、修改并通过设定和章纲，再保存并通过正文；只验证链路，不代表人工质量验收。
 - advance 是同步长请求；没有后台 job、SSE、Web telemetry 或跨进程聚合。
-- run-step 支持 caption、creative、outline、setting、beat#1、prose#1；实验结果不会落库或成为作品已通过产物，不支持第二章、后台任务或原始模型输出。
+- run-step 支持 caption、creative、outline、setting 及任意合法章号的 Beat/Prose；后续章必须提供恰好前一章。实验结果不会落库或成为作品已通过产物，不支持后台任务或原始模型输出。
 - provider、credential、Base URL、wire protocol 和 timeout 默认值归 wiki 016。
 
 ## 上下文演进
+
+### 2026-09-29 — 显式续章命令与前章实验输入
+
+- **触发证据**：[CLI commands](../../apps/cli/src/commands.ts) 和 [client](../../apps/cli/src/client.ts) 新增 startChapter，[实验契约](../../packages/contracts/src/step-experiment.ts) 与生产 Step 接受后续章及恰好上一章的输入；#6 AC 要求可执行 CLI 经 HTTP 验证多章。
+- **原假设**：#22 的命令与 run-step 限首章，默认 smoke 通过首章并断言没有第二章，尚不承担章节循环验收。
+- **决定**：由 [Wiki 006](./006-chapter-continuation.md) 承接 start-chapter、任意合法章号、前章输入与多章测试；默认 smoke 继续作为首章探针，不让它自动无限续写。
+- **影响**：开始命令使用明确目标章与前章正文身份/版本，不回填或自动重发；结果未知先 get。独立后续章输入必须提供 previousChapter，仍不证明所供内容来自作品当前 approved head，真实模型证据按实际节点和上游来源分别记录。
+- **上下文处理**：preserve 原 CLI／遥测目的、旧测试与完成审核证据、失败经验和首章 smoke；replace 当前命令表、输入及边界导航，追加多章验收下一跳 Wiki 006。
 
 ### 2026-09-29 — 正文扩展作品命令、单节点与 smoke
 
@@ -247,4 +259,4 @@ CLI 测试以注入 fetch 覆盖 REST 映射、自动回填版本、首方向缺
 
 ## 交接结论
 
-后续 Agent 应优先使用 a4n 和项目 drive skill；作品链路先检查 advance 的 kind，再读内联 telemetry，跨次分析调用 logs。单节点对照使用 run-step，保存每次返回的 content、telemetry.generation、promptHash 与 systemHash，并保留输入和 SP 的版本；它不写作品。修改时保持 stdout/stderr 分离、作品版本保护和安全遥测；provider、生成参数或 timeout 变更维护 [wiki 016](./016-model-runtime-provider-config.md)。Prose 请求与恢复及六步 smoke 的当前验收从 [Wiki 022](./022-prose-generation-review.md) 进入；本页旧五节点与五步 smoke 记录继续作为历史证据，不作为 #22 已完成的判定。
+后续 Agent 应优先使用 a4n 和项目 drive skill；作品链路先检查 advance 的 kind，再读内联 telemetry，跨次分析调用 logs。单节点对照使用 run-step，保存每次返回的 content、telemetry.generation、promptHash 与 systemHash，并保留输入和 SP 的版本；它不写作品。修改时保持 stdout/stderr 分离、作品版本保护和安全遥测；provider、生成参数或 timeout 变更维护 [wiki 016](./016-model-runtime-provider-config.md)。Prose 请求与恢复及首章 smoke 从 [Wiki 022](./022-prose-generation-review.md) 进入；start-chapter、后续章单节点输入及多章验收从 [Wiki 006](./006-chapter-continuation.md) 进入；本页旧五节点与五步 smoke 记录继续作为历史证据，不作为 #22 已完成的判定。

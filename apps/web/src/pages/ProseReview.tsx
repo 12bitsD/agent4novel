@@ -1,3 +1,4 @@
+import { chapterLabel } from '../chapter-view.js'
 import { useState } from 'react'
 import { proseLimits } from '@agent4novel/contracts'
 import type { ProseReviewState, ProseReviewAction } from '../prose-review.js'
@@ -16,7 +17,7 @@ export default function ProseReview({ title, state, onAction, allowCommands, onA
   const busy = ['saving', 'submitting', 'regenerating', 'reconciling'].includes(state.phase)
   return <section className="setting-review" aria-label="正文关卡">
     <header className="setting-review-header">
-      <div><p className="setting-eyebrow">第一章 · 正文</p><h2>{approved ? '第一章已完成' : title}</h2>
+      <div><p className="setting-eyebrow">{chapterLabel(state.baseline.chapter)} · 正文</p><h2>{approved ? `${chapterLabel(state.baseline.chapter)}已完成` : title}</h2>
         <p className="setting-muted">{approved ? '本章已通过。修改会自动保存，仍保持已通过。' : '正文修改会自动保存；通过后标记本章完成。'}</p>
         <p role="status">{state.phase === 'saving' ? '保存中…' : ['uncertain', 'conflict'].includes(state.phase) ? '操作尚未确认，修改已保留。'
           : state.draft.text !== state.baseline.content.text ? '尚有修改未保存。' : '已保存。'}</p></div>

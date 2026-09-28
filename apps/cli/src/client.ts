@@ -1,5 +1,5 @@
 import { advanceOutcomeDtoSchema, apiErrorSchema, settingApproveResponseSchema, workViewSchema, diagnosticResponseSchema, diagnosticQuerySchema } from '@agent4novel/contracts'
-import type { BeatSubmission, ProseSubmission, DiagnosticQuery } from '@agent4novel/contracts'
+import type { BeatSubmission, ProseSubmission, DiagnosticQuery, StartChapterRequest } from '@agent4novel/contracts'
 import { appConfigSchema } from '@agent4novel/contracts'
 import type {
   Artifact,
@@ -124,6 +124,14 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
       const parsed = advanceOutcomeDtoSchema.safeParse(data)
       if (!parsed.success || parsed.data.state.workId !== workId) {
         throw new CliError('Invalid advance response', 'invalid-response', 200)
+      }
+      return parsed.data
+    },
+    startChapter: async (workId: string, request: StartChapterRequest) => {
+      const data = await call<unknown>('POST', `/api/works/${encodeURIComponent(workId)}/chapters/start`, request, 920_000)
+      const parsed = advanceOutcomeDtoSchema.safeParse(data)
+      if (!parsed.success || parsed.data.state.workId !== workId) {
+        throw new CliError('Invalid chapter start response; inspect the work before retrying', 'invalid-response', 200)
       }
       return parsed.data
     },

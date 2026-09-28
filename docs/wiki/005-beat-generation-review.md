@@ -8,7 +8,7 @@ topics: ["beat", "chapter-planning", "human-review", "conditional-write", "agent
 code_paths: ["packages/contracts/src/beat.ts", "packages/contracts/src/beat-submission.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/store/in-memory-store.ts", "apps/server/src/routes/works.ts", "apps/server/src/steps/llm-call.ts", "apps/web/src/pages/Workspace.tsx", "apps/cli/src/commands.ts"]
 symbols: ["BeatContent", "BeatEditDraft", "BeatCommandObservation", "regenerateBeat", "matchesBeatSubmission", "writeOutcome", "request-rejected", "beat-approved"]
 inherits: ["004", "013", "014"]
-changed_by: ["022"]
+changed_by: ["022", "006"]
 read_when: ["implement-beat", "change-beat-schema", "review-beat-plan", "debug-beat-submission", "design-agent-observability"]
 last_context_reviewed: "2026-09-29"
 ---
@@ -19,9 +19,9 @@ last_context_reviewed: "2026-09-29"
 
 - **读取时机**：规划／实现／评审 #5，检查按章寻址、章纲失败恢复或 Agent 调用诊断时。
 - **原始目的**：生成当前第一章的完整写作计划，由作者编辑或整份再生，最终通过后再供正文使用；WHAT/AC 以 [issue #5](https://github.com/12bitsD/agent4novel/issues/5) 为准。
-- **实际落地**：[PR #23](https://github.com/12bitsD/agent4novel/pull/23) 已合并 main，生产第五步、真实/fake Beat、Web 编辑与再生、同版本通过、UUID 身份及 CLI 文件命令已落地；#5 已 CLOSED。`beat-approved` 和无正文断言是本票五步交付时的范围，当前六步首章链路由 [Wiki 022](./022-prose-generation-review.md) 接手。
-- **当前价值**：继承 Beat 四部分契约、按章身份、同版本通过、冻结请求与保守恢复；“本轮范围与计划”、五步状态表、旧 smoke 和完成证据只描述 #5 当时的候选。当前形状／协议见 [schema](../schema.md#beat5-当前契约)，原技术评审与决定见 [评审记录](../plans/005-beat-technical-review.md)。
-- **后续变化**：[Wiki 022](./022-prose-generation-review.md) 扩展至 `prose-approved`，Web 显式“通过章纲并生成正文”在确认 Beat 通过后生成一次正文；Beat 专用 API 仍只定稿，打开／刷新页面不生成。正文自动保存与 approved 可编辑的例外不改变 Beat 通过后只读；比较 #20、章节重生 #21 与后续排期见 [handoff](../handoff.md)。
+- **实际落地**：[PR #23](https://github.com/12bitsD/agent4novel/pull/23) 已合并 main，生产第五步、真实/fake Beat、Web 编辑与再生、同版本通过、UUID 身份及 CLI 文件命令已落地；#5 已 CLOSED。`beat-approved` 和无正文断言是本票五步交付时的范围，首章正文由 [Wiki 022](./022-prose-generation-review.md) 接手，后续逐章生成和浏览再由 [Wiki 006](./006-chapter-continuation.md) 扩展。
+- **当前价值**：继承 Beat 四部分契约、按章身份、同版本通过、冻结请求与保守恢复；“本轮范围与计划”、仅第一章限制、五步状态表、旧 smoke 和完成证据只描述 #5 当时的候选。当前形状／协议见 [schema](../schema.md#beat5-当前契约)，原技术评审与决定见 [评审记录](../plans/005-beat-technical-review.md)。
+- **后续变化**：[Wiki 022](./022-prose-generation-review.md) 扩展至 `prose-approved`，Web 显式“通过章纲并生成正文”在确认 Beat 通过后生成一次正文；Beat 专用 API 仍只定稿，打开／刷新页面不生成。[Wiki 006](./006-chapter-continuation.md) 将 Beat/Prose 双关卡推广到各章，并在后续章生成时消费上一章实际内容；正文自动保存与 approved 可编辑的例外不改变 Beat 通过后只读；比较 #20、章节重生 #21 与后续排期见 [handoff](../handoff.md)。
 - **代码入口**：现有 [Pipeline](../../apps/server/src/pipeline/pipeline.ts)、[WorkStore](../../apps/server/src/store/work-store.ts)、[路由](../../apps/server/src/routes/works.ts)；完整落点见下表，内容／命令协议均已有运行时 schema。
 
 ## 设计目的
@@ -81,7 +81,7 @@ last_context_reviewed: "2026-09-29"
 
 ## 技术方案
 
-本节保留 #5 的方案与交付范围：下方五步终点、Web 通过后的停留行为及“无 prose”的 smoke 断言均属于当时基线。当前生产衔接已由 [#22 承接事件](#2026-09-29--正文承接五步终点与后续入口) 说明；Beat 本身的编辑、再生和同版本通过机制继续有效。
+本节保留 #5 的方案与交付范围：下方仅第一章限制、五步终点、Web 通过后的停留行为及“无 prose”的 smoke 断言均属于当时基线。后续章、前章输入和衔接提示由 [Wiki 006](./006-chapter-continuation.md) 维护。当前生产衔接已由 [#22 承接事件](#2026-09-29--正文承接五步终点与后续入口) 说明；Beat 本身的编辑、再生和同版本通过机制继续有效。
 
 ### 本轮范围与计划（2026-09-28）
 
@@ -521,6 +521,14 @@ COREPACK_ENABLE_AUTO_PIN=0 pnpm build
 
 ## 上下文演进
 
+### 2026-09-29 — 章纲复用于后续章双关卡
+
+- **触发证据**：作者确认 #6 先于治理／持久化推进；当前 [Pipeline](../../apps/server/src/pipeline/pipeline.ts) 复用 Beat/Prose 定义生成后续章，[章节输入契约](../../packages/contracts/src/step-experiment.ts) 接受正安全章号与对应前章输入。
+- **原假设**：#5 为验证独立章纲关卡只开放第一章，后续章如何承接由 #6 决定；章号没有被定义成大纲剧情点索引。
+- **决定**：由 [Wiki 006](./006-chapter-continuation.md) 接管显式下一章、完整大纲／设定加上一章 Beat／Prose 的输入和章节浏览，继续复用本页的 Beat 编辑、再生、同版通过及只读边界。
+- **影响**：当前章号不再限1；后续章根据上一章实际正文提出计划，不强制一剧情点一章。旧章编辑保留后章并提示衔接，生成期间实际输入变化由提交条件拒绝；不开放已通过 Beat 回改或级联重写。
+- **上下文处理**：preserve 原 Human 拆票决定、技术理由、第一章方案、失败经验与完成审核证据；replace 当前入口及继承导航，历史章号限制继续作为当时范围保留；下一跳为 Wiki 006。
+
 ### 2026-09-29 — 正文承接五步终点与后续入口
 
 - **触发证据**：当前 [生产装配](../../apps/server/src/start.ts) 已注册 `prose#1`；[CLI smoke](../../apps/cli/src/commands.ts) 已回读 `prose-approved`。2026-09-29 live 回读 #5 为 CLOSED，关闭时间为 2026-09-28T15:01:31Z。
@@ -579,7 +587,7 @@ COREPACK_ENABLE_AUTO_PIN=0 pnpm build
 
 ## 交接结论
 
-可以依赖已由 PR23 合并的 Beat 四部分契约、专用命令和请求诊断；#5 已关闭，完成评论与远端状态从 [issue #5](https://github.com/12bitsD/agent4novel/issues/5) 回读。当前正文、六步生产链和新 smoke 从 [Wiki 022](./022-prose-generation-review.md) 接手，不能用本页五步实测替代 #22 验收；第二章、持久化与自动语义一致性检查仍不在本票。历史真实模型结果与各次 fake/mock 回归分开使用。
+可以依赖已由 PR23 合并的 Beat 四部分契约、专用命令和请求诊断；#5 已关闭，完成评论与远端状态从 [issue #5](https://github.com/12bitsD/agent4novel/issues/5) 回读。正文编辑协议和首章 smoke 从 [Wiki 022](./022-prose-generation-review.md) 接手，后续章命令、循环和浏览从 [Wiki 006](./006-chapter-continuation.md) 接手；不能用本页五步实测替代后续票验收。持久化与自动语义一致性检查仍不在本票。历史真实模型结果与各次 fake/mock 回归分开使用。
 
 ### 2026-09-28 收口行动（历史）
 

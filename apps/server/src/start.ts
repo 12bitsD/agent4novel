@@ -43,6 +43,7 @@ const pipeline = new Pipeline({
   store,
   steps,
   definition,
+  repeatChapters: true,
   // Work.config 是作品级覆盖；未设置 model 时由 ModelRuntime 使用启动默认值。
   resolveConfig: (work) => work.config,
   consumeGuards,

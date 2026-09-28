@@ -25,6 +25,43 @@ async function invoke(args: string[], providerUrl: string, env: NodeJS.ProcessEn
 }
 
 describe('run-step through a local mock provider', () => {
+  it('runs chapter two through the executable worker with exact previous text and chapter telemetry', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'a4n-step-continuation-'))
+    const requests: { messages: { role: string; content: string }[] }[] = []
+    const server = createServer(async (req, res) => {
+      let source = ''; for await (const chunk of req) source += chunk
+      requests.push(JSON.parse(source))
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ id: 'mock-prose-two', model: 'LongCat-2.0', choices: [{ index: 0,
+        message: { role: 'assistant', content: JSON.stringify({ text: '第二章正文。' }) }, finish_reason: 'stop' }] }))
+    })
+    server.listen(0, '127.0.0.1'); await once(server, 'listening')
+    const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
+    const beat = { title: '过桥', goal: '继续追寻', writingPlan: [{ itemId: 'item-two', title: '过桥', content: '沿桥继续走' }], ending: '发现新线索' }
+    const previousChapter = { chapter: 1, beat, prose: { text: '  上章人工作者最终全文。\n\n主角站在桥头。\n' } }
+    const input = { seed: '', chapter: 2, upstream: { beat, previousChapter, setting: { overview: '城市夜行',
+      world: [{ itemId: 'world-one', title: '城市', content: '河流横贯城市' }], characters: [{ itemId: 'person-one', title: '主角', content: '寻找证人' }],
+      factions: [], relationships: [], extensions: [],
+    } } }
+    try {
+      const file = join(directory, 'input.json'); writeFileSync(file, JSON.stringify(input))
+      const providerUrl = `http://127.0.0.1:${address.port}/v1`
+      const result = await invoke(['run-step', 'prose', '--input-file', file], providerUrl)
+      expect(result.code, result.stderr).toBe(0)
+      expect(JSON.parse(result.stdout)).toMatchObject({ kind: 'succeeded', stepId: 'prose', content: { text: '第二章正文。' }, telemetry: [{ chapter: 2, ok: true }] })
+      expect(requests).toHaveLength(1)
+      expect(requests[0]!.messages.find(message => message.role === 'user')?.content).toContain(JSON.stringify(previousChapter))
+      for (const invalid of [{ ...input, chapter: 1 }, { ...input, chapter: 3 }, { ...input, upstream: { ...input.upstream, previousChapter: undefined } }]) {
+        writeFileSync(file, JSON.stringify(invalid))
+        const rejected = await invoke(['run-step', 'prose', '--input-file', file], providerUrl)
+        expect(rejected.code).toBe(1)
+        expect(JSON.parse(rejected.stderr)).toMatchObject({ code: 'invalid-input' })
+        expect(rejected.stderr).not.toContain(previousChapter.prose.text)
+      }
+      expect(requests).toHaveLength(1)
+    } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
+  }, 20000)
+
   it('uses the configured request model even when the startup default has no credential', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'a4n-step-model-'))
     const requests: { model: string }[] = []

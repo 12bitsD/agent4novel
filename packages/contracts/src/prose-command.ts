@@ -5,7 +5,7 @@ import { llmTelemetrySchema } from './telemetry.js'
 
 export const proseOperationSchema = z.enum(['generate-prose', 'regenerate-prose', 'approve-prose', 'save-prose'])
 export const proseHeadSchema = z.object({ artifactId: z.string().min(1), version: z.number().int().positive().safe(), humanStatus: z.enum(['pending', 'approved']).optional() }).strict()
-export const proseTargetSchema = z.object({ workId: z.string().min(1), kind: z.literal('prose'), chapter: z.literal(1) }).strict()
+export const proseTargetSchema = z.object({ workId: z.string().min(1), kind: z.literal('prose'), chapter: z.number().int().positive().safe() }).strict()
 const common = {
   requestId: z.string().uuid(), operation: proseOperationSchema,
   executionMode: z.enum(['demo', 'live']), latencyMs: z.number().nonnegative().finite(),
@@ -50,7 +50,7 @@ export const proseCommandResponseSchema = z.object({
 }).strict().superRefine((v, ctx) => {
   const command = v.command
   if (command.kind !== 'execution-result' || command.writeOutcome !== 'committed'
-    || command.target.workId !== v.artifact.workId || command.resultHead?.artifactId !== v.artifact.id
+    || command.target.chapter !== v.artifact.chapter || command.target.workId !== v.artifact.workId || command.resultHead?.artifactId !== v.artifact.id
     || command.resultHead.version !== v.artifact.version || command.resultHead.humanStatus !== v.artifact.humanStatus) {
     ctx.addIssue({ code: 'custom', message: '成功结果与命令观察不一致' })
   }
@@ -61,6 +61,7 @@ export const proseCommandResponseSchema = z.object({
 export const proseInputBudgetSchema = z.object({
   limit: z.number().int().positive(), actualLength: z.number().int().nonnegative(),
   systemChars: z.number().int().nonnegative(), beatChars: z.number().int().nonnegative(), settingChars: z.number().int().nonnegative(),
+  previousChapterChars: z.number().int().nonnegative().optional(),
   draftChars: z.number().int().nonnegative(), instructionsChars: z.number().int().nonnegative(),
 }).strict()
 export type ProseInputBudget = z.infer<typeof proseInputBudgetSchema>

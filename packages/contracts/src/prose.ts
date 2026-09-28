@@ -9,7 +9,7 @@ export const proseContentSchema = z.object({ text: text.refine(value => value.tr
 export type ProseContent = z.infer<typeof proseContentSchema>
 export type ProseEditDraft = z.infer<typeof proseEditDraftSchema>
 export const proseArtifactSchema = artifactEnvelopeSchema.extend({
-  kind: z.literal('prose'), chapter: z.literal(1), content: proseEditDraftSchema,
+  kind: z.literal('prose'), chapter: z.number().int().positive().safe(), content: proseEditDraftSchema,
 }).strict().superRefine((artifact, ctx) => {
   if (artifact.humanStatus === 'approved' && !artifact.content.text.trim()) {
     ctx.addIssue({ code: 'custom', path: ['content', 'text'], message: '已通过正文不能为空' })
@@ -17,7 +17,7 @@ export const proseArtifactSchema = artifactEnvelopeSchema.extend({
 })
 export type ProseArtifact = z.infer<typeof proseArtifactSchema>
 export const proseRequestHeadSchema = z.object({
-  chapter: z.literal(1), expectedArtifactId: z.string().min(1).max(128), expectedHeadVersion: z.number().int().positive().safe(),
+  chapter: z.number().int().positive().safe(), expectedArtifactId: z.string().min(1).max(128), expectedHeadVersion: z.number().int().positive().safe(),
 }).strict()
 export const proseApproveRequestSchema = proseRequestHeadSchema.extend({ content: proseContentSchema }).strict()
 export const proseRegenerateRequestSchema = proseRequestHeadSchema.extend({ content: proseEditDraftSchema, instructions: z.string().max(proseLimits.instructions) }).strict()

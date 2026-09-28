@@ -20,6 +20,7 @@ const request: SettingApproveRequest = {
 const approved: SettingArtifact = { ...baseline, humanStatus: 'approved', content: request.content as SettingArtifact['content'] }
 const workWith = (artifact: SettingArtifact): WorkView => ({
   id: 'w1', title: '测试作品', seed: '合成素材', config: {}, createdAt: 'created-once', artifacts: [artifact],
+  currentChapter: 1, chapters: [],
   workflowState: artifact.humanStatus === 'approved' ? 'setting-approved' : 'awaiting-setting-review',
   nextStepId: null, allowedActions: artifact.humanStatus === 'approved' ? [] : ['approve'],
 })

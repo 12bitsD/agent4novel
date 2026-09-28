@@ -14,6 +14,7 @@ export type ArtifactPrecondition = {
 export type AppendOptions = {
   chapter?: number
   preconditions?: readonly ArtifactPrecondition[]
+  inputs?: Artifact['inputs']
 }
 
 export type FinalizeArtifactInput = {

@@ -26,6 +26,7 @@ export function proseResponseError(workId: string, committed: ProseExecutionObse
 export async function observeProse<T extends Artifact>(
   workId: string, operation: ProseOperation, expectedHead: ProseExecutionObservation['expectedHead'],
   run: (execution: ProseExecution) => T | Promise<T>,
+  chapter = 1,
 ): Promise<{ artifact: T; command: ProseExecutionObservation }> {
   const request = currentRequest()
   const started = Date.now()
@@ -33,7 +34,7 @@ export async function observeProse<T extends Artifact>(
   const execution: ProseExecution = { stage: 'precondition' }
   const base = () => ({
     kind: 'execution-result' as const, requestId: request?.requestId ?? randomUUID(), operation,
-    target: { workId, kind: 'prose' as const, chapter: 1 as const }, expectedHead,
+    target: { workId, kind: 'prose' as const, chapter }, expectedHead,
     executionMode: request?.executionMode ?? 'demo' as const, latencyMs: Date.now() - started,
     attemptIds: request?.telemetry.slice(cursor).filter(t => t.stepId === 'prose').map(t => t.attemptId) ?? [],
   })

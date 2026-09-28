@@ -5,6 +5,7 @@ export type KnownErrorCode =
   | 'work-not-found'
   | 'artifact-not-found'
   | 'advance-in-progress'
+  | 'chapter-not-ready'
   | 'version-conflict'
   | 'upstream-changed'
   | 'artifact-already-approved'
