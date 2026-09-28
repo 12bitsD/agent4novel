@@ -118,7 +118,7 @@ describe('setting CLI submission', () => {
     }
   })
 
-  it('smoke follows the complete fake HTTP chain, edits the pending setting, and verifies the committed result', async () => {
+  it('smoke edits and verifies setting but does not mistake the old Beat terminal for complete Prose', async () => {
     let current: WorkView = {
       ...workWith(baseline), artifacts: [], workflowState: 'ready-to-generate', allowedActions: ['generate'], nextStepId: 'caption',
     }
@@ -134,6 +134,7 @@ describe('setting CLI submission', () => {
       if (method === 'GET') return json(current)
       if (path === '/api/works') return json({ id: 'w1', title: '测试作品', seed: '合成素材', config: {}, createdAt: 'created-once' }, 201)
       if (path.endsWith('/advance')) {
+        if (advances === 4) return json({ kind: 'complete', state: { workId: 'w1', stage: 'complete', nextStepId: null }, telemetry: [] })
         const kind = (['creative', 'outline', 'setting', 'beat'] as const)[advances++]!
         const artifact: Artifact = kind === 'beat' ? beat : kind === 'setting' ? baseline : {
           id: `artifact-${kind}`, workId: 'w1', kind, version: 1, humanStatus: 'pending' as const, createdAt: 'created-once',
@@ -166,17 +167,19 @@ describe('setting CLI submission', () => {
       throw new Error(`Unexpected fake request ${method} ${path}`)
     } })
 
-    const result = await cmd.smoke(client, { seed: '合成素材' }, () => {})
-    expect(result.final.workflowState).toBe('beat-approved')
+    await expect(cmd.smoke(client, { seed: '合成素材' }, () => {})).rejects.toMatchObject({ code: 'smoke-incomplete', details: {
+      steps: expect.arrayContaining([{ step: 'get(prose#1)', ok: false, detail: 'smoke-incomplete' }]),
+    } })
+    expect(current.workflowState).toBe('beat-approved')
     expect(submitted?.expectedHeadVersion).toBe(1)
     expect(submitted?.content.overview).not.toBe(baseline.content.overview)
-    expect(result.final.artifacts.find((artifact) => artifact.kind === 'setting')?.content).toEqual(submitted?.content)
+    expect(current.artifacts.find((artifact) => artifact.kind === 'setting')?.content).toEqual(submitted?.content)
     expect(calls).toEqual([
       'GET /api/config',
       'POST /api/works', 'POST /api/works/w1/advance', 'GET /api/works/w1',
       'POST /api/works/w1/artifacts/creative/select', 'POST /api/works/w1/advance', 'POST /api/works/w1/approve',
       'POST /api/works/w1/advance', 'GET /api/works/w1', 'GET /api/works/w1',
-      'POST /api/works/w1/artifacts/setting/approve', 'POST /api/works/w1/advance', 'GET /api/works/w1', 'GET /api/works/w1', 'POST /api/works/w1/artifacts/beat/approve', 'GET /api/works/w1',
+      'POST /api/works/w1/artifacts/setting/approve', 'POST /api/works/w1/advance', 'GET /api/works/w1', 'GET /api/works/w1', 'POST /api/works/w1/artifacts/beat/approve', 'POST /api/works/w1/advance', 'GET /api/works/w1',
     ])
   })
 

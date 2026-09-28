@@ -1,5 +1,5 @@
 import { advanceOutcomeDtoSchema, apiErrorSchema, settingApproveResponseSchema, workViewSchema, diagnosticResponseSchema, diagnosticQuerySchema } from '@agent4novel/contracts'
-import type { BeatSubmission, DiagnosticQuery } from '@agent4novel/contracts'
+import type { BeatSubmission, ProseSubmission, DiagnosticQuery } from '@agent4novel/contracts'
 import { appConfigSchema } from '@agent4novel/contracts'
 import type {
   Artifact,
@@ -160,5 +160,8 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
     beatCommand: (workId: string, submission: BeatSubmission) => call<{ status: number; body: unknown }>('POST',
       `/api/works/${encodeURIComponent(workId)}/artifacts/beat/${submission.operation === 'approve-beat' ? 'approve' : 'regenerate'}`,
       submission.request, submission.operation === 'approve-beat' ? 30_000 : 920_000, true),
+    proseCommand: (workId: string, submission: ProseSubmission) => call<{ status: number; body: unknown }>('POST',
+      `/api/works/${encodeURIComponent(workId)}/artifacts/prose/${submission.operation === 'approve-prose' ? 'approve' : submission.operation === 'save-prose' ? 'save' : 'regenerate'}`,
+      submission.request, submission.operation === 'regenerate-prose' ? 920_000 : 30_000, true),
   }
 }

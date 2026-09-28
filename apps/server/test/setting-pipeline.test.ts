@@ -113,7 +113,7 @@ describe('Setting Pipeline integration', () => {
     expect(await pipeline.advance(work.id)).toMatchObject({ kind: 'advanced', stepId: 'setting' })
     const pending = store.getWork(work.id)!.artifacts.find((artifact) => artifact.kind === 'setting')!
     const content = settingContentSchema.parse(pending.content)
-    const consumer = fakeArtifactStep('future-consumer', 'consumed')
+    const consumer = fakeArtifactStep('future-consumer', { text: 'consumed' })
     const withConsumer = new Pipeline({
       store, steps: new Map([...steps, ['future-consumer', consumer.step]]),
       definition: [...definition, { stepId: 'future-consumer', outputKind: 'prose', chapter: 1, consumes: ['setting'], gateAfter: { kind: 'prose', chapter: 1 } }],

@@ -394,4 +394,37 @@ describe('InMemoryStore', () => {
       .toThrow(expect.objectContaining({ code: 'version-conflict' }))
     expect(store.getWork(work.id)!.artifacts).toEqual([])
   })
+  it.each(['pending', 'approved'] as const)('saves a new version while preserving %s and isolating input and output snapshots', status => {
+    const store = new InMemoryStore()
+    const work = store.createWork({ seed: 'x' })
+    let head = store.appendArtifact(work.id, 'prose', { text: 'original' }, { chapter: 1 })
+    if (status === 'approved') head = store.finalizeArtifact({ workId: work.id, kind: 'prose', chapter: 1, expectedArtifactId: head.id, expectedHeadVersion: head.version, content: head.content })
+    const content = { text: '  edited\n' }
+    const request = { workId: work.id, kind: 'prose' as const, chapter: 1, expectedArtifactId: head.id, expectedHeadVersion: head.version, expectedHumanStatus: status, content }
+    const saved = store.saveArtifact(request)
+    expect(saved).toMatchObject({ version: 2, humanStatus: status, content })
+    expect(saved.id).not.toBe(head.id)
+    content.text = 'outside input change'
+    ;(saved.content as { text: string }).text = 'outside output change'
+    saved.humanStatus = status === 'approved' ? 'pending' : 'approved'
+    expect(store.getWork(work.id)!.artifacts[0]).toMatchObject({ version: 2, humanStatus: status, content: { text: '  edited\n' } })
+    expect(head.content).toEqual({ text: 'original' })
+    expect(() => store.saveArtifact(request)).toThrow(expect.objectContaining({ code: 'version-conflict' }))
+    expect(store.headVersion(work.id, 'prose', { chapter: 1 })).toBe(2)
+  })
+  it('saves only if status and all upstream preconditions still match, without a partial version on failure', () => {
+    const store = new InMemoryStore()
+    const work = store.createWork({ seed: 'x' })
+    const upstream = store.appendArtifact(work.id, 'caption', { note: 'first' })
+    store.setStatus(work.id, 'caption', 'approved')
+    const head = store.appendArtifact(work.id, 'prose', { text: 'first' }, { chapter: 1 })
+    const request = { workId: work.id, kind: 'prose' as const, chapter: 1, expectedArtifactId: head.id, expectedHeadVersion: head.version, expectedHumanStatus: 'pending' as const, content: { text: 'saved' } }
+    expect(() => store.saveArtifact({ ...request, content: new Proxy({ text: 'uncloneable' }, {}) })).toThrow()
+    store.appendArtifact(work.id, 'caption', { note: 'second' })
+    expect(() => store.saveArtifact({ ...request, preconditions: [{ kind: 'caption', head: { artifactId: upstream.id, version: upstream.version, humanStatus: 'approved' } }] })).toThrow(expect.objectContaining({ code: 'upstream-changed' }))
+    const approved = store.finalizeArtifact({ ...request, content: { text: 'final' } })
+    expect(() => store.saveArtifact(request)).toThrow(expect.objectContaining({ code: 'version-conflict' }))
+    expect(store.getWork(work.id)!.artifacts.find(a => a.kind === 'prose')).toEqual(approved)
+    expect(store.headVersion(work.id, 'prose', { chapter: 1 })).toBe(1)
+  })
 })

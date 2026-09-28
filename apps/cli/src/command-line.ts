@@ -38,7 +38,7 @@ const commands: Record<string, CommandDefinition> = {
   },
   'run-step': { exactlyOne: ['input-file', 'seed-file'], positionals: [1, 1], flags: ['input-file', 'seed-file', 'system-prompt-file', 'config-file', 'thinking', 'temperature', 'top-p'],
     syntax: 'run-step <node> --input-file <f> | --seed-file <f> [--system-prompt-file <sp>] [--config-file <f>] [--thinking on|off] [--temperature 0..1] [--top-p 0..1]',
-    input: 'node: caption|creative|outline|setting|beat。input-file: {"seed":"素材","upstream":{...}}；Beat 另需 chapter:1。config-file 仅接受 model/directionCount/thinking/temperature/topP，flags 按字段覆盖；top-p 必须大于 0，不支持 --top-k。',
+    input: 'node: caption|creative|outline|setting|beat|prose。input-file: {"seed":"素材","upstream":{...}}；Beat/Prose 另需 chapter:1。config-file 仅接受 model/directionCount/thinking/temperature/topP，flags 按字段覆盖；top-p 必须大于 0，不支持 --top-k。',
     example: 'a4n run-step caption --seed-file seed.txt --thinking off',
     effects: '启动本地 worker，真实调用已配置 provider；不写作品。无需启动作品服务，不支持 --url。',
   },
@@ -62,7 +62,7 @@ const commands: Record<string, CommandDefinition> = {
   },
   approve: { positionals: [2, 2], flags: [],
     syntax: 'approve <workId> <kind>',
-    input: '例如 outline；creative 需 select，setting/beat 需专用完整内容命令。',
+    input: '例如 outline；creative 需 select，setting/beat/prose 需专用完整内容命令。',
     example: 'a4n approve work-id outline',
     effects: '通过服务器当前产物。pending 和 allowedActions 不等于作者授权。',
   },
@@ -84,6 +84,24 @@ const commands: Record<string, CommandDefinition> = {
     example: 'a4n regenerate-beat work-id --file beat-request.json',
     effects: '调用模型并追加 pending 章纲；结果未知时最多回读一次，不自动重发。',
   },
+  'save-prose': { required: ['file'], positionals: [1, 1], flags: ['file'],
+    syntax: 'save-prose <workId> --file <f>',
+    input: '文件: {"chapter":1,"expectedArtifactId":"...","expectedHeadVersion":1,"expectedHumanStatus":"pending","content":{"text":"当前编辑正文"}}；expectedHumanStatus 与读取基线一致（pending 或 approved）。pending 正文可空，approved 正文不可空。',
+    example: 'a4n save-prose work-id --file prose-request.json',
+    effects: '追加正文版本并保留当前 pending/approved 状态；不调用模型、不替换文件基线。未知时最多回读一次，不自动重发。',
+  },
+  'approve-prose': { required: ['file'], positionals: [1, 1], flags: ['file'],
+    syntax: 'approve-prose <workId> --file <f>',
+    input: '文件: {"chapter":1,"expectedArtifactId":"...","expectedHeadVersion":1,"content":{"text":"完整正文"}}。',
+    example: 'a4n approve-prose work-id --file prose-request.json',
+    effects: '同版本定稿，第一章完成；通过后可用 save-prose 编辑且保留 approved，不生成第二章。未知时最多回读一次，不自动重发。',
+  },
+  'regenerate-prose': { required: ['file'], positionals: [1, 1], flags: ['file'],
+    syntax: 'regenerate-prose <workId> --file <f>',
+    input: '文件: {"chapter":1,"expectedArtifactId":"...","expectedHeadVersion":1,"content":{"text":"当前编辑正文"},"instructions":"修改意见"}；正文和意见可空。',
+    example: 'a4n regenerate-prose work-id --file prose-request.json',
+    effects: '调用模型并追加 pending 正文，保持章纲不变；未知时最多回读一次，不自动重发。保留请求文件。',
+  },
   logs: { positionals: [1, 1], flags: ['request-id', 'attempt-id'],
     syntax: 'logs <workId> [--request-id <id>] [--attempt-id <id>]',
     input: 'request-id 为 UUID；过滤当前进程保留的诊断窗口。',
@@ -94,7 +112,7 @@ const commands: Record<string, CommandDefinition> = {
     syntax: 'smoke --seed <text> | --seed-file <f> [--title <t>]',
     input: '--seed 与 --seed-file 恰好一个；使用合成素材。',
     example: 'a4n smoke --seed-file seed.txt',
-    effects: '创建作品、调用生成并自动选定/编辑/通过到 Beat；失败非零退出，不自动重试。仅用于已授权的探针。',
+    effects: '创建作品、调用生成并自动选定/编辑/通过到第一章正文通过；失败非零退出，不自动重试。仅用于已授权的探针。',
   },
 }
 
@@ -155,7 +173,7 @@ function commandForHelp(argv: string[]): string | undefined {
 export function helpFor(argv: string[]): string {
   const command = commandForHelp(argv)
   const definition = command ? commands[command] : undefined
-  const timeout = '--timeout-ms <milliseconds> 覆盖请求期限；普通 300000，advance 1820000，Beat 通过 30000/再生 920000/回读 10000，run-step 920000。'
+  const timeout = '--timeout-ms <milliseconds> 覆盖请求期限；普通 300000，advance 1820000，Beat/Prose 通过 30000、Prose 保存 30000、再生 920000/回读 10000，run-step 920000。'
   const flags = `${command === 'run-step' ? '' : '--url <baseUrl> 覆盖作品服务地址（默认 A4N_BASE_URL 或 http://localhost:8787）。\n'}${timeout}`
   const convention = '--help / -h 是零副作用帮助，任意独立 token 优先；字面值请用 --seed=--help。帮助输出 stderr，正常结果 stdout 为 JSON。'
   if (definition) return `用法: a4n ${definition.syntax}\n输入: ${definition.input}\n示例: ${definition.example}\n副作用: ${definition.effects}\n选项: ${flags}\n${convention}`

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { captionContentSchema, creativeContentSchema, outlineContentSchema, settingArtifactSchema, beatArtifactSchema } from '@agent4novel/contracts'
+import { captionContentSchema, creativeContentSchema, outlineContentSchema, settingArtifactSchema, beatArtifactSchema, proseArtifactSchema } from '@agent4novel/contracts'
 import type { CaptionContent, CreativeContent, OutlineContent, WorkView } from '@agent4novel/contracts'
 import { advance, getWork } from '../api.js'
 import { btnPrimary, btnSecondary, cardStyle } from '../ui.js'
@@ -12,10 +12,16 @@ import { ConfirmDialog } from '../ConfirmDialog.js'
 import BeatReview from './BeatReview.js'
 import { initBeatReview, isBeatDirty, reduceBeatReview, type BeatReviewState, type BeatReviewAction } from '../beat-review.js'
 import { postBeatCommand } from '../beat-api.js'
+import ProseReview from './ProseReview.js'
+import { initProseReview, isProseDirty, reduceProseReview, type ProseReviewState, type ProseReviewAction } from '../prose-review.js'
+import { postProseCommand } from '../prose-api.js'
 
 // Workspace 只渲染 server 读模型(workflowState/allowedActions 来自 GET /works/:id 同快照),
 // 不在前端重建状态机。生成/重试 = 同一个 advance(幂等,从失败步骤恢复)。
-export default function Workspace({ workId, onBack }: { workId: string; onBack: () => void }) {
+export default function Workspace(props: { workId: string; onBack: () => void }) {
+  return <WorkSession key={props.workId} {...props} />
+}
+function WorkSession({ workId, onBack }: { workId: string; onBack: () => void }) {
   const [work, setWork] = useState<WorkView | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
@@ -23,6 +29,9 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
   const [setting, setSettingState] = useState<SettingReviewState | null>(null)
   const [beat, setBeatState] = useState<BeatReviewState | null>(null)
   const beatRef = useRef<BeatReviewState | null>(null)
+  const [prose, setProseState] = useState<ProseReviewState | null>(null)
+  const proseRef = useRef<ProseReviewState | null>(null)
+  const setProse = useCallback((next: ProseReviewState) => { proseRef.current = next; setProseState(next) }, [])
   const [leaving, setLeaving] = useState(false)
   const settingRef = useRef<SettingReviewState | null>(null)
   const workRef = useRef<WorkView | null>(null)
@@ -31,6 +40,7 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
   const commandSequence = useRef(0)
   const generationBusy = useRef(false)
   const navigated = useRef(false)
+  const continuedBeat = useRef<string | null>(null)
   const setBeat = useCallback((next: BeatReviewState) => { beatRef.current = next; setBeatState(next) }, [])
   const setSetting = useCallback((next: SettingReviewState) => {
     settingRef.current = next
@@ -40,9 +50,15 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
     const currentBeat = beatRef.current
     const oldHead = currentBeat?.observedWork?.artifacts.find(a => a.kind === 'beat' && a.chapter === 1) ?? currentBeat?.baseline
     const newHead = view.artifacts.find(a => a.kind === 'beat' && a.chapter === 1)
-    if (oldHead && !newHead) return
+    if (oldHead && !newHead) return false
     if (oldHead && newHead && (newHead.version < oldHead.version || (newHead.id === oldHead.id && newHead.version === oldHead.version
-      && oldHead.humanStatus === 'approved' && newHead.humanStatus === 'pending'))) return
+      && oldHead.humanStatus === 'approved' && newHead.humanStatus === 'pending'))) return false
+    const currentProse = proseRef.current
+    const observedProse = currentProse?.observedWork?.artifacts.find(a => a.kind === 'prose' && a.chapter === 1)
+    const oldProse = observedProse && currentProse && observedProse.version > currentProse.baseline.version ? observedProse : currentProse?.baseline
+    const newProse = view.artifacts.find(a => a.kind === 'prose' && a.chapter === 1)
+    if (oldProse && (!newProse || newProse.version < oldProse.version || (newProse.id === oldProse.id && newProse.version === oldProse.version
+      && oldProse.humanStatus === 'approved' && newProse.humanStatus === 'pending'))) return false
     workRef.current = view
     setWork(view)
     const current = settingRef.current
@@ -52,15 +68,18 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
     const beatCandidate = beatArtifactSchema.safeParse(newHead).data
     if (!currentBeat && beatCandidate?.workId === view.id) setBeat({ ...initBeatReview(beatCandidate), observedWork: view })
     else if (currentBeat && observe) setBeat(reduceBeatReview(currentBeat, { type: 'observe', work: view }))
-  }, [setSetting, setBeat])
+    const proseCandidate = proseArtifactSchema.safeParse(newProse).data
+    if (!currentProse && proseCandidate?.workId === view.id) setProse({ ...initProseReview(proseCandidate), observedWork: view })
+    else if (currentProse && observe) setProse(reduceProseReview(currentProse, { type: 'observe', work: view }))
+    return true
+  }, [setSetting, setBeat, setProse])
 
   const refresh = useCallback(async () => {
     const sequence = ++readSequence.current
     try {
       const view = await getWork(workId)
       if (!mounted.current || sequence !== readSequence.current || view.id !== workId) return null
-      acceptWork(view)
-      return view
+      return acceptWork(view) ? view : null
     } catch {
       if (mounted.current && sequence === readSequence.current) setError('读取作品失败，请重试。')
       return null
@@ -73,7 +92,7 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
     return () => { mounted.current = false; readSequence.current++; commandSequence.current++ }
   }, [refresh])
   const dirty = (setting !== null && (isSettingDirty(setting) || setting.hasUnknownWrite || ['submitting', 'reconciling'].includes(setting.phase)))
-    || (beat !== null && isBeatDirty(beat)) || generating
+    || (beat !== null && isBeatDirty(beat)) || (prose !== null && isProseDirty(prose)) || generating
   useEffect(() => {
     if (!dirty) return
     const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
@@ -127,6 +146,16 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
     if (result.work) acceptWork(result.work, false)
     if (result.state.phase === 'approved' && current.phase !== 'approved') await continueAfterApproval()
   }
+  const continueAfterBeat = async (readback?: WorkView | null) => {
+    const approved = beatRef.current
+    if (approved?.phase !== 'approved') { await refresh(); return }
+    const key = `${approved.baseline.id}:${approved.baseline.version}`
+    const view = readback === undefined ? await refresh() : readback
+    if (view?.nextStepId === 'prose' && view.allowedActions.includes('generate') && continuedBeat.current !== key) {
+      continuedBeat.current = key
+      await generate('prose')
+    }
+  }
   const beatAction = (action: BeatReviewAction) => { if (beatRef.current) setBeat(reduceBeatReview(beatRef.current, action)) }
   const runBeat = async (mode: 'approve-beat' | 'regenerate-beat' | 'confirm' | 'retry') => {
     const current = beatRef.current
@@ -145,7 +174,7 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
       if (!active()) return
       const updated = reduceBeatReview(beatRef.current!, { type: 'result', response })
       setBeat(updated)
-      if (!updated.submitted) { await refresh(); return }
+      if (!updated.submitted) { await continueAfterBeat(); return }
     }
     if (!active()) return
     setBeat(reduceBeatReview(beatRef.current!, { type: 'confirm' }))
@@ -153,8 +182,48 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
     try { view = await getWork(workId) } catch { /* preserve the frozen request */ }
     if (!active()) return
     setBeat(reduceBeatReview(beatRef.current!, { type: 'readback', work: view }))
+    const accepted = view?.id === workId && acceptWork(view, false)
+    if (beatRef.current?.phase === 'approved' && current.phase !== 'approved') await continueAfterBeat(accepted ? view : null)
+  }
+
+  const proseAction = (action: ProseReviewAction) => { if (proseRef.current) setProse(reduceProseReview(proseRef.current, action)) }
+  const runProse = async (mode: 'approve-prose' | 'regenerate-prose' | 'save-prose' | 'confirm' | 'retry') => {
+    const current = proseRef.current
+    if (!current || ['saving', 'submitting', 'regenerating', 'reconciling'].includes(current.phase)) return
+    if (mode === 'save-prose' && !workRef.current?.allowedActions.includes('save-draft')) return
+    if ((mode === 'approve-prose' || mode === 'regenerate-prose') && (workRef.current?.workflowState !== 'awaiting-prose-review'
+      || !workRef.current.allowedActions.includes(mode === 'approve-prose' ? 'approve' : 'regenerate'))) return
+    const next = reduceProseReview(current, mode === 'confirm' || mode === 'retry' ? { type: mode } : { type: 'start', operation: mode })
+    setProse(next)
+    if (mode !== 'confirm' && (!next.submitted || !['saving', 'submitting', 'regenerating'].includes(next.phase))) return
+    const sequence = ++commandSequence.current
+    readSequence.current++
+    const active = () => mounted.current && sequence === commandSequence.current
+    if (mode !== 'confirm') {
+      let response: { status: number; body: unknown } | undefined
+      try { response = await postProseCommand(workId, next.submitted!) } catch { /* unknown outcome, reconcile once */ }
+      if (!active()) return
+      const updated = reduceProseReview(proseRef.current!, { type: 'result', response })
+      setProse(updated)
+      if (!updated.submitted) { await refresh(); return }
+    }
+    if (!active()) return
+    setProse(reduceProseReview(proseRef.current!, { type: 'confirm' }))
+    let view: WorkView | undefined
+    try { view = await getWork(workId) } catch { /* preserve the frozen request */ }
+    if (!active()) return
+    setProse(reduceProseReview(proseRef.current!, { type: 'readback', work: view }))
     if (view?.id === workId) acceptWork(view, false)
   }
+
+  const autosaveRef = useRef(runProse)
+  autosaveRef.current = runProse
+  useEffect(() => {
+    if (!prose || !['editing', 'approved'].includes(prose.phase) || prose.draft.text === prose.baseline.content.text
+      || !work?.allowedActions.includes('save-draft')) return
+    const timer = setTimeout(() => { void autosaveRef.current('save-prose') }, 600)
+    return () => clearTimeout(timer)
+  }, [prose?.draft.text, prose?.baseline.id, prose?.baseline.version, prose?.phase, work?.allowedActions])
 
   const creativeArtifact = work?.artifacts.find((a) => a.kind === 'creative')
   const captionArtifact = work?.artifacts.find((a) => a.kind === 'caption')
@@ -176,16 +245,17 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
     outlineArtifact !== undefined
 
   const showSetting = setting !== null && (work?.workflowState === 'awaiting-setting-review' || work?.workflowState === 'setting-approved')
+  const showProse = prose !== null && (work?.workflowState === 'awaiting-prose-review' || work?.workflowState === 'prose-approved')
   const showBeat = beat !== null && (work?.workflowState === 'awaiting-beat-review' || work?.workflowState === 'beat-approved')
   // 生成间隙保留已选定的创意稿；动作权限仍由服务器读模型决定。
   const showPoster = creative !== null && creativeArtifact !== undefined && (
     work?.workflowState === 'awaiting-selection' || (
-      creativeArtifact.humanStatus === 'approved' && !showOutline && !showSetting && !showBeat &&
+      creativeArtifact.humanStatus === 'approved' && !showOutline && !showSetting && !showBeat && !showProse &&
       (work?.workflowState === 'ready-to-generate' || work?.workflowState === 'failed')
     )
   )
   const nextStep = generating ? generationStep : work?.nextStepId
-  const stepLabel = nextStep === 'beat' ? '第一章章纲' : nextStep === 'setting' ? '设定' : nextStep === 'outline' ? '大纲' : '创意稿'
+  const stepLabel = nextStep === 'prose' ? '第一章正文' : nextStep === 'beat' ? '第一章章纲' : nextStep === 'setting' ? '设定' : nextStep === 'outline' ? '大纲' : '创意稿'
 
   return (
     <main style={{ padding: 24, maxWidth: 860 }}>
@@ -199,7 +269,7 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
       {error && <button type="button" style={btnSecondary} onClick={() => void refresh()}>刷新作品</button>}
 
-      {work && !showPoster && !showOutline && !showSetting && !showBeat && (
+      {work && !showPoster && !showOutline && !showSetting && !showBeat && !showProse && (
         <section style={{ ...cardStyle, marginBottom: 16, background: 'var(--bg-sunken)' }}>
           <strong style={{ color: 'var(--ink-2)' }}>脑洞（seed）</strong>
           <p style={{ whiteSpace: 'pre-wrap' }}>{work.seed}</p>
@@ -246,6 +316,11 @@ export default function Workspace({ workId, onBack }: { workId: string; onBack: 
         allowCommands={work?.workflowState === 'awaiting-beat-review' && work.allowedActions.includes('approve') && work.allowedActions.includes('regenerate')}
         onApprove={() => void runBeat('approve-beat')} onRegenerate={() => void runBeat('regenerate-beat')}
         onConfirm={() => void runBeat('confirm')} onRetry={() => void runBeat('retry')} />}
+      {showProse && prose && <ProseReview title={beat?.baseline.content.title ?? '第一章'} state={prose} onAction={proseAction}
+        allowCommands={work?.allowedActions.includes('save-draft') || (work?.workflowState === 'awaiting-prose-review' && work.allowedActions.includes('approve') && work.allowedActions.includes('regenerate'))}
+        onApprove={() => void runProse('approve-prose')} onRegenerate={() => void runProse('regenerate-prose')}
+        onConfirm={() => void runProse('confirm')} onRetry={() => void runProse('retry')} />}
+      {prose && !showProse && prose.phase !== 'approved' && <p className="setting-notice">正文的本页修改与意见仍保留。完成前置关卡后可继续查看。</p>}
       {beat && !showBeat && beat.phase !== 'approved' && <p className="setting-notice">章纲的本页修改与意见仍保留。完成前置关卡后可继续查看。</p>}
       {setting && !showSetting && setting.phase !== 'approved' && <p className="setting-notice">设定的本页修改仍保留。完成前置关卡后可继续查看。</p>}
       {leaving && <ConfirmDialog title="离开当前创作页面？" description="离开会放弃本页修改和意见；已发送的请求可能继续处理。"

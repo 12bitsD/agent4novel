@@ -17,7 +17,7 @@ it('公开读模型每个 kind/chapter 只允许一个当前 head，不把不同
   if (!duplicateWorkHead.success) expect(duplicateWorkHead.error.issues.map((issue) => issue.path)).toContainEqual(['artifacts', 1])
   const beat = { ...artifact, id: 'beat-1', kind: 'beat', chapter: 1, content: { title: '海港来客', goal: '发现来客', writingPlan: [{ itemId: 'item-1', title: '靠岸', content: '来客靠岸。' }], ending: '来客叩门。' } }
   expect(workViewSchema.safeParse({ ...view, artifacts: [beat, { ...beat, id: 'beat-2', version: 2 }] }).success).toBe(false)
-  expect(workViewSchema.safeParse({ ...view, artifacts: [artifact, beat, { ...beat, id: 'beat-chapter-2', chapter: 2 }, { ...beat, id: 'prose-1', kind: 'prose' }] }).success).toBe(true)
+  expect(workViewSchema.safeParse({ ...view, artifacts: [artifact, beat, { ...beat, id: 'beat-chapter-2', chapter: 2 }, { ...beat, id: 'prose-1', kind: 'prose', content: { text: '海港来客靠岸。' } }] }).success).toBe(true)
 })
 
 it('公开读模型携带下一步，advance 保留状态和遥测，错误保留字段定位', () => {

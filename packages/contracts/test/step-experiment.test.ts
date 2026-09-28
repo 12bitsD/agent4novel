@@ -38,6 +38,16 @@ describe('step experiment contracts', () => {
     }
   })
 
+  it('accepts only the selected chapter step regeneration shape', () => {
+    const prose = { stepId: 'prose', input: { seed: '', chapter: 1, regeneration: { content: { text: '' }, instructions: '' } } }
+    expect(stepExperimentRequestSchema.safeParse(prose).success).toBe(true)
+    for (const invalid of [
+      { ...prose, stepId: 'beat' }, { ...prose, stepId: 'caption' },
+      { ...prose, input: { ...prose.input, chapter: 2 } },
+      { ...prose, input: { ...prose.input, regeneration: { content: { title: 'not prose' }, instructions: '' } } },
+    ]) expect(stepExperimentRequestSchema.safeParse(invalid).success).toBe(false)
+  })
+
   it('keeps failure diagnostics separate from generated content and raw provider output', () => {
     const base = { runId: 'experiment-test', stepId: 'caption', executionMode: 'live', model: 'longcat:LongCat-2.0', telemetry: [] }
     const success = { ...base, kind: 'succeeded', content: { summary: 'validated content' } }

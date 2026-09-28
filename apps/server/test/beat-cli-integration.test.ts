@@ -7,7 +7,7 @@ import { createRequire } from 'node:module'
 import { expect, it } from 'vitest'
 import { beatArtifactSchema, beatCommandResponseSchema, diagnosticResponseSchema } from '@agent4novel/contracts'
 
-it('drives the executable CLI through smoke, edited regeneration, approval and filtered diagnostics', async () => {
+it('drives the independent Beat workflow through edited regeneration, approval and filtered diagnostics', async () => {
   const server = spawn(process.execPath, ['--import', createRequire(import.meta.url).resolve('tsx'), fileURLToPath(new URL('./fixtures/beat-cli-server.ts', import.meta.url))], { stdio: ['ignore', 'pipe', 'pipe'] })
   const folder = await mkdtemp(join(tmpdir(), 'a4n-beat-cli-'))
   let output = ''
@@ -23,11 +23,6 @@ it('drives the executable CLI through smoke, edited regeneration, approval and f
       child.stdout.on('data', chunk => { stdout += String(chunk) }); child.stderr.on('data', chunk => { stderr += String(chunk) })
       child.once('error', reject); child.once('close', status => resolve({ status, stdout, stderr }))
     })
-    const smoke = await cli(['smoke', '--seed', '合成素材：在图书馆发现名字消失，先保护证人。'])
-    expect(smoke.status, smoke.stderr).toBe(0)
-    const full = JSON.parse(smoke.stdout)
-    expect(full).toMatchObject({ executionMode: 'demo', final: { workflowState: 'beat-approved' } })
-    expect(full.final.artifacts.some((a: { kind: string }) => a.kind === 'prose')).toBe(false)
     const created = JSON.parse((await cli(['create', '--seed', '合成素材：以日常对话建立关系。'])).stdout)
     for (const args of [['advance', created.id], ['select', created.id], ['advance', created.id], ['approve', created.id, 'outline'], ['advance', created.id]]) expect((await cli(args)).status).toBe(0)
     const setting = JSON.parse((await cli(['get', created.id, '--kind', 'setting'])).stdout)
@@ -51,6 +46,9 @@ it('drives the executable CLI through smoke, edited regeneration, approval and f
     const approved = await cli(['approve-beat', created.id, '--file', file])
     expect(approved.status, approved.stderr).toBe(0)
     expect(beatCommandResponseSchema.parse(JSON.parse(approved.stdout)).artifact).toMatchObject({ id: regenerated.artifact.id, version: 2, humanStatus: 'approved', content: { ending: '作者选择在安静的门口结束。' } })
+    const final = JSON.parse((await cli(['get', created.id])).stdout)
+    expect(final.workflowState).toBe('beat-approved')
+    expect(final.artifacts.some((a: { kind: string }) => a.kind === 'prose')).toBe(false)
     const logs = await cli(['logs', created.id, '--request-id', regenerated.command.requestId])
     expect(logs.status, logs.stderr).toBe(0)
     expect(diagnosticResponseSchema.parse(JSON.parse(logs.stdout)).commands).toHaveLength(1)

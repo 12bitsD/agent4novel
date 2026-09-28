@@ -1,4 +1,4 @@
-import { creativeContentSchema, captionContentSchema, outlineContentSchema, settingContentSchema, beatContentSchema } from '@agent4novel/contracts'
+import { creativeContentSchema, captionContentSchema, outlineContentSchema, settingContentSchema, beatContentSchema, proseContentSchema } from '@agent4novel/contracts'
 import type { ArtifactKind, JsonValue } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
 
@@ -9,6 +9,7 @@ export const consumeGuards: Partial<Record<ArtifactKind, (content: JsonValue) =>
   outline: content => { outlineContentSchema.parse(content) },
   setting: content => { settingContentSchema.parse(content) },
   beat: content => { beatContentSchema.parse(content) },
+  prose: content => { proseContentSchema.parse(content) },
   // creative 被消费时必须恰好 1 个方向(已选定),否则不算数
   creative: (content) => {
     const parsed = creativeContentSchema.parse(content)

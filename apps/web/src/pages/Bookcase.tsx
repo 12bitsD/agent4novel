@@ -41,7 +41,7 @@ export default function Bookcase({
             <strong style={{ display: 'block', marginBottom: 8 }}>{w.title}</strong>
             <span style={{ color: 'var(--ink-2)', fontSize: 13 }}>{w.seedPreview}</span>
             <small style={{ display: 'block', marginTop: 8, color: 'var(--ink-3)' }}>
-              {w.chapterCount} 章
+              已完成 {w.chapterCount} 章
             </small>
           </button>
         ))}

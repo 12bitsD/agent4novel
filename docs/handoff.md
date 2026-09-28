@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。最后更新：2026-09-28，章纲 #5 的 [PR #23](https://github.com/12bitsD/agent4novel/pull/23) 已合并，正在补齐当前候选的交付／关闭证据；当前运行仍止于 `beat-approved`。完成后接 #22 第一章正文，依据见 [Wiki 005](./wiki/005-beat-generation-review.md)。CLI #25 已合并并关闭。
+> 用途：context compaction / 新会话接力。最后更新：2026-09-29。#5 已关闭；当前仅交付 #22 第一章正文，工作区实现已接六步至 `prose-approved`，完整本地门禁及真实正文节点验收已通过，发布前审核与远端交付状态分别见Wiki022和live issue/PR。最新正文自动保存与通过后编辑决定见 [Wiki 022](./wiki/022-prose-generation-review.md)。#28/#29 已登记为后续扩展，不阻塞首章。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -24,21 +24,30 @@
 - **#13** 完整设定（[Wiki 013](./wiki/013-setting-generation-review.md)）：大纲通过后一次生成；六字段通用卡片、有限 Markdown、页内编辑、专用命令同 id/version 原子通过，不追加 V2。Store 读写快照隔离、生成提交条件、Web 未知结果恢复和 CLI 完整请求已落地。本票原末端 `setting-approved` 已由 #5 延伸至 `beat-approved`，具体交付证据只看本票 Wiki 和完成评论。
 
 - **#25** CLI 帮助零副作用与严格参数：顶级/子命令 `--help`、`-h` 在 I/O 前返回，非法语法返回安全 usage。保留业务结果与人工关卡；上下文及验收见 [Wiki 025](./wiki/025-cli-command-safety.md)。
+- **#5** 第一章章纲：编辑、整份再生、同版本通过及请求诊断已交付，issue 已关闭；历史方案和完成证据见 [Wiki 005](./wiki/005-beat-generation-review.md)。
+
+## 当前实施：#22 第一章正文
+
+- 第一章章纲与正文仍是两个 Step／关卡。正文消费作者最终通过的 Beat 和完整 Setting；模型初稿与整章重写结果均 pending，重写使用当前编辑全文及意见。
+- 用户在2026-09-29明确替换旧的“正文草稿仅页面内存、通过后只读”默认：待把关正文自动保存到服务端，保存成功后刷新恢复；通过后默认阅读，进入编辑后自动保存且保持 approved。正文空草稿可保存 pending，但空白不能通过或保存为 approved。Setting／Beat 的既有只读边界不变。
+- save 基线绑定 id/version/humanStatus，原子追加新ID／版本并保留状态；通过写入实际提交全文并保留id/version/createdAt。审批前迟到的 pending autosave不得覆盖刚通过的全文。并发失败、未知写入和精确回读由共享Prose恢复契约处理。
+- Web 的“通过章纲并生成正文”是显式动作；页面打开、刷新和返回只读状态，不隐式生成。正文完成后仍止于第一章。书架返回和稳定作品URL由本轮Web集成处理，是否已验收看Wiki022证据。
+- 当前只用InMemoryStore：浏览器刷新恢复依赖同一server进程；重启持久化归#9。没有Wiki搜索、tool loop、档案候选或联合通过；它们分别归#28/#29。
 
 ## 关键架构与契约（不能丢）
 
 - **2026-09-13 接回**：Caption 采用 R10 A SP，提炼稿在理解素材后作开发判断并提出具体剧情建议；选定证据与限制由 [Wiki 011](./wiki/011-caption-creative-directions.md) 保存。`run-step` 可独立运行 caption/creative/outline/setting/beat#1，复用生产输入、输出 schema、ID 和预算；要求完整 monorepo 与真实 provider，由本地 server worker 执行，不写作品。CLI HOW 见 [Wiki 014](./wiki/014-agent-cli-telemetry.md#单节点实验-run-step)。主仓库 344 测、四包 typecheck 和构建通过，记录见 [本轮计划](./experiments/caption-adoption-2026-09-13/plan.md#验证记录)；没有新增真实模型质量证据。已运行 server 缓存生产 SP，需新进程读取更新。
 - **生成参数**：LongCat 默认 thinking disabled、temperature 0.9、topP 0.95，生产链和独立节点共用 ModelRuntime；单节点 config-file 可设置模型与参数，显式 CLI flag 逐字段优先。topK 明确拒绝，telemetry 记录实际公开参数。完整覆盖、provider 和 timeout 契约只看 [Wiki 016](./wiki/016-model-runtime-provider-config.md#生成参数与单节点覆盖)。
-- **#5 当前阶段**：第一章章纲实现已合并，支持本页编辑、整份再生和同版本通过；UUID 身份、Beat CLI、请求关联诊断已落地。本轮只做文档与交付证据收口，不重新实现 Beat。方案、AC/TDD、历史验证与本轮预留只看 [Wiki 005](./wiki/005-beat-generation-review.md)，契约见 [schema](./schema.md#beat5-当前契约)。
+- **#5 继承边界**：本页编辑、整份再生、同版本通过、UUID身份与请求关联诊断继续保留；本轮仅把明确的“通过并生成正文”按钮接到下一Step，不开放已通过章纲回改。Beat与Prose契约分别见 [schema](./schema.md)。
 - **workflow 骨架 + 步骤内 agent**；Step 零感知 kind，输出 `{content}` 装整个 JSON；kind = 节点名；pipeline 管解析/组装/持久化，是深模块不是 swap seam。
 - **两个真 seam**：store（InMemoryStore / #9 做 SQLiteStore）、step（FakeStep / RealStep）。
 - **模型路由边界**：ModelRuntime 位于 RealStep 内部，不是第三个 Pipeline 注入 seam；已注册 provider 通过模型 ID 切换，新增 provider 需要对应 adapter、registry 注册与 key 契约。完整 HOW 只看 [wiki 016](./wiki/016-model-runtime-provider-config.md)。
-- **6 节点 kind**：caption/creative/outline/setting 每作品一份；beat/prose 每作品×每章（当前仅 beat#1 接入生产，prose 尚未接入）。Artifact.content: JsonValue；humanStatus: pending | approved；appendArtifact 版本 +1。Setting/Beat 专用 finalize 是同版本内容与状态原子定稿的例外，禁止通用 setStatus 改 Setting/Beat。
+- **6 节点 kind**：caption/creative/outline/setting 每作品一份；beat/prose 每作品×每章，生产目前只接beat#1/prose#1。Artifact.content: JsonValue；humanStatus: pending | approved；appendArtifact版本+1。Setting／Beat／Prose专用finalize同版本原子定稿，通用setStatus均拒绝。Prose saveArtifact追加版本并保留匹配基线状态，不改变其他产物保存策略。
 - **creative 保存语义**（#3c 起，取代「人工保存即通过」）：`PUT /artifacts/creative` = saveCreativeDraft，存全部方向、永远 pending、带 `expectedHeadVersion` 乐观锁；`POST /artifacts/creative/select` = selectCreativeDirection，落**单方向**新版本 + approved。`directionId` 由 server 注入（`${workId}-dir-N`），web 永不生成、编辑不可改。
 - **pipeline（#3c）**：definition 加 `consumes`（只指前序 outputKind，启动校验唯一/禁环）；`PipelineInput = {workId, seed, upstream}`，upstream 读**最新版且必须 approved**；`advance()` 链式推进到下一个关卡（上限 = definition 长度），per-work 互斥锁（finally 释放，冲突 → 409 `advance-in-progress`），返回可穷举 outcome `advanced | awaiting-approval | complete | failed(stepId, code, retryable, attemptId)`；interview 机制零残留。
-- **读模型**：`GET /works/:id` 同快照附带 `workflowState`、`nextStepId` 与 `allowedActions`；新增 awaiting-beat-review/beat-approved；outline-approved/setting-approved 仅用于旧三步／四步定义。`generating` 是 Web 本地瞬态，不入契约。按 `pendingGate.kind` 分派，Web 不重建关卡状态机。公开 WorkView／advance DTO 已集中到 contracts。
-- **LLM 调用**：`steps/llm-call.ts` 统一 generateObject + zod + maxOutputTokens（outline/setting 16000，其余默认 8000）+ 可配置超时 + 类型化错误；advance 仍为 HTTP 200 + failed outcome，不按 HTTP 成功判断生成成功。原始素材 >100K 字符截断，结构化上游不静默截断。Setting/Beat 显式 SDK maxRetries=0，其他步骤保留 SDK 默认值；Pipeline 本身不自动重试。ModelRuntime 配置唯一 HOW 见 [Wiki 016](./wiki/016-model-runtime-provider-config.md)。每次模型调用记录进程内 telemetry，advance 内联、logs 回看；systemHash 标识 prompt。
-- **CLI**：`./apps/cli/bin/a4n <cmd>`（stdout 纯 JSON）或 `pnpm -s cli`；select/save-outline 自动回填 expectedHeadVersion，approve-setting 的文件必须显式包含完整 content + 读取时版本，不自动改版本。Beat 两命令还需显式 chapter、expectedArtifactId 和版本，提供 command 写入结果与安全恢复动作。smoke 已扩展至修改并通过 Setting/Beat，是每次测试标准动作之一，不等于人工质量验收。
+- **读模型**：`GET /works/:id` 同快照附带 `workflowState`、`nextStepId` 与 `allowedActions`；生产新增awaiting-prose-review/prose-approved。pending正文动作save-draft/approve/regenerate，approved保留save-draft；完成章数只计approved正文head。outline-approved/setting-approved/beat-approved保留给旧定义。`generating`是Web本地瞬态；按pendingGate.kind分派，Web不重建关卡状态机。
+- **LLM 调用**：`steps/llm-call.ts`统一generateObject + zod + maxOutputTokens（outline/setting/prose 16000，其余默认8000）+ 可配置超时 + 类型化错误。advance业务失败可为HTTP200 + failed outcome，不能只按HTTP成功判断。原始素材>100K字符截断，结构化上游不静默截断；Prose实际system+prompt超过400000字符在模型前拒绝。Setting/Beat/Prose显式SDK maxRetries=0；Pipeline不自动重试。ModelRuntime唯一HOW见 [Wiki 016](./wiki/016-model-runtime-provider-config.md)。
+- **CLI**：`./apps/cli/bin/a4n <cmd>`（stdout纯JSON）或`pnpm -s cli`；仅select/save-outline自动回填版本。Prose支持get、save-prose、approve-prose、regenerate-prose，文件显式绑定chapter/id/version，save另带expectedHumanStatus，重写另带instructions；结果未知最多回读一次，不自动重复写入。smoke延伸至正文生成、作者全文save、同版approve、精确回读prose-approved且无第二章；不是文学质量验收。独立run-step支持prose#1，不写作品。
 - **错误**：HTTP 统一 `{code, retryable, attemptId?, message, issues?}`；Setting 字段错误 issues 只含 path/code/message。明确 4xx 均在写前，传输/5xx/非法成功响应可能已写入，必须按 Wiki 013 的冻结提交与回读规则处理。
 - **web 设计系统**（#3c）：`apps/web/src/styles.css` 唯一全局面，亮暗双主题 CSS 变量（prefers-color-scheme + data-theme 预留）；多巴胺在点缀层（主 CTA 珊瑚 accent，方向 tab 珊瑚/紫/青轮转，chip 用强调色），底色纸白/墨黑极简；**内联样式只许 var(--*)，禁硬编码色值**。创意海报风险面抽纯函数 `web/src/creative-compare.ts`（tab↔directionId、保存全部、选定、409 保 dirty），vitest 覆盖，无浏览器 E2E。
 - 栈：pnpm workspaces + TS E2E、Vite+React(5173 /api proxy)、Hono(8787)、zod、Vitest、tsx、AI SDK v7 + `@ai-sdk/deepseek` + `@ai-sdk/openai-compatible`。Setting 使用 mdast-util-from-markdown + 自有允许列表 React renderer；测试计数与最终命令证据只记本票 Wiki。
@@ -67,7 +76,7 @@
 - LongCat 的 Responses 协议尚未接入；当前只对接其文档明确支持的 OpenAI-compatible Chat Completions。
 - LongCat 文档未保证 JSON Schema structured output；当前走 `json_object` + 本地 zod 校验。历史三步证据见 Wiki 016，Setting 新样例见 Wiki 013；成功样例不是上游协议保证。
 - `Work.config.model` 已作为内部覆盖接缝接入 Pipeline，但目前没有公开 UI/API；全局启动配置见 [wiki 016](./wiki/016-model-runtime-provider-config.md)。
-- run-step 不持久化实验账本、不自动跑上游，也不校验所供 content 是否来自作品最新版；成功只证明通过生产 schema，raw 模型输出和 reasoning 不对外返回。当前仅 Beat 第一章，CLI 配置不会写回作品。
+- run-step 不持久化实验账本、不自动跑上游，也不校验所供content是否来自作品最新版；成功只证明通过生产schema，raw模型输出和reasoning不对外返回。Beat/Prose当前只第一章，CLI配置不会写回作品。
 - 版本回看 UI（后悔药）没有入口，留 #6；重新生成（带补充想法）/渐进展示/分段提炼留 #12。
 - #5 专属版本比较归 #20，正文后回流与章节重生归 #21；本期只允许通过前整份章纲再生。上条 #6/#12 是旧的通用优化分工，不覆盖这次已确认拆分。
 - #5 已修复序号身份复用、共享原始错误日志和首次 Web advance 无限等待。2026-09-08 完整 production live smoke 两次卡在 Creative（截断／schema），不属于 Beat 成功证据；独立 Beat live 样例也是历史结果。本轮 fake/mock 回归通过；浏览器确认 pending 章纲及意见输入，原生刷新取消／确认受工具限制未验证，不能用 mounted 测试代替。证据边界统一见 Wiki 005。
@@ -77,21 +86,21 @@
 
 CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化与真实模型质量验证仍是独立范围。当前能力、验证边界和完成记录统一从 [Wiki 025](./wiki/025-cli-command-safety.md) 进入。2026-09-13 Caption/CLI 的历史验证保留在 [当时计划](./experiments/caption-adoption-2026-09-13/plan.md#验证记录)。
 
-#5 按 [Wiki 005 完成审核证据](./wiki/005-beat-generation-review.md#完成审核证据) 完成本轮冻结、review 和发布收口。当前 source 为 `feat/mvp-closeout`、目标 main；固定点和已授权纳入的既有文档提交见该页计划。#5 仍 OPEN、assignee `12bitsD`、`ready-for-agent`、Project #3 Status `Backlog`，#4/#13 均 CLOSED；完成时保持标签、Project 和原依赖。旧分支／merge 授权快照保留在 Wiki005 的历史记录，不据此重合并已完成的 PR23，也不跳过本轮关闭证据。
+#22 当前source为`feat/22-prose-review`，固定点`7a57d48aa50ced5c79ca4bc26cc9a424322f0a6f`，目标main。逐票按完成清单核对候选门禁、知识回写、独立评审与远端交付证据；不能因局部测试通过提前关闭issue。最新计划、变化事件与实际证据从 [Wiki 022](./wiki/022-prose-generation-review.md) 进入。旧#5分支／发布授权只属历史，不重做已关闭票。
 
-后续队列：**#5 第一章章纲 → #22 第一章正文 → #19 契约治理 → #9 SQLite → #6 后续章推进**。作者已明确先完成产物再治理与持久化；旧的“先 #19/#9 再 #5，章纲与正文合票”理由与替代决定保留在 [Wiki 005 上下文演进](./wiki/005-beat-generation-review.md#上下文演进)。顺序不是新建硬依赖，#7/#8 仍是原 MVP 的交付项。
+当前先完成**#22第一章正文**；既有后续排期为#19契约治理 → #9 SQLite → #6后续章推进，每票开工前单独grill。#7/#8仍是原MVP交付项。#28设定检索＋Agent工具执行、#29作品Wiki＋档案演进已登记为后续扩展，不合并进首章、不作为#22前置。顺序不是新增硬依赖；旧排期变化保留在 [Wiki 005](./wiki/005-beat-generation-review.md#上下文演进)。
 
-| 交付批次 | 可验收结果 | 可并行入口 |
+| 交付批次 | 可验收结果 | 后续衔接 |
 |---|---|---|
-| #5 收口 | 当前候选审核与 main 回读一致，完成评论及 issue 关闭可核对 | #22 只读方案准备；#5 关闭后解锁 #7 |
-| #22 第一章正文 | 生成、编辑、整章重写与通过；失败保留文本，终点第一章完成，无第二章 | #7 配置界面与生成接线；#22 关闭后解锁 #8 |
-| #19 契约治理 | 各产物与命令边界一致，非法内容在入口／读回被拒绝 | #7/#8 独立界面可推进，共享接口先对齐 |
+| #22 第一章正文 | 自动保存刷新恢复、整章重写、全文通过、通过后编辑保持approved；失败保护；无第二章 | 通过完整门禁与远端回读后再进入下一票 |
+| #19 契约治理 | 各产物与命令边界一致，非法内容在入口／读回被拒绝 | 覆盖已落地的Prose保存及错误语义 |
 | #9 SQLite | 作品与产物跨实际重启可回读，继承条件写入和身份规则 | 与 #8 联验坏例的作品／章节关联及持久化 |
 | #6 后续章 | 可重复的按章推进和作者关卡，遵守已确认的编辑／回流边界 | 收口 #7 配置与 skill 消费、#8 片段标记／备注／列表 |
+| #28 / #29 扩展 | 分别完成设定查询工具循环、作品Wiki档案演进；当前未实现 | 每票单独对齐接入范围；#29接入时正文与档案联合通过 |
 
 MVP 的 WHAT 与当前排期以 [父票 #1](https://github.com/12bitsD/agent4novel/issues/1) 为入口，每票按各自 AC 和原生依赖验收；本表只作接手导航，不缩减 MVP、不新建依赖或承诺日期，也不提前设计章节重生。
 
-继续继承条件写入、快照隔离、冻结提交与回读对账，不能照搬 Outline 保存／通过流程。设定后编辑归 #17、冲突澄清归 #18、章纲比较归 #20、章节重生归 #21。#12 仍承接既有 creative 优化，#15 在服务定型后做 Hono RPC；契约归属见 [管理原则](./agents/contract-governance.md)。
+继续继承条件写入、快照隔离、冻结提交与回读对账，不能照搬Outline保存／通过流程。#29中的WorkWiki指本书设定库，初始Setting与Wiki应呈现一套正式事实；正文与新增／更新档案一同通过、失败不保存一半、重试不重复历史，均是该扩展接入时的目标。通过后正文编辑的异步Wiki更新也是#29待对齐项，#22不预建任务。#17独立设定修改、#18冲突澄清、#20章纲比较、#21章节重生继续后置；#12/#15既有边界不变。
 
 ## 环境
 

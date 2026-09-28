@@ -145,10 +145,11 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [002 脚手架、存储、workflow 与书架](./002-scaffold-storage-runner-bookcase.md) | [#2](https://github.com/12bitsD/agent4novel/issues/2) | mixed | monorepo、store、基础 pipeline、书架 |
 | [003 统一入口与 idea 工作区](./003-unified-entry-idea-workspace.md) | [#3](https://github.com/12bitsD/agent4novel/issues/3) | mixed | 创建作品、文件导入、早期编辑链路 |
 | [004 大纲弧线与剧情点](./004-outline-arcs-segments.md) | [#4](https://github.com/12bitsD/agent4novel/issues/4) | current | outline 契约、关卡、编辑界面 |
-| [005 第一章章纲生成与通过](./005-beat-generation-review.md) | [#5](https://github.com/12bitsD/agent4novel/issues/5) | current | 章纲编辑／再生／通过已接线；Agent 可观测协议、验证与交付证据 |
+| [005 第一章章纲生成与通过](./005-beat-generation-review.md) | [#5](https://github.com/12bitsD/agent4novel/issues/5) | mixed | 章纲编辑／再生／通过已接线；Agent 可观测协议、验证与交付证据 |
 | [010 预处理 RealStep 与 interview](./010-preprocess-realstep-interview.md) | [#10](https://github.com/12bitsD/agent4novel/issues/10) | historical | 已被替代的 preprocess 方案及其遗留机制 |
 | [011 Caption 与 Creative 方向包](./011-caption-creative-directions.md) | [#11](https://github.com/12bitsD/agent4novel/issues/11) | mixed | 提炼稿、创意稿、选择关卡；R10 A SP 采用依据、对照迭代与逐版反思 |
-| [013 完整设定生成与一次通过](./013-setting-generation-review.md) | [#13](https://github.com/12bitsD/agent4novel/issues/13) | current | 设定生成、页内编辑、同版本原子通过、失败对账 |
+| [013 完整设定生成与一次通过](./013-setting-generation-review.md) | [#13](https://github.com/12bitsD/agent4novel/issues/13) | mixed | 设定生成、页内编辑、同版本原子通过、失败对账 |
 | [014 Agent CLI 与遥测](./014-agent-cli-telemetry.md) | [#14](https://github.com/12bitsD/agent4novel/issues/14) | mixed | 作品 CLI、run-step 单节点 SP 对照、smoke、安全 telemetry |
 | [016 模型运行配置](./016-model-runtime-provider-config.md) | [#16](https://github.com/12bitsD/agent4novel/issues/16) | current | provider、凭据、timeout、生成参数默认与覆盖、ModelRuntime |
+| [022 第一章正文](./022-prose-generation-review.md) | [#22](https://github.com/12bitsD/agent4novel/issues/22) | current | 首章生成／自动保存／整章重写／通过后编辑 |
 | [025 CLI 命令发现与参数校验](./025-cli-command-safety.md) | [#25](https://github.com/12bitsD/agent4novel/issues/25) | current | 帮助零副作用、严格参数与安全 usage |

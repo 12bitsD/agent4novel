@@ -26,6 +26,8 @@ export type FinalizeArtifactInput = {
   preconditions?: readonly ArtifactPrecondition[]
 }
 
+export type SaveArtifactInput = FinalizeArtifactInput & { expectedHumanStatus: HumanStatus }
+
 export interface WorkStore {
   // Inputs and returned snapshots must not expose mutable store-owned references.
   createWork(input: { seed: string; title?: string }): Work
@@ -39,6 +41,8 @@ export interface WorkStore {
   ): Artifact
   // Atomically replace a pending head's content and approve it without a new version.
   finalizeArtifact(input: FinalizeArtifactInput): Artifact
+  // Atomically append edited content with a fresh identity/version, preserving the matched head's status.
+  saveArtifact(input: SaveArtifactInput): Artifact
   setStatus(
     workId: string,
     kind: ArtifactKind,
