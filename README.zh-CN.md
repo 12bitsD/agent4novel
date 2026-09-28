@@ -55,14 +55,18 @@ LongCat 默认关闭 thinking，temperature 为 `0.9`，top-p 为 `0.95`。单�
 
 ### CLI（供脚本和 Agent 使用）
 
-生成与把关也能从命令行驱动——stdout 恒为纯 JSON：
+生成与把关也能从命令行驱动——成功命令结果以纯 JSON 写入 stdout：
 
 ```bash
+./apps/cli/bin/a4n --help                       # 命令目录，不执行 I/O
+./apps/cli/bin/a4n approve-beat --help          # 请求形状、例子与副作用
 ./apps/cli/bin/a4n smoke --seed-file seed.txt   # 完整链路，编辑并通过设定和章纲
 ./apps/cli/bin/a4n list                         # create / get / advance / select / approve / logs …
 ./apps/cli/bin/a4n get work-1 --kind setting    # 将 work-1 替换成你的作品 ID
 ./apps/cli/bin/a4n approve-setting work-1 --file setting-request.json
 ```
+
+顶级及所有子命令的 `--help` / `-h` 在读文件、访问服务或启动模型 worker 前 exit 0，帮助文字写 stderr。未知、重复、缺值、空值选项和错误的位置参数数量会在 I/O 前失败，stderr 返回安全的 `usage` JSON，exit 1。`create` / `smoke` 必须恰好提供 `--seed`、`--seed-file` 之一。独立帮助 token 优先；需要该字面值时使用 `--seed=--help`。保留 `--flag=value` 与 pnpm 的 `--` 分隔符。详见 [CLI 调用安全](./docs/wiki/025-cli-command-safety.md)。
 
 `setting-request.json` 包含完整的 `{ content, expectedHeadVersion }` 请求。版本号应来自你实际查看的设定；`approve-setting` 不会将它替换成最新版本。只有 `select` 和 `save-outline` 自动查询版本；`smoke` 会实际修改设定后再通过。
 
@@ -161,6 +165,7 @@ pnpm build
 | [#16](https://github.com/12bitsD/agent4novel/issues/16) | 可配置 ModelRuntime + LongCat provider | ✅ |
 | [#13](https://github.com/12bitsD/agent4novel/issues/13) | 大纲通过后生成完整设定，本地编辑并一次通过（[工程上下文](./docs/wiki/013-setting-generation-review.md)） | ✅ 已实现 |
 | [#5](https://github.com/12bitsD/agent4novel/issues/5) | 第一章章纲：编辑、再生、通过（[上下文](./docs/wiki/005-beat-generation-review.md)） | 已实现，交付收口中 |
+| [#25](https://github.com/12bitsD/agent4novel/issues/25) | CLI 帮助零副作用与严格参数校验（[上下文](./docs/wiki/025-cli-command-safety.md)） | 已实现 |
 | [#22](https://github.com/12bitsD/agent4novel/issues/22) | 第一章正文及作者关卡 | 计划中 |
 | [#9](https://github.com/12bitsD/agent4novel/issues/9) | 产物设计与治理后接入 SQLite | 计划中 |
 | [#6](https://github.com/12bitsD/agent4novel/issues/6) | 续写 + 作品详情 + router | |

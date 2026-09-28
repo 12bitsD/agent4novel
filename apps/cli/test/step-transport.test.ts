@@ -4,19 +4,18 @@ import { once } from 'node:events'
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { cliBin as bin, cliTestEnv } from './cli-process.js'
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 
-const bin = fileURLToPath(new URL('../bin/a4n', import.meta.url))
 const hash = (text: string) => createHash('sha256').update(text).digest('hex').slice(0, 12)
 const caption = { inputStage: '主线', summary: '合成故事的开发价值', elements: [], gaps: [] }
 
 async function invoke(args: string[], providerUrl: string, env: NodeJS.ProcessEnv = {}) {
-  const child = spawn(bin, args, { env: { ...process.env, A4N_MODEL: 'longcat:LongCat-2.0',
+  const child = spawn(bin, args, { env: cliTestEnv({ A4N_MODEL: 'longcat:LongCat-2.0',
     LONGCAT_API_KEY: 'synthetic-step-key', LONGCAT_BASE_URL: providerUrl, DEEPSEEK_API_KEY: '',
     A4N_LLM_TIMEOUT_MS: '5000', A4N_CLI_TIMEOUT_MS: '10000', ...env,
-  }, stdio: ['ignore', 'pipe', 'pipe'] })
+  }), stdio: ['ignore', 'pipe', 'pipe'] })
   let stdout = ''; let stderr = ''
   child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8')
   child.stdout.on('data', chunk => { stdout += chunk })

@@ -8,9 +8,9 @@ topics: ["agent-cli", "isolated-step", "system-prompt", "llm-telemetry", "workfl
 code_paths: ["apps/cli/src/client.ts", "apps/cli/src/commands.ts", "apps/cli/src/main.ts", "apps/cli/src/local-step.ts", "apps/server/src/step-lab-main.ts", "apps/server/src/steps/isolated-runner.ts", "packages/contracts/src/step-experiment.ts", "packages/contracts/src/telemetry.ts", "apps/server/src/steps/llm-call.ts", ".claude/skills/agent4novel-drive/SKILL.md"]
 symbols: ["createClient", "CliError", "run-step", "runLocalStep", "runIsolatedStep", "stepExperimentRequestSchema", "smoke", "LlmTelemetry", "recordTelemetry", "telemetryFor", "callLlm"]
 inherits: ["004", "011"]
-changed_by: ["016", "013", "005"]
+changed_by: ["016", "013", "005", "025"]
 read_when: ["drive-workflow-from-cli", "run-isolated-step", "compare-system-prompts", "debug-llm-failure", "change-cli-command", "change-telemetry", "run-end-to-end-smoke"]
-last_context_reviewed: "2026-09-13"
+last_context_reviewed: "2026-09-28"
 ---
 
 # 014 — Agent 可用性基建：CLI + 遥测内联 + 项目级 Skill
@@ -23,6 +23,7 @@ last_context_reviewed: "2026-09-13"
 - **当前价值**：本文拥有 CLI 命令语义、单节点输入与结果边界、遥测契约、smoke 流程和 outline 截断的排障经验；生成参数与 timeout 默认值由 Wiki 016 维护。
 - **后续变化**：[Wiki 016](./016-model-runtime-provider-config.md) 接管模型配置与 timeout 默认值；[Wiki 013](./013-setting-generation-review.md) 拥有 Setting 完整显式版本请求与结果对账规则，不沿用 Outline 自动补版本。
   [Wiki 005](./005-beat-generation-review.md) 已增加按章命令、请求关联与写入结果，移除共享原始错误内容传播；Beat 恢复语义以该页为准。
+- **入口语法变化**：[Wiki 025](./025-cli-command-safety.md) 将子命令帮助和严格语法校验前置到任何 I/O；本文的业务结果、遥测和单节点语义保持不变。
 - **代码入口**：[CLI commands](../../apps/cli/src/commands.ts)、[local-step](../../apps/cli/src/local-step.ts)、[isolated-runner](../../apps/server/src/steps/isolated-runner.ts)、[telemetry ledger](../../apps/server/src/steps/telemetry.ts)、[LLM call](../../apps/server/src/steps/llm-call.ts)、[drive skill](../../.claude/skills/agent4novel-drive/SKILL.md)。
 
 ## 设计目的
@@ -48,6 +49,8 @@ Agent 操作面必须满足三个条件：命令可组合、输出可解析、�
 ## 技术方案
 
 ### CLI 命令
+
+命令发现使用 `a4n --help` 或 `a4n <command> --help` / `-h`，零 I/O；参数语法错误为 stderr 单条安全 `usage` JSON、exit 1。命令定义、帮助优先级、严格参数与兼容边界由 [Wiki 025](./025-cli-command-safety.md) 说明。
 
 统一入口：
 
@@ -166,6 +169,14 @@ CLI 测试以注入 fetch 覆盖 REST 映射、自动回填版本、首方向缺
 - provider、credential、Base URL、wire protocol 和 timeout 默认值归 wiki 016。
 
 ## 上下文演进
+
+### 2026-09-28 — 命令发现和语法验证由 #25 收口
+
+- **触发证据**：子命令 `--help` 会发 POST，旧命令静默忽略未知参数。
+- **原假设**：顶级 usage 与各 dispatch 分支零散校验足够。
+- **决定**：由 [Wiki 025](./025-cli-command-safety.md) 记录帮助零副作用、统一严格语法与安全 usage；保留本文业务协议。
+- **影响**：帮助与误参数在 I/O 前结束；合法调用的输出、版本与恢复不变。
+- **上下文处理**：preserve 原始 CLI/遥测目的与失败经验；replace 当前入口语法指引，不重写原实验或人工决定。
 
 ### 2026-09-13 — 单节点实验从临时入口接回正式 CLI
 
