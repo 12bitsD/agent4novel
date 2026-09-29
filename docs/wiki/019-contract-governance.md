@@ -1,14 +1,14 @@
 ---
 wiki_id: "019"
 ticket: 19
-ticket_state: active
+ticket_state: done
 context_state: current
 summary: "统一六类产物、存储与公开协议验证；保留关卡、版本条件和未知写入恢复。"
 topics: ["contract-governance", "runtime-validation", "storage-boundary", "public-api"]
 code_paths: ["packages/contracts/src/**", "apps/server/src/store/**", "apps/server/src/routes/works.ts", "apps/cli/src/client.ts", "apps/web/src/api.ts"]
 symbols: ["Artifact", "artifactSchema", "WorkStore", "workViewSchema", "ApiError"]
 inherits: ["013", "006"]
-changed_by: []
+changed_by: ["009"]
 read_when: ["change-public-contract", "validate-artifact-content", "implement-storage-adapter"]
 last_context_reviewed: "2026-09-30"
 ---
@@ -19,9 +19,9 @@ last_context_reviewed: "2026-09-30"
 
 - **读取时机**：调整公开数据、持久化内容校验或消费者解析。
 - **原始目的**：[#19](https://github.com/12bitsD/agent4novel/issues/19) 要求共享定义和职责明确，防止跨模块漏改。
-- **实际落地**：六 kind/status 共享内容注册表，Store 写前/读回验证，REST/CLI/Web 解析及身份关联，独立实验成功包复验。候选本地门禁已通过，review/交付状态看下方证据与 issue。
+- **实际落地**：六 kind/status 共享内容注册表，Store 写前/读回验证，REST/CLI/Web 解析及身份关联，独立实验成功包复验；已随 [PR #34](https://github.com/12bitsD/agent4novel/pull/34) 合并，#19 已关闭。原发布前证据保留如下。
 - **当前价值**：继承 #6 多章、CAS 和未知写入恢复，不改变作者操作。
-- **后续变化**：#9 将沿同一 Store 接口和测试接入 SQLite。
+- **后续变化**：[Wiki 009](./009-sqlite-persistence.md) 沿同一 Store 接口和内容验证接入 SQLite；SQL 约束、事务及真实重启证据由该页负责，本页仍拥有共享契约边界。
 - **代码入口**：contracts 的 Artifact/公开协议、Store、works 路由、CLI client、Web api。
 
 ## 设计目的
@@ -99,6 +99,14 @@ RED/GREEN 原始日志位于 `/tmp/a4n-19-evidence/`：`core-content-*`（内容
 
 ## 上下文演进
 
+### 2026-09-30 — 共享验证供持久化适配器复用
+
+- **触发证据**：#19 已合并关闭，#9 开始把 Work 和全部产物版本写入 SQLite。
+- **原假设**：本票以 InMemoryStore 证明共享写前／读回校验，不证明磁盘持久性。
+- **决定**：SQLite 复用共享内容 schema 与 Store 验证，物理约束和恢复说明由 [Wiki 009](./009-sqlite-persistence.md) 接管。
+- **影响**：避免在 SQL 适配器复制六 kind 内容规则，继续保留坏数据安全失败、版本条件及未知写入语义。
+- **上下文处理**：preserve 原始 rationale、发现、TDD 和完成审核证据；replace 顶部交付状态与后继入口，#19 测试不作为 #9 完成证据。
+
 ### 2026-09-30 — 三方案自主收敛并接续多章基线
 
 - **触发证据**：#6 已合并关闭；用户要求普通 grilling 自主三案评估，只升级关键节点。
@@ -125,4 +133,4 @@ RED/GREEN 原始日志位于 `/tmp/a4n-19-evidence/`：`core-content-*`（内容
 
 ## 交接结论
 
-当前候选已实现并通过本地门禁，独立review/发布前裁决见证据字段，远端交付状态以本票issue/PR为准。#9应复用共享内容验证、Store业务行为和测试，补SQL事务及真实重启；不能把内存验证视为SQLite已落地。后续 #33/#7/#8 按已收敛范围逐票验收。
+#19 已合并关闭，原始独立 review 与发布前裁决见证据字段，远端终态以本票 issue/PR 为准。[Wiki 009](./009-sqlite-persistence.md) 继承共享内容验证和 Store 业务语义，并独立记录 SQL 事务及真实重启证据；本页内存门禁不替代 SQLite 验收。后续任务按各自 issue/Project 与交接快照逐票验收。

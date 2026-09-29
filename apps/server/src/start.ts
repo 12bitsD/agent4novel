@@ -1,58 +1,38 @@
 import { serve } from '@hono/node-server'
-import { createApp } from './app.js'
-import { consumeGuards } from './pipeline/consume-guards.js'
-import { Pipeline } from './pipeline/pipeline.js'
-import type { ArtifactStep, PipelineDefinitionEntry } from './pipeline/pipeline.js'
-import { seed } from './seed.js'
-import { createCaptionStep } from './steps/caption-step.js'
-import { createCreativeStep } from './steps/creative-step.js'
-import { createOutlineStep } from './steps/outline-step.js'
-import { createSettingStep } from './steps/setting-step.js'
-import { createBeatStep } from './steps/beat-step.js'
-import { createProseStep } from './steps/prose-step.js'
-import { createFakeCaptionStep, createFakeCreativeStep, createFakeOutlineStep, createFakeSettingStep, createFakeBeatStep, createFakeProseStep } from './steps/fake-step.js'
-import { modelRuntime } from './steps/llm.js'
-import { InMemoryStore } from './store/in-memory-store.js'
+import { parseServerConfig } from './config/server-config.js'
+import { createShutdown } from './runtime/shutdown.js'
 
-const store = new InMemoryStore()
-seed(store)
+async function start(): Promise<void> {
+  const config = parseServerConfig(process.env)
+  // Import provider configuration inside this error boundary; startup diagnostics never echo its values.
+  const { createProductionApp } = await import('./runtime/production-app.js')
+  const { openPersistentStore } = await import('./runtime/storage.js')
+  const store = openPersistentStore(config)
+  try {
+    const { app, demo } = createProductionApp(store)
+    const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {
+      const host = config.host.includes(':') ? `[${config.host}]` : config.host
+      console.log(`agent4novel server listening on http://${host}:${info.port}`)
+      if (demo) console.log('演示模式:未配置可用模型凭据,使用 FakeStep')
+    })
+    let shutdownExitCode = 0
+    const stop = createShutdown(server, () => store.close(), { exit: code => process.exit(code || shutdownExitCode) })
+    process.once('SIGTERM', stop)
+    process.once('SIGINT', stop)
+    server.once('error', () => {
+      console.error('agent4novel server failed to listen')
+      shutdownExitCode = 1
+      stop()
+    })
+  } catch (error) {
+    store.close()
+    throw error
+  }
+}
 
-// 无可用模型凭据 → fake 演示模式（不报错、不触网）。
-const demo = modelRuntime.mode === 'demo'
-
-const steps = new Map<string, ArtifactStep>([
-  ['caption', demo ? createFakeCaptionStep() : createCaptionStep()],
-  ['creative', demo ? createFakeCreativeStep() : createCreativeStep()],
-  ['outline', demo ? createFakeOutlineStep() : createOutlineStep()],
-  ['setting', demo ? createFakeSettingStep() : createSettingStep()],
-  ['beat', demo ? createFakeBeatStep() : createBeatStep()],
-  ['prose', demo ? createFakeProseStep() : createProseStep()],
-])
-// #3c:caption(提炼稿,落库即 approved)→ creative(创意稿,gateAfter = 比较视图)
-// #4:outline(大纲,consumes 选定单方向 creative,gateAfter = 大纲 review)
-// #13:setting(完整设定,消费三个 approved 上游,gateAfter = 设定 review)
-const definition: PipelineDefinitionEntry[] = [
-  { stepId: 'caption', outputKind: 'caption' },
-  { stepId: 'creative', outputKind: 'creative', consumes: ['caption'], gateAfter: { kind: 'creative' } },
-  { stepId: 'outline', outputKind: 'outline', consumes: ['creative'], gateAfter: { kind: 'outline' } },
-  { stepId: 'setting', outputKind: 'setting', consumes: ['caption', 'creative', 'outline'], gateAfter: { kind: 'setting' } },
-  { stepId: 'beat', outputKind: 'beat', chapter: 1, consumes: ['outline', 'setting'], gateAfter: { kind: 'beat', chapter: 1 } },
-  { stepId: 'prose', outputKind: 'prose', chapter: 1, consumes: ['beat', 'setting'], gateAfter: { kind: 'prose', chapter: 1 } },
-]
-const pipeline = new Pipeline({
-  store,
-  steps,
-  definition,
-  repeatChapters: true,
-  // Work.config 是作品级覆盖；未设置 model 时由 ModelRuntime 使用启动默认值。
-  resolveConfig: (work) => work.config,
-  consumeGuards,
-})
-
-const app = createApp({ store, pipeline, meta: { demo } })
-
-serve({ fetch: app.fetch, port: 8787 }, (info) => {
-  console.log(`agent4novel server listening on http://localhost:${info.port}`)
-  if (demo) console.log('演示模式:未配置可用模型凭据,使用 FakeStep')
-  else console.log(`模型:${modelRuntime.defaultModelId}`)
-})
+try {
+  await start()
+} catch {
+  console.error('agent4novel startup failed; check server, model and storage configuration')
+  process.exitCode = 1
+}

@@ -71,6 +71,32 @@ function makePipeline() {
 }
 
 describe('Pipeline(#3c 链式 advance)', () => {
+  it('commits the no-gate Caption directly as approved without a second persistence action', async () => {
+    class NoSecondWrite extends InMemoryStore {
+      override setStatus(): void { throw new Error('second persistence action unavailable') }
+    }
+    const store = new NoSecondWrite()
+    const work = store.createWork({ seed: 'atomic caption' })
+    const pipeline = new Pipeline({ store, steps: new Map([['caption', fakeStep('caption', captionContent())]]),
+      definition: definition.slice(0, 1), resolveConfig: () => ({}) })
+    expect(await pipeline.advance(work.id)).toMatchObject({ kind: 'complete' })
+    expect(store.getWork(work.id)!.artifacts).toMatchObject([{ kind: 'caption', humanStatus: 'approved', version: 1 }])
+  })
+  it('does not approve a head replaced between reading and committing approval', () => {
+    class CompetingStatus extends InMemoryStore {
+      override setStatus(...args: Parameters<InMemoryStore['setStatus']>) {
+        this.appendArtifact(args[0], 'outline', outlineContent)
+        return super.setStatus(...args)
+      }
+    }
+    const store = new CompetingStatus()
+    const work = store.createWork({ seed: 'approve race' })
+    store.appendArtifact(work.id, 'outline', outlineContent)
+    const pipeline = new Pipeline({ store, steps: new Map(), definition: [], resolveConfig: () => ({}) })
+    expect(() => pipeline.approve(work.id, 'outline')).toThrow(expect.objectContaining({ code: 'version-conflict' }))
+    expect(store.getWork(work.id)!.artifacts).toMatchObject([{ humanStatus: 'pending', version: 2 }])
+  })
+
   it('does not commit output generated from an upstream replaced while the step runs', async () => {
     const store = new InMemoryStore()
     let release!: () => void

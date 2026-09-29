@@ -1,10 +1,19 @@
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect } from 'vitest'
 import { caption, creative, outline as outlineContent, setting as settingContent, beat } from './fixtures/artifact-content.js'
 import { InMemoryStore } from '../src/store/in-memory-store.js'
+import { SqliteStore } from '../src/store/sqlite-store.js'
 
-describe('InMemoryStore', () => {
+describe.each(['memory', 'sqlite'] as const)('%s WorkStore contract', adapter => {
+  const opened: SqliteStore[] = []
+  afterEach(() => { for (const store of opened.splice(0)) store.close() })
+  const createStore = () => {
+    if (adapter === 'memory') return new InMemoryStore()
+    const store = new SqliteStore(':memory:')
+    opened.push(store)
+    return store
+  }
   it('creates and lists works', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const w = store.createWork({ seed: '脑洞一', title: '作品一' })
     expect(w.id).toMatch(/^work-/)
     const list = store.listWorks()
@@ -14,7 +23,7 @@ describe('InMemoryStore', () => {
   })
 
   it('empty or whitespace title falls back to the seed prefix', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     expect(store.createWork({ seed: '一二三四五六七八九十甲乙丙丁戊己庚辛', title: '' }).title).toBe(
       '一二三四五六七八九十甲乙丙丁戊己庚辛',
     )
@@ -22,12 +31,12 @@ describe('InMemoryStore', () => {
   })
 
   it('getWork returns undefined for unknown id', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     expect(store.getWork('nope')).toBeUndefined()
   })
 
   it('returns an isolated work snapshot when creating a work', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const work = store.createWork({ seed: 'original seed', title: 'original title' })
     work.title = 'outside change'
     work.config.skills = ['outside skill']
@@ -41,7 +50,7 @@ describe('InMemoryStore', () => {
   })
 
   it('reading a work cannot mutate its stored config or artifact tree', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const work = store.createWork({ seed: 'x' })
     store.appendArtifact(work.id, 'caption', caption('original'))
     const read = store.getWork(work.id)!
@@ -58,7 +67,7 @@ describe('InMemoryStore', () => {
   })
 
   it('appending copies content and returns an independent artifact snapshot', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const work = store.createWork({ seed: 'x' })
     const content = caption('original')
     const appended = store.appendArtifact(work.id, 'caption', content)
@@ -75,7 +84,7 @@ describe('InMemoryStore', () => {
   })
 
   it('appends versioned validated artifacts and getWork returns the latest', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const w = store.createWork({ seed: 'x' })
     store.appendArtifact(w.id, 'caption', caption('v1'))
     store.appendArtifact(w.id, 'caption', caption('v2'))
@@ -87,21 +96,48 @@ describe('InMemoryStore', () => {
   })
 
   it('per-chapter kind requires a chapter', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const w = store.createWork({ seed: 'x' })
     expect(() => store.appendArtifact(w.id, 'beat', 'x')).toThrow(/requires a chapter/)
   })
 
   it('per-work kind rejects a chapter', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const w = store.createWork({ seed: 'x' })
     expect(() => store.appendArtifact(w.id, 'caption', 'x', { chapter: 1 })).toThrow(
       /must not have a chapter/,
     )
   })
 
+  it('atomically appends approved content for direct-status kinds', () => {
+    const store = createStore()
+    const work = store.createWork({ seed: 'x' })
+    const appended = store.appendArtifact(work.id, 'caption', caption('ready'), { humanStatus: 'approved' })
+    expect(appended.humanStatus).toBe('approved')
+    expect(store.getWork(work.id)!.artifacts).toEqual([appended])
+  })
+
+  it.each(['setting', 'beat', 'prose'] as const)('refuses approved append bypass for %s', kind => {
+    const store = createStore()
+    const work = store.createWork({ seed: 'x' })
+    const content = kind === 'setting' ? settingContent('x') : kind === 'beat' ? beat('x') : { text: 'x' }
+    expect(() => store.appendArtifact(work.id, kind, content, { humanStatus: 'approved', ...(kind === 'setting' ? {} : { chapter: 1 }) }))
+      .toThrow(expect.objectContaining({ code: `${kind}-approval-required` }))
+    expect(store.getWork(work.id)!.artifacts).toEqual([])
+  })
+
+  it('checks status preconditions atomically without changing a newer head', () => {
+    const store = createStore()
+    const work = store.createWork({ seed: 'x' })
+    const original = store.appendArtifact(work.id, 'outline', outlineContent('v1'))
+    const newer = store.appendArtifact(work.id, 'outline', outlineContent('v2'))
+    expect(() => store.setStatus(work.id, 'outline', 'approved', { preconditions: [{ kind: 'outline', head: { artifactId: original.id, version: original.version, humanStatus: 'pending' } }] }))
+      .toThrow(expect.objectContaining({ code: 'version-conflict' }))
+    expect(store.getWork(work.id)!.artifacts).toEqual([newer])
+  })
+
   it('setStatus affects the latest version only', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const w = store.createWork({ seed: 'x' })
     store.appendArtifact(w.id, 'outline', outlineContent('v1'))
     store.setStatus(w.id, 'outline', 'approved')
@@ -113,13 +149,13 @@ describe('InMemoryStore', () => {
   })
 
   it('setStatus on missing artifact throws', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const w = store.createWork({ seed: 'x' })
     expect(() => store.setStatus(w.id, 'outline', 'approved')).toThrow(/artifact not found/)
   })
 
   it('headVersion reflects the latest version, undefined when absent', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const w = store.createWork({ seed: 'x' })
     expect(store.headVersion(w.id, 'creative')).toBeUndefined()
     store.appendArtifact(w.id, 'creative', creative('v1'))
@@ -129,7 +165,7 @@ describe('InMemoryStore', () => {
   })
 
   it('refuses to append a generated result after an upstream head changed', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const work = store.createWork({ seed: 'x' })
     const outline = store.appendArtifact(work.id, 'outline', outlineContent('original'))
     store.setStatus(work.id, 'outline', 'approved')
@@ -147,7 +183,7 @@ describe('InMemoryStore', () => {
   })
 
   it('finalizes edited content and approval together without changing artifact identity or version', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const work = store.createWork({ seed: 'x' })
     const pending = store.appendArtifact(work.id, 'setting', settingContent('generated'))
 
@@ -173,7 +209,7 @@ describe('InMemoryStore', () => {
     { expectedArtifactId: 'another-artifact', expectedHeadVersion: 1 },
     { expectedArtifactId: undefined, expectedHeadVersion: 2 },
   ])('rejects a stale finalization target without changing content or status: %j', (expected) => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const work = store.createWork({ seed: 'x' })
     const pending = store.appendArtifact(work.id, 'setting', settingContent('generated'))
 
@@ -188,7 +224,7 @@ describe('InMemoryStore', () => {
   })
 
   it.each(['author edited', 'a competing edit'])('rejects a repeated finalization with content %j', (note) => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const work = store.createWork({ seed: 'x' })
     const pending = store.appendArtifact(work.id, 'setting', settingContent('generated'))
     const request = {
@@ -206,7 +242,7 @@ describe('InMemoryStore', () => {
   })
 
   it('cannot finalize while an upstream head no longer satisfies the approved precondition', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const work = store.createWork({ seed: 'x' })
     const outline = store.appendArtifact(work.id, 'outline', outlineContent('outline'))
     store.setStatus(work.id, 'outline', 'approved')
@@ -229,7 +265,7 @@ describe('InMemoryStore', () => {
   })
 
   it.each(['pending', 'approved'] as const)('blocks the generic setStatus path for setting status %s', (status) => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const work = store.createWork({ seed: 'x' })
     const pending = store.appendArtifact(work.id, 'setting', settingContent('generated'))
 
@@ -250,7 +286,7 @@ describe('InMemoryStore', () => {
   })
 
   it('validates bucket addresses in conditional writes before committing', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const work = store.createWork({ seed: 'x' })
     expect(() => store.appendArtifact(work.id, 'setting', settingContent('generated'), {
       preconditions: [{ kind: 'outline', chapter: 1, head: null }],
@@ -273,7 +309,7 @@ describe('InMemoryStore', () => {
   })
 
   it('appends only when every upstream matches and the output bucket is absent', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const work = store.createWork({ seed: 'x' })
     const outline = store.appendArtifact(work.id, 'outline', outlineContent('outline'))
     store.setStatus(work.id, 'outline', 'approved')
@@ -298,7 +334,7 @@ describe('InMemoryStore', () => {
     { artifactId: undefined, version: 2, humanStatus: 'approved' as const },
     { artifactId: undefined, version: 1, humanStatus: 'pending' as const },
   ])('checks every component of an upstream head: %j', (head) => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const work = store.createWork({ seed: 'x' })
     const outline = store.appendArtifact(work.id, 'outline', outlineContent('outline'))
     store.setStatus(work.id, 'outline', 'approved')
@@ -311,7 +347,7 @@ describe('InMemoryStore', () => {
   })
 
   it('scopes preconditions and finalization to the exact chapter bucket', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const work = store.createWork({ seed: 'x' })
     const first = store.appendArtifact(work.id, 'beat', beat('first chapter'), { chapter: 1 })
     const second = store.appendArtifact(work.id, 'beat', beat('second chapter'), {
@@ -335,7 +371,7 @@ describe('InMemoryStore', () => {
   })
 
   it('copies finalization input and output without leaking approved content', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const work = store.createWork({ seed: 'x' })
     const pending = store.appendArtifact(work.id, 'setting', settingContent('generated'))
     const content = settingContent('author edited')
@@ -358,7 +394,7 @@ describe('InMemoryStore', () => {
   })
 
   it('leaves no append or partial approval when copying the input fails', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const work = store.createWork({ seed: 'x' })
     const uncloneable = new Proxy({ note: 'invalid boundary input' }, {})
     expect(() => store.appendArtifact(work.id, 'setting', uncloneable)).toThrow()
@@ -378,7 +414,7 @@ describe('InMemoryStore', () => {
   })
 
   it('reports missing finalization targets without creating anything', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const request = {
       workId: 'missing-work',
       kind: 'setting' as const,
@@ -395,7 +431,7 @@ describe('InMemoryStore', () => {
     expect(store.getWork(work.id)!.artifacts).toEqual([])
   })
   it.each(['pending', 'approved'] as const)('saves a new version while preserving %s and isolating input and output snapshots', status => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const work = store.createWork({ seed: 'x' })
     let head = store.appendArtifact(work.id, 'prose', { text: 'original' }, { chapter: 1 })
     if (status === 'approved') head = store.finalizeArtifact({ workId: work.id, kind: 'prose', chapter: 1, expectedArtifactId: head.id, expectedHeadVersion: head.version, content: head.content })
@@ -413,7 +449,7 @@ describe('InMemoryStore', () => {
     expect(store.headVersion(work.id, 'prose', { chapter: 1 })).toBe(2)
   })
   it('saves only if status and all upstream preconditions still match, without a partial version on failure', () => {
-    const store = new InMemoryStore()
+    const store = createStore()
     const work = store.createWork({ seed: 'x' })
     const upstream = store.appendArtifact(work.id, 'caption', caption('first'))
     store.setStatus(work.id, 'caption', 'approved')

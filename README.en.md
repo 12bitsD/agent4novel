@@ -42,7 +42,7 @@ Approved settings and chapter plans cannot currently be changed. After you edit 
 
 ## Quick start
 
-> **Before trying the app: stopping or restarting the local server clears works.** Works are not yet saved to disk. Copy any text you need into local files.
+> **Works are saved on your computer.** Once prose is shown as saved, it survives server restarts when you use the same data directory. Unsaved changes in the page do not survive.
 
 ### 1. Start demo mode
 
@@ -59,11 +59,13 @@ Leave the program running in your terminal and open **[localhost:5173](http://lo
 
 With no model selected and no DeepSeek or LongCat API key (a secret for calling a model service), the app enters demo mode. Demo mode uses built-in sample content and supports selection, editing, and approval. **It does not call AI to generate a story.** Selecting a model without its corresponding key causes startup to fail.
 
+The bookcase is empty on first startup, and you can create a work immediately. To add sample works, use `A4N_SEED_DEMO=1 pnpm dev` for the first startup. Samples are added only to an empty bookcase; restarting does not add duplicates.
+
 ### 2. Configure a model service
 
 **DeepSeek** and **LongCat** are currently supported. Obtain an API key from your chosen service.
 
-Copy any text you need to keep, then press `Ctrl+C` in the terminal running `pnpm dev` to stop the server. If `.env.local` already exists, edit it directly. For the first setup, run these commands from the `agent4novel` directory to create a configuration file that only your operating-system user can read and write:
+Check that your prose is shown as saved, then press `Ctrl+C` in the terminal running `pnpm dev` to stop the server. If `.env.local` already exists, edit it directly. For the first setup, run these commands from the `agent4novel` directory to create a configuration file that only your operating-system user can read and write:
 
 ```bash
 cp .env.example .env.local
@@ -81,12 +83,18 @@ Save the file and run `pnpm dev` again.
 
 When you use a real model, your input and the story content needed for generation are sent to the chosen model service. Git does not add `.env.local` to version history by default; keep the key in that file. See [model configuration](./docs/wiki/016-model-runtime-provider-config.md#配置契约) for further options.
 
+### 3. Keep and back up your works
+
+The default data file is `.data/agent4novel.sqlite` under the project directory. To use another location, set `A4N_DATA_DIR` in `.env.local` to an absolute directory path. Relative paths are resolved from the project root. Switching to an empty directory shows an empty bookcase; works in the original directory remain there.
+
+To back up, stop all servers using that data directory, then copy the entire directory to a new backup location. To restore, stop the server, keep a backup of the current directory, and restore the entire directory from your chosen backup. Do not copy only the database file while the server is running. See [work storage and recovery](./docs/wiki/009-sqlite-persistence.md) for details and the limits of preserving data from older in-memory versions.
+
 ## Current status
 
-**Chapter-by-chapter writing is available. The project is still in development.** Current limitations:
+**Chapter-by-chapter writing is available. The project is still in development.** Keep the following in mind when saving and using your works:
 
-- **Stopping or restarting the server clears works.** Work data is held in the memory of the local server started by `pnpm dev`; it is not yet written to disk. Copy any text you need into local files.
-- **Prose saves automatically to the local server.** Once the page shows that it is saved, a browser refresh can recover it as long as the server has not stopped or restarted. Unsubmitted manual edits to settings and chapter plans remain in the current page. Refreshing the page or discarding edits to leave loses those edits.
+- **Works are saved on your computer.** Once prose is shown as saved, it survives browser refreshes and server restarts when you use the same data directory. Unsaved prose and unsubmitted manual edits to settings and chapter plans remain in the current page. Refreshing the page or discarding edits to leave loses those edits.
+- **Interrupted generation needs a manual decision.** Restarting the server does not automatically call AI again. Open the work and check its saved content before continuing generation. Runtime diagnostic logs do not survive server restarts.
 - **Full-novel generation quality has not yet been evaluated.** See the [chapter continuation verification record](./docs/wiki/006-chapter-continuation.md#测试与验证) for the scope and results of existing tests.
 
 <a id="architecture"></a>
@@ -105,7 +113,7 @@ When you use a real model, your input and the story content needed for generatio
 <summary>Engineering documentation for agents</summary>
 
 - **Development rules:** [AGENTS.md](./AGENTS.md) and the [completion checklist](./docs/agents/ticket-completion-checklist.md).
-- **Operation and troubleshooting:** [runtime instructions](./.claude/skills/agent4novel-drive/SKILL.md), [model configuration](./docs/wiki/016-model-runtime-provider-config.md), and [command-line usage](./docs/wiki/014-agent-cli-telemetry.md).
+- **Operation and troubleshooting:** [runtime instructions](./.claude/skills/agent4novel-drive/SKILL.md), [model configuration](./docs/wiki/016-model-runtime-provider-config.md), [work storage and recovery](./docs/wiki/009-sqlite-persistence.md), and [command-line usage](./docs/wiki/014-agent-cli-telemetry.md).
 - **Design and implementation:** [Engineering Wiki](./docs/wiki/README.md), [architecture decisions](./docs/adr/), and [research](./docs/research/).
 - **Terms and data definitions:** [domain glossary](./CONTEXT.md) and [data model](./docs/schema.md).
 - **Task handoff:** [handoff record](./docs/handoff.md).

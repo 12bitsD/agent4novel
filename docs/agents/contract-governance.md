@@ -105,6 +105,7 @@
 
 - [`store/validation.ts`](../../apps/server/src/store/validation.ts) 以共享 schema 检查输入与存储快照，抛出固定消息的 `StoreContractError`，区分 `invalid-store-input` / `invalid-stored-data`，不携带原始内容。
 - `createWork` 校验公开创建输入与候选 Work；`appendArtifact`、`saveArtifact`、`finalizeArtifact`、`setStatus` 在修改内部状态前校验完整候选 Artifact。现有版本／上游条件比较保留；内容校验失败不追加版本、不通过、不部分写入。
+- SQLite 与内存适配器复用上述内容校验；SQL 额外保证物理身份、版本唯一、kind/chapter、JSON 与外键约束。写入的目标和上游条件在同一短事务内比较，不能用路由中的预检替代。
 - `getWork` 验证当前 WorkDetail 和所有 head；`listWorks` 从已验证的 getWork 派生摘要；`headVersion` 验证所读的单个 head。当前读取不扫描全部历史版本，不能据此声称全库历史已检查。
 - [`contract-response.ts`](../../apps/server/src/contract-response.ts) 是 HTTP 输出验证与安全失败接缝。输出验证失败不能证明此前写入未发生；返回通用安全失败，不泄漏非法内容。写请求的消费者遇到无效成功包仍须保留回读语义，不自动重放。
 - Web/CLI 的成功包解析不能只检 shape：涉及既有作品／产物时还需核对目标关联；Setting/Beat/Prose 的提交结果继续使用共享匹配／恢复逻辑。读取非法数据不应作为正常工作区展示。
@@ -114,13 +115,13 @@
 
 本次移出路由的创建、创意稿保存/选择、大纲保存、通用通过请求归 `work-requests.ts`；WorkSummary 与 AppConfig 的消费者类型从 schema 派生。WorkView 不再为六 kind 分别追加平行内容检查，而是复用统一 Artifact 校验；低层 envelope 与内容注册表分开消除循环依赖。
 
-三类 creative hint、Beat/Prose 命令族、各私有 Step 包装和三种人工编辑完整度继续分开：相似字段不表示相同业务。客户端本地编辑状态、HTTP transport、CLI flags、provider 原始响应都不是新的公开领域 schema。#15 Hono RPC 迁移仍未实施；#9 SQL 表/迁移、#7 作者配置、#28 工具执行、#29 作品 Wiki 和未对齐的 materials 生命周期不由本票预定义。
+三类 creative hint、Beat/Prose 命令族、各私有 Step 包装和三种人工编辑完整度继续分开：相似字段不表示相同业务。客户端本地编辑状态、HTTP transport、CLI flags、provider 原始响应都不是新的公开领域 schema。#15 Hono RPC 迁移仍未实施；#9 SQL 表/迁移由 Wiki 009 和 schema 拥有，#7 作者配置、#28 工具执行、#29 作品 Wiki 和未对齐的 materials 生命周期也不由契约治理预定义。
 
 ## 向 #9 交接
 
-SQLite 适配器应沿用 WorkStore 接缝以及 `artifactSchema` / `workSchema` / `workDetailSchema`；独立内容检查使用共享 `parseArtifactContent`。SQL 约束补足身份、版本和原子性，不能手写第二套六 kind 内容规则。加载的持久内容须验证，坏数据不能以 HTTP200 传出；写入前验证和 CAS 必须在实际事务语义中保持一致。当前内存版本只验证实际读取的 head；未来历史查询增加时也要对其输出验证。
+SQLite 适配器沿用 WorkStore 接缝以及 `artifactSchema` / `workSchema` / `workDetailSchema`；独立内容检查使用共享 `parseArtifactContent`。SQL 约束补足身份、版本和原子性，不能手写第二套六 kind 内容规则。加载的持久内容须验证，坏数据不能以 HTTP200 传出；写入前验证和 CAS 在事务内保持一致。当前两种适配器都只验证实际读取的 head；未来历史查询增加时也要对其输出验证。
 
-正文空白、pending/approved 差异、同版通过、新版保存、全部历史版本与 inputs 引用沿现有领域语义保留。物理 SQL 表数、迁移方式和数据修复工具由 #9 决定；此清单不证明 SQLite 已实现。
+正文空白、pending/approved 差异、同版通过、新版保存、全部历史版本与 inputs 引用沿现有领域语义保留。`appendArtifact` 可携带最终状态及前置条件，用于 Caption 直接通过、Creative 选定等一次提交；Setting/Beat/Prose 禁止借此跳过专用 finalize。`setStatus` 也接收前置条件，避免事务外版本检查后的竞态。物理 SQL v1 形状见 [schema](../schema.md#sqlite-持久化9)，运行 HOW 与真实重启证据见 [Wiki 009](../wiki/009-sqlite-persistence.md)；此职责清单本身不替代验收。
 
 ## 治理前落差与排期沿革
 

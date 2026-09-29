@@ -1,0 +1,51 @@
+import { createApp } from '../app.js'
+import { consumeGuards } from '../pipeline/consume-guards.js'
+import { Pipeline } from '../pipeline/pipeline.js'
+import type { ArtifactStep, PipelineDefinitionEntry } from '../pipeline/pipeline.js'
+import { createCaptionStep } from '../steps/caption-step.js'
+import { createCreativeStep } from '../steps/creative-step.js'
+import { createOutlineStep } from '../steps/outline-step.js'
+import { createSettingStep } from '../steps/setting-step.js'
+import { createBeatStep } from '../steps/beat-step.js'
+import { createProseStep } from '../steps/prose-step.js'
+import { createFakeCaptionStep, createFakeCreativeStep, createFakeOutlineStep, createFakeSettingStep, createFakeBeatStep, createFakeProseStep } from '../steps/fake-step.js'
+import { modelRuntime } from '../steps/llm.js'
+import type { WorkStore } from '../store/work-store.js'
+
+export function createProductionApp(store: WorkStore) {
+  // 无可用模型凭据 → fake 演示模式（不报错、不触网）。
+  const demo = modelRuntime.mode === 'demo'
+
+  const steps = new Map<string, ArtifactStep>([
+    ['caption', demo ? createFakeCaptionStep() : createCaptionStep()],
+    ['creative', demo ? createFakeCreativeStep() : createCreativeStep()],
+    ['outline', demo ? createFakeOutlineStep() : createOutlineStep()],
+    ['setting', demo ? createFakeSettingStep() : createSettingStep()],
+    ['beat', demo ? createFakeBeatStep() : createBeatStep()],
+    ['prose', demo ? createFakeProseStep() : createProseStep()],
+  ])
+  // #3c:caption(提炼稿,落库即 approved)→ creative(创意稿,gateAfter = 比较视图)
+  // #4:outline(大纲,consumes 选定单方向 creative,gateAfter = 大纲 review)
+  // #13:setting(完整设定,消费三个 approved 上游,gateAfter = 设定 review)
+  const definition: PipelineDefinitionEntry[] = [
+    { stepId: 'caption', outputKind: 'caption' },
+    { stepId: 'creative', outputKind: 'creative', consumes: ['caption'], gateAfter: { kind: 'creative' } },
+    { stepId: 'outline', outputKind: 'outline', consumes: ['creative'], gateAfter: { kind: 'outline' } },
+    { stepId: 'setting', outputKind: 'setting', consumes: ['caption', 'creative', 'outline'], gateAfter: { kind: 'setting' } },
+    { stepId: 'beat', outputKind: 'beat', chapter: 1, consumes: ['outline', 'setting'], gateAfter: { kind: 'beat', chapter: 1 } },
+    { stepId: 'prose', outputKind: 'prose', chapter: 1, consumes: ['beat', 'setting'], gateAfter: { kind: 'prose', chapter: 1 } },
+  ]
+  const pipeline = new Pipeline({
+    store,
+    steps,
+    definition,
+    repeatChapters: true,
+    // Work.config 是作品级覆盖；未设置 model 时由 ModelRuntime 使用启动默认值。
+    resolveConfig: (work) => work.config,
+    consumeGuards,
+  })
+
+  const app = createApp({ store, pipeline, meta: { demo } })
+
+  return { app, demo }
+}

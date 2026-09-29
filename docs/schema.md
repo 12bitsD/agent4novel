@@ -1,6 +1,6 @@
 # 数据模型
 
-agent4novel 的领域数据模型。代码英文 id ↔ 领域中文词（见 [CONTEXT.md](../CONTEXT.md)）的映射、实体、形状与不变量。SQLite 建表（issue #9）以此为准。
+agent4novel 的领域数据模型。代码英文 id ↔ 领域中文词（见 [CONTEXT.md](../CONTEXT.md)）的映射、实体、形状与不变量。当前 SQLite 物理存储形状见下方“SQLite 持久化”章节；设计依据和运行 HOW 见 [Wiki 009](./wiki/009-sqlite-persistence.md)。
 
 ## kind = 节点名
 
@@ -81,13 +81,39 @@ Artifact = {
 
 `artifactSchema` 同时检查内容及 kind/chapter 地址；`workDetailSchema` 和 `workViewSchema` 使用同一归属/唯一 head 规则。每个产物必须属于当前作品，同一 kind/chapter 只出现一个当前版本；本规则不把公开读取扩展成全部历史列表。Config 的未知字段拒绝，不静默丢弃以掩盖协议漂移。
 
-Store 在写入及状态转换前校验候选，保留原有版本与上游条件检查；失败不得创建空 bucket、增加版本或改变状态。读取校验本次返回的内容，快照不暴露内部可变引用。公开 GET 仍只返回各地址 head，不承诺扫描未被读取的历史；SQLite 恢复和未来历史读取必须复用同一验证入口。
+Store 在写入及状态转换前校验候选，保留原有版本与上游条件检查；失败不得创建空 bucket、增加版本或改变状态。读取校验本次返回的内容，快照不暴露内部可变引用。公开 GET 仍只返回各地址 head，不承诺扫描未被读取的历史；SQLite 从磁盘解码时复用同一验证入口，未来历史读取也必须遵守。
 
 公开创建、列表、创意稿保存/选择、大纲保存、通用通过、应用配置、推进及各专用命令均复用 `packages/contracts`。HTTP 成功输出也校验；输出失败统一安全 500，不含原始内容，不宣称操作未发生。错误公共联合 `httpErrorSchema` 保留基础错误以及 Beat/Prose command 与遥测扩展。CLI 本地诊断包装和 Step 私有 I/O 不被强行并入 HTTP 错误形。
 
 Web/CLI 在消费端解析公开响应并核对资源身份。错误体畸形、身份不匹配或成功响应无效时，写操作按结果未知处理；不能仅凭 4xx 认定未写入，也不能自动重复 POST。既有 Beat/Prose 专用恢复层仍保留原始状态与响应，按各自共享命令契约对账。
 
 独立 Step 实验成功包按 `stepId` 校验正式内容；请求与 Step 调度包装仍为各自私有边界。完整契约清单与保留重复的理由见 [契约治理](./agents/contract-governance.md)，本票设计和证据见 [Wiki 019](./wiki/019-contract-governance.md)。
+
+## SQLite 持久化：#9
+
+生产使用 [`SqliteStore`](../apps/server/src/store/sqlite-store.ts) 实现 `WorkStore`；`InMemoryStore` 继续用于行为测试。SQLite v1 由 [`sqlite-schema.ts`](../apps/server/src/store/sqlite-schema.ts) 定义，两张 `STRICT` 表持有作品与每个产物版本，不按 kind 拆表。
+
+| 表 | 列与存储形态 |
+| --- | --- |
+| `works` | `id` 主键；`title`、`seed`、`created_at` 非空文本；`config` 为通过共享 AgentConfig 校验的 JSON 文本 |
+| `artifacts` | `id` 主键；`work_id` 外键指向 `works.id`；`kind`、`version`、`human_status`、`created_at`；`chapter` 为可空整数；`content` 为 JSON 文本；可空 `inputs` 为生成输入引用的 JSON 文本 |
+
+- SQL 校验六种 kind、两种 human status、JSON 语法以及版本为正安全整数。作品级 kind 的 chapter 必须为 SQL `NULL`；Beat/Prose 的 chapter 必须为正安全整数。返回 JavaScript 时 `NULL` chapter 恢复为字段缺省。
+- 两个部分唯一索引分别约束 `(work_id, kind, version) WHERE chapter IS NULL` 和 `(work_id, kind, chapter, version) WHERE chapter IS NOT NULL`，防止普通含 NULL 唯一约束遗漏作品级重复版本。
+- `content`、`config`、`inputs` 的领域有效性仍由共享 schema 验证；SQL 的 `json_valid` 不取代内容校验。inputs 记录原始生成依据，不复制上游内容，也没有新增关系表或历史版本 UI。
+- 读取在一致快照中取每个 kind/chapter 的最大 version；作品列表与章节统计基于这些 head。旧版本留在表中，当前公开接口不读取全部版本，也不承诺扫描未使用的历史数据。
+
+### 事务与版本条件
+
+写操作使用 `BEGIN IMMEDIATE` 语义的短事务；目标 id/version/status 与所消费上游 head 的条件检查、候选内容校验及写入均在其中完成。条件变化时拒绝整个写操作；事务失败不追加版本、不部分通过。LLM 调用在事务外，生成完成后重新验证实际输入基线。
+
+`appendArtifact` 原子追加下一版，默认 pending，也可为允许直接通过的 kind 指定 `humanStatus: 'approved'`。Caption 落库与通过、Creative 选定方向与通过因此不再拆成两次写入；Setting/Beat/Prose 仍只能走专用 finalize。`setStatus` 支持前置条件。Prose save 原子追加新 id/version 并保留匹配状态；finalize 原子替换同一 id/version 的内容与状态；历史版本及 inputs 依既有规则保留。
+
+### Schema 版本与恢复边界
+
+数据库版本使用 `PRAGMA user_version = 1`。初始化在取得写锁后重新读取版本和结构，只对真正无用户对象的 v0 空库建表；已有 v1 必须匹配已知表与索引定义。未来版本、未知旧结构或不匹配结构使启动失败，不删库、不降级、不悄悄退回内存。当前未提供历史库修复、导入或旧内存实例迁移工具。
+
+连接启用外键、WAL、`synchronous = FULL` 和 5 秒 busy timeout。默认数据目录与备份/恢复操作见 [Wiki 009](./wiki/009-sqlite-persistence.md)。同一数据目录中的已提交作品、产物版本、通过状态和 inputs 可在服务重启后读取；未保存页面草稿、进程内遥测、正在运行的模型调用不在该持久化范围。
 
 ## Setting：#13 已确认设计
 
@@ -203,7 +229,7 @@ type SettingApiError = ApiError & { issues?: ValidationIssue[] }
 
 Setting 的状态迁移是单向的：首次生成创建 pending，专用完成命令将同一版本置为 approved。通用 `setStatus` 不接受 Setting，已通过内容不能退回 pending 后再次完成。
 
-此设计沿用 `Work + Artifact`，不指定每种产物一张 SQL 表。当前运行存储仍是 `InMemoryStore`；真实 SQLite、迁移与重启持久性归 #9。`materials` 的多素材生命周期尚未定案，不是 #13 的新实体。
+此设计沿用 `Work + Artifact`，没有为每种产物分别建表。当前生产使用 `SqliteStore`，内存实现保留用于测试；物理形状见 SQLite 持久化章节。`materials` 的多素材生命周期尚未定案，不是 #13 的新实体。
 
 ## Beat：#5 当前契约
 
@@ -382,7 +408,7 @@ CLI 在失败 JSON 中保留原始安全 `code` 为 `causeCode`、operation、�
 
 扩展现有 `GET /api/works/:id/telemetry` 与 `a4n logs <workId>`，新增可选 `requestId / attemptId` 查询条件及对应 CLI 参数；保留 `workId/telemetry`，增加 `commands` 与 `window`。未知／非法查询字段明确拒绝，成功与失败均经共享响应 schema 解码，CLI 不再仅作类型断言。
 
-现有 LLM 账本容量为**进程内全局 1,000 条，不是每作品 1,000 条**。命令摘要用同样全局有界的独立 1,000 条环形缓冲；不记录命令 body。`window` 为两类缓冲分别返回 `capacity/oldestSeq/latestSeq/truncated`，并给出随机 `processInstanceId` 与 `retention:'process-memory'`；truncated 表示该进程该缓冲已发生淘汰，不代表过滤查询本来就有命中。空缓冲 seq 为 null，查询结果为空不能证明未执行；重启清空且 processInstanceId 改变，旧作品也可能直接 404。
+现有 LLM 账本容量为**进程内全局 1,000 条，不是每作品 1,000 条**。命令摘要用同样全局有界的独立 1,000 条环形缓冲；不记录命令 body。`window` 为两类缓冲分别返回 `capacity/oldestSeq/latestSeq/truncated`，并给出随机 `processInstanceId` 与 `retention:'process-memory'`；truncated 表示该进程该缓冲已发生淘汰，不代表过滤查询本来就有命中。空缓冲 seq 为 null，查询结果为空不能证明未执行；重启清空遥测且 processInstanceId 改变，同一 SQLite 数据目录中的已保存作品仍可回读。
 
 每次响应的 LLM 内联数据按 requestId／本次 attemptIds 精确收集，不能继续仅靠 workId 加前后 cursor 筛选，避免锁冲突响应混入另一请求的记录。环形缓冲被淘汰不应导致本次响应丢遥测：在命令作用域内保留有界的本次记录副本。首次多步 advance 的内联 telemetry 保持完整本次请求，beatCommand.attemptIds 只关联 Beat；其他 Step 的业务诊断本票不扩展。
 
@@ -390,9 +416,9 @@ CLI 在失败 JSON 中保留原始安全 `code` 为 `causeCode`、operation、�
 
 ### 外层身份与生命周期
 
-#5 将 Work／Artifact 身份分别改为 `work-<UUID>`／`artifact-<UUID>`，避免重启后重新从零计数使旧请求误中新作品；客户端只把 ID 当作不透明身份。当前 Store 使用 UUID；旧序号数据无持久迁移需求，因为存储仍是进程内存。Beat 新卡为 `beat-item-<UUID>`，人工同版编辑保留旧卡身份，AI 再生采用全新卡身份。
+#5 将 Work／Artifact 身份分别改为 `work-<UUID>`／`artifact-<UUID>`，避免重启后重新从零计数使旧请求误中新作品；客户端只把 ID 当作不透明身份。当前两种 Store 都使用 UUID，SQLite 保留已保存的身份；旧内存实例和早期序号数据不自动迁移，保全边界见 Wiki 009。Beat 新卡为 `beat-item-<UUID>`，人工同版编辑保留旧卡身份，AI 再生采用全新卡身份。
 
-首次生成追加 v1 pending，整份再生成功追加下一版 pending；人工通过原子更新当前完整内容与 approved 状态，保留 id/version/createdAt。通用 approve/setStatus 不接受 Beat，不提供保存中间草稿、已通过修改或退回 pending；详见 [Wiki 005 写入一致性](./wiki/005-beat-generation-review.md#5-写入一致性生成追加通过同版本定稿)。本票仍用内存 WorkStore；SQL 表与持久化不在本节实施。
+首次生成追加 v1 pending，整份再生成功追加下一版 pending；人工通过原子更新当前完整内容与 approved 状态，保留 id/version/createdAt。通用 approve/setStatus 不接受 Beat，不提供保存中间草稿、已通过修改或退回 pending；详见 [Wiki 005 写入一致性](./wiki/005-beat-generation-review.md#5-写入一致性生成追加通过同版本定稿)。SQLite 以事务实现同一 WorkStore 语义，不改变 Beat 生命周期。
 
 ## Prose：#22 当前契约
 
@@ -448,7 +474,7 @@ save 必须校验 `expectedHumanStatus`：通过不增加版本，审批前发�
 
 共享 `recoverProseSubmission` 把保存回读的作品／章节、下一版本、新身份、相同状态和逐字符全文与冻结请求匹配；精确匹配可确认保存结果，较新或不同内容按冲突保留本地输入。通过确认要求同 id/version/createdAt 和逐字符全文。未知重写不能仅凭 GET 新版认领成功；更早 unknown 也不会被后续 not-committed 清除。客户端最多自动回读一次，重试使用冻结基线，不自动改版本覆盖服务器。
 
-当前 WorkStore 和诊断均在进程内；浏览器刷新后的恢复不等于服务重启持久化。SQLite／真实重启恢复归 #9。设定检索与工具执行 #28、作品 Wiki 档案演进及联合通过 #29 均为后续扩展，不属于本票保存语义。
+生产 WorkStore 使用 SQLite，成功保存的正文及其版本、状态和 inputs 在同一数据目录中跨服务重启保留；未保存的页面内容不恢复。诊断仍是进程内窗口，重启不会自动续跑模型。实际持久性验证见 [Wiki 009](./wiki/009-sqlite-persistence.md)。设定检索与工具执行 #28、作品 Wiki 档案演进及联合通过 #29 均为后续扩展，不属于正文保存语义。
 
 ## 后续章：#6 续写契约
 

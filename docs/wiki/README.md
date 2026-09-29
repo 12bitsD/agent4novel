@@ -156,7 +156,8 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [003 统一入口与 idea 工作区](./003-unified-entry-idea-workspace.md) | [#3](https://github.com/12bitsD/agent4novel/issues/3) | mixed | 创建作品、文件导入、早期编辑链路 |
 | [004 大纲弧线与剧情点](./004-outline-arcs-segments.md) | [#4](https://github.com/12bitsD/agent4novel/issues/4) | current | outline 契约、关卡、编辑界面 |
 | [005 第一章章纲生成与通过](./005-beat-generation-review.md) | [#5](https://github.com/12bitsD/agent4novel/issues/5) | mixed | 章纲编辑／再生／通过已接线；Agent 可观测协议、验证与交付证据 |
-| [006 后续章续写与跨章创作](./006-chapter-continuation.md) | [#6](https://github.com/12bitsD/agent4novel/issues/6) | current | 显式下一章、上一章承接、章节目录与历史编辑隔离 |
+| [006 后续章续写与跨章创作](./006-chapter-continuation.md) | [#6](https://github.com/12bitsD/agent4novel/issues/6) | mixed | 显式下一章、上一章承接、章节目录与历史编辑隔离 |
+| [009 SQLite 持久化](./009-sqlite-persistence.md) | [#9](https://github.com/12bitsD/agent4novel/issues/9) | current | 作品与全部产物版本、事务条件写入、数据目录与重启恢复 |
 | [010 预处理 RealStep 与 interview](./010-preprocess-realstep-interview.md) | [#10](https://github.com/12bitsD/agent4novel/issues/10) | historical | 已被替代的 preprocess 方案及其遗留机制 |
 | [011 Caption 与 Creative 方向包](./011-caption-creative-directions.md) | [#11](https://github.com/12bitsD/agent4novel/issues/11) | mixed | 提炼稿、创意稿、选择关卡；R10 A SP 采用依据、对照迭代与逐版反思 |
 | [013 完整设定生成与一次通过](./013-setting-generation-review.md) | [#13](https://github.com/12bitsD/agent4novel/issues/13) | mixed | 设定生成、页内编辑、同版本原子通过、失败对账 |

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1080" height="800" viewBox="0 0 1080 800" role="img" aria-labelledby="workflow-title workflow-desc" font-family="Georgia, 'Songti SC', 'Noto Serif CJK SC', serif">
   <title id="workflow-title">Pipeline、作者关卡与当前存储边界</title>
-  <desc id="workflow-desc">当前流程为提炼稿、选定创意稿、通过大纲和完整设定。设定修改仅保留在本页，通过时原子更新同一产物与版本。每章分别经过章纲和正文关卡；正文通过后停在阅读，由作者显式开始下一章。生成消费恰好上一章并记录输入版本；正文通过后仍可编辑，不自动重写后章。刷新恢复已保存正文，服务重启持久化待 SQLite #9。</desc>
+  <desc id="workflow-desc">当前流程为提炼稿、选定创意稿、通过大纲和完整设定。设定修改仅保留在本页，通过时原子更新同一产物与版本。每章分别经过章纲和正文关卡；正文通过后停在阅读，由作者显式开始下一章。生成消费恰好上一章并记录输入版本；正文通过后仍可编辑，不自动重写后章。作品和已保存产物持久化到本机 SQLite，同一数据目录可跨服务重启恢复；遥测仍为进程内窗口。</desc>
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
       <path d="M 0 0 L 10 5 L 0 10 z" fill="#444444"/>
@@ -92,15 +92,15 @@
 
   <rect x="80" y="568" width="440" height="60" rx="6" fill="#f7f7f7" stroke="#bbbbbb" stroke-dasharray="4 3"/>
   <text x="100" y="589" font-size="11" font-weight="600" fill="#555555">存储接缝</text>
-  <text x="100" y="613" font-size="11" fill="#444444">当前：InMemoryStore</text>
-  <text x="300" y="613" font-size="11" fill="#888888">规划：SQLite（#9）</text>
+  <text x="100" y="613" font-size="11" fill="#444444">生产：SqliteStore</text>
+  <text x="300" y="613" font-size="11" fill="#888888">测试：InMemoryStore</text>
   <rect x="550" y="568" width="450" height="60" rx="6" fill="#f7f7f7" stroke="#bbbbbb" stroke-dasharray="4 3"/>
   <text x="570" y="589" font-size="11" font-weight="600" fill="#555555">生成步骤接缝</text>
   <text x="570" y="613" font-size="11" fill="#444444" font-family="'SF Mono', Menlo, monospace">FakeStep / RealStep</text>
 
   <line x1="540" y1="655" x2="540" y2="680" stroke="#444444" marker-end="url(#arrow)"/>
   <rect x="290" y="684" width="500" height="66" rx="3" fill="#f3f3f3" stroke="#222222" stroke-width="1.2"/>
-  <text x="540" y="707" text-anchor="middle" font-size="13" fill="#111111">Store · 创作产物（当前存于内存）</text>
+  <text x="540" y="707" text-anchor="middle" font-size="13" fill="#111111">Store · 创作产物（保存到本机 SQLite）</text>
   <text x="540" y="731" text-anchor="middle" font-size="10.5" fill="#777777">同版本通过 · 正文保存追加版本 · 保留生成输入版本</text>
-  <text x="540" y="769" text-anchor="middle" font-size="10" fill="#777777">设定与章纲通过后只读；正文修改保留通过状态并提示衔接。SQLite 尚待实现。</text>
+  <text x="540" y="769" text-anchor="middle" font-size="10" fill="#777777">设定与章纲通过后只读；正文修改保留通过状态并提示衔接。已保存内容可跨服务重启恢复。</text>
 </svg>

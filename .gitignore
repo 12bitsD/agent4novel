@@ -3,3 +3,7 @@ dist/
 .DS_Store
 *.log
 /.env.local
+/.data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

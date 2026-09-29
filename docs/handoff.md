@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。最后更新：2026-09-30。#5/#22/#6 已合并关闭，当前推进 #19 契约治理；完整 MVP #1 尚未完成。剩余 #19 → #9 → #33 → #7 → #8 → 联验；#28/#29 后置。先读下方里程碑与验证边界，再进入对应 Wiki。
+> 用途：context compaction / 新会话接力。最后更新：2026-09-30。#5/#22/#6/#19 已合并关闭，当前推进 #9 SQLite；完整 MVP #1 尚未完成。剩余 #9 → #33 → #7 → #8 → 联验；#28/#29 后置。先读下方里程碑与验证边界，再进入对应 Wiki。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -14,11 +14,11 @@
 
 ## 当前里程碑与验证边界
 
-**首章与续章已交付，当前治理契约，完整 MVP 未完成。** #6 提供显式下一章、章节目录、稳定章节链接与历史正文编辑；#19 候选与门禁从 [Wiki 019](./wiki/019-contract-governance.md) 进入。
+**首章、续章与契约治理已交付，当前接入持久化，完整 MVP 未完成。** #6 提供显式下一章、章节目录、稳定章节链接与历史正文编辑；#19 收敛共享验证；#9 候选与实际门禁从 [Wiki 009](./wiki/009-sqlite-persistence.md) 进入。
 
-- **交付状态**：#22/PR #30、#6/[PR #32](https://github.com/12bitsD/agent4novel/pull/32) 已关闭/合并；#6 终止状态见 [完成评论](https://github.com/12bitsD/agent4novel/issues/6#issuecomment-5884089960)，不重复交付。
-- **已验证基线**：#6 有 fake 多章、CLI/Web、独立真实 Beat2/Prose2 和本地门禁证据，见 [Wiki 006](./wiki/006-chapter-continuation.md)。真实节点使用合成上游，不是全书/全部节点真实模型验收，也不证明长篇质量。#19 的当前候选验证只看其本票 Wiki，不能沿用 #6 测试结论。
-- **尚未具备**：跨服务重启恢复、作者侧 Agent 配置、坏例收集分析、长期历史记忆与 Wiki 检索。当前仍是 InMemoryStore，刷新可恢复不等于重启不丢数据；已有模型运行配置与 CLI 参数不等于 #7 作者配置已交付。
+- **交付状态**：#22/PR #30、#6/[PR #32](https://github.com/12bitsD/agent4novel/pull/32)、#19/[PR #34](https://github.com/12bitsD/agent4novel/pull/34) 已关闭/合并；#6 终止状态见 [完成评论](https://github.com/12bitsD/agent4novel/issues/6#issuecomment-5884089960)，不重复交付。#9 完成状态回读其 issue/PR，不能从本文候选描述推断已发布。
+- **已验证基线**：#6 有 fake 多章、CLI/Web、独立真实 Beat2/Prose2 和本地门禁证据，见 [Wiki 006](./wiki/006-chapter-continuation.md)。真实节点使用合成上游，不是全书/全部节点真实模型验收，也不证明长篇质量。#19 的共享验证证据见其本票 Wiki；#9 的 SQLite、真实进程重启及关闭路径需看 Wiki 009 的实际结果，不沿用旧票测试。
+- **当前存储边界**：生产启动使用 SQLite，恢复已提交的作品、产物版本、状态和输入引用；未保存页面编辑不恢复，遥测仍在进程内，不自动恢复模型调用。旧内存进程不自动迁移或清空。作者侧 Agent 配置、坏例收集、Docker/CI、长期历史记忆与 Wiki 检索仍未交付；已有运行配置与 CLI 参数不等于 #7 作者配置已交付。
 - **MVP 收尾条件**：按 [总票 #1](https://github.com/12bitsD/agent4novel/issues/1) 完成剩余需求后，联验两章双关卡、重启恢复、配置生效及坏例回看，并分别记录 fake、真实模型与 SQLite 重启证据。#1 当前保持 OPEN。
 
 ## 已完成
@@ -35,10 +35,12 @@
 - **#25** CLI 帮助零副作用与严格参数：顶级/子命令 `--help`、`-h` 在 I/O 前返回，非法语法返回安全 usage。保留业务结果与人工关卡；上下文及验收见 [Wiki 025](./wiki/025-cli-command-safety.md)。
 - **#5** 第一章章纲：编辑、整份再生、同版本通过及请求诊断已交付，issue 已关闭；历史方案和完成证据见 [Wiki 005](./wiki/005-beat-generation-review.md)。
 - **#22** 第一章正文：生成、编辑自动保存、整章重写、同版本通过及通过后编辑保持 approved 已交付；issue 已关闭。当前正文语义及验证边界见 [Wiki 022](./wiki/022-prose-generation-review.md)。
+- **#6** 后续章续写：显式开始下一章、上一章承接、章节目录与旧章正文编辑隔离已交付；见 [Wiki 006](./wiki/006-chapter-continuation.md)。
+- **#19** 契约治理：六 kind/status 内容、Store、公开请求/响应及消费者验证已收敛；保留关卡、版本条件和未知结果恢复，见 [Wiki 019](./wiki/019-contract-governance.md)。
 
 ## 已交付首章的关键约束
 
-本节保留 #22 交付时的边界；其中“只到第一章”已在 #6 扩展为手动逐章推进。当前多章协议以 [Wiki 006](./wiki/006-chapter-continuation.md) 和 schema 为准，原首章审核证据不改写。
+本节保留 #22 交付时的边界；其中“只到第一章”已在 #6 扩展为手动逐章推进，“当前只用内存”由 #9 SQLite 接替。当前多章协议以 [Wiki 006](./wiki/006-chapter-continuation.md) 和 schema 为准，存储恢复见 [Wiki 009](./wiki/009-sqlite-persistence.md)，原首章审核证据不改写。
 
 - 第一章章纲与正文仍是两个 Step／关卡。正文消费作者最终通过的 Beat 和完整 Setting；模型初稿与整章重写结果均 pending，重写使用当前编辑全文及意见。
 - 用户在2026-09-29明确替换旧的“正文草稿仅页面内存、通过后只读”默认：待把关正文自动保存到服务端，保存成功后刷新恢复；通过后默认阅读，进入编辑后自动保存且保持 approved。正文空草稿可保存 pending，但空白不能通过或保存为 approved。Setting／Beat 的既有只读边界不变。
@@ -52,7 +54,7 @@
 - **生成参数**：LongCat 默认 thinking disabled、temperature 0.9、topP 0.95，生产链和独立节点共用 ModelRuntime；单节点 config-file 可设置模型与参数，显式 CLI flag 逐字段优先。topK 明确拒绝，telemetry 记录实际公开参数。完整覆盖、provider 和 timeout 契约只看 [Wiki 016](./wiki/016-model-runtime-provider-config.md#生成参数与单节点覆盖)。
 - **#5 继承边界**：本页编辑、整份再生、同版本通过、UUID身份与请求关联诊断继续保留；“通过并生成正文”按钮在 #22 接到 Prose，#6 将同一双关卡推广到各章，不开放已通过章纲回改。Beat与Prose契约分别见 [schema](./schema.md)。
 - **workflow 骨架 + 步骤内 agent**；Step 零感知 kind，输出 `{content}` 装整个 JSON；kind = 节点名；pipeline 管解析/组装/持久化，是深模块不是 swap seam。
-- **两个真 seam**：store（InMemoryStore / #9 做 SQLiteStore）、step（FakeStep / RealStep）。
+- **两个真 seam**：store（生产 SqliteStore／测试可用 InMemoryStore）、step（FakeStep / RealStep）。SQL 事务内校验目标与实际输入版本；等待 LLM 不占数据库事务，提交时重新检查。
 - **模型路由边界**：ModelRuntime 位于 RealStep 内部，不是第三个 Pipeline 注入 seam；已注册 provider 通过模型 ID 切换，新增 provider 需要对应 adapter、registry 注册与 key 契约。完整 HOW 只看 [wiki 016](./wiki/016-model-runtime-provider-config.md)。
 - **6 节点 kind**：caption/creative/outline/setting 每作品一份；beat/prose 每作品×每章，生产复用beat/prose逐章推进；章号是正安全整数，每章独立版本。Artifact.content 的 JSON 表示由共享 kind/status schema 校验；humanStatus: pending | approved；appendArtifact版本+1。Setting／Beat／Prose专用finalize同版本原子定稿，通用setStatus均拒绝。Prose saveArtifact追加版本并保留匹配基线状态，不改变其他产物保存策略。
 - **creative 保存语义**（#3c 起，取代「人工保存即通过」）：`PUT /artifacts/creative` = saveCreativeDraft，存全部方向、永远 pending、带 `expectedHeadVersion` 乐观锁；`POST /artifacts/creative/select` = selectCreativeDirection，落**单方向**新版本 + approved。`directionId` 由 server 注入（`${workId}-dir-N`），web 永不生成、编辑不可改。
@@ -100,19 +102,18 @@ CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化
 
 #22 已合入 main；其原 source、固定点和候选审核记录均属于已交付历史，入口为 [Wiki 022](./wiki/022-prose-generation-review.md)。新票从当前 main 核对基线，不能把旧票授权或审核结论当成新票完成证据。
 
-**当前 #19 → #9 → #33 → #7 → #8 → MVP 联验**。范围已按三方案研究收敛并写回对应 issue，普通工程细节不再逐项请求 Human；新增重大冲突仍需升级。
+**当前 #9 → #33 → #7 → #8 → MVP 联验**。范围已按三方案研究收敛并写回对应 issue，普通工程细节不再逐项请求 Human；新增重大冲突仍需升级。
 
 | 交付批次 | 可验收结果 | 后续衔接 |
 |---|---|---|
-| #19 契约治理（当前） | 六 kind/status、Store、公开请求响应及消费者验证一致，非法内容零写入 | 保留多章/CAS/unknown，交接 #9 同接口测试 |
-| #9 SQLite | 全部产物版本、状态和输入引用跨真实进程重启恢复 | 显式幂等演示初始化、不自动续跑模型 |
+| #9 SQLite（当前） | 全部产物版本、状态和输入引用跨真实进程重启恢复 | 显式幂等演示初始化、不自动续跑模型 |
 | #33 本机 Docker/CI | 单容器同源服务、数据目录卷恢复、远端 fake CI | 不做公网部署/镜像发布/自动部署 |
 | #7 Agent 配置 | 作品默认＋每步覆盖，生成冻结配置和文件版本 | Prompt/Skill 文件沿 ADR0002，工具执行归 #28 |
 | #8 坏例 | 已保存正文选段、备注、原文快照和来源版本、列表回看 | 自动分析及持续重定位后置 |
 | #1 MVP 联验 | 两章双关卡、历史修改、服务/容器重启、配置生效、坏例回看 | 各票和实际贯通证据均完成才能关闭 |
 | #28/#29 扩展 | 设定查询工具循环、作品 Wiki 档案演进 | 当前均未实现，保持后置 |
 
-WHAT/AC 和依赖以 [父票 #1](https://github.com/12bitsD/agent4novel/issues/1) 及子票为准；[研究与决定清单](./research/mvp-delivery-options.md) 保存取舍。#33 的 SQLite 恢复 AC 原生依赖 #9；不为纯排期增加其他硬依赖。不迁移或清空旧内存实例；若以后需要切换且内有重要作品，先保全。配置/坏例/SQLite/容器仍未实现，不能把方案已确定当作能力已验证。
+WHAT/AC 和依赖以 [父票 #1](https://github.com/12bitsD/agent4novel/issues/1) 及子票为准；[研究与决定清单](./research/mvp-delivery-options.md) 保存取舍。#33 的 SQLite 恢复 AC 原生依赖 #9；不为纯排期增加其他硬依赖。不迁移或清空旧内存实例；切换且内有重要作品时先保全。配置/坏例/容器仍未实现，SQLite 的验收范围以 Wiki 009 为准，不能把方案已确定当作能力已验证。
 
 继续继承条件写入、快照隔离、冻结提交与回读对账，不能照搬Outline保存／通过流程。#29中的WorkWiki指本书设定库，初始Setting与Wiki应呈现一套正式事实；正文与新增／更新档案一同通过、失败不保存一半、重试不重复历史，均是该扩展接入时的目标。通过后正文编辑的异步Wiki更新也是#29待对齐项，#22不预建任务。#17独立设定修改、#18冲突澄清、#20章纲比较、#21章节重生继续后置；#12/#15既有边界不变。
 
