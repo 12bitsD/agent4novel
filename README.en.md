@@ -57,7 +57,7 @@ Approved settings and chapter plans cannot currently be changed. After you edit 
 
 ### 1. Start demo mode
 
-These commands are for macOS and Linux terminals. Install Git (to download the source), Node.js (to run the program), and pnpm (to install dependencies), then run:
+These commands are for macOS and Linux terminals. Install Git (to download the source), Node.js 22.13.0 or later (to run the program), and pnpm (to install dependencies), then run:
 
 ```bash
 git clone https://github.com/12bitsD/agent4novel.git

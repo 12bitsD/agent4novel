@@ -59,7 +59,7 @@
 
 ### 1. 启动演示模式
 
-以下命令适用于 macOS 和 Linux 终端。安装 Git（下载源码）、Node.js（运行程序）和 pnpm（安装项目依赖）后执行：
+以下命令适用于 macOS 和 Linux 终端。安装 Git（下载源码）、Node.js 22.13.0 或更高版本（运行程序）和 pnpm（安装项目依赖）后执行：
 
 ```bash
 git clone https://github.com/12bitsD/agent4novel.git
