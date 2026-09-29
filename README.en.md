@@ -1,33 +1,28 @@
 <p align="center">
-  <img src="./docs/assets/logo.svg" alt="agent4novel" width="280">
+  <img src="./docs/assets/logo.svg" alt="agent4novel book mark" width="64" height="64">
 </p>
 
 <h1 align="center">agent4novel</h1>
 
-<p align="center">
-  <strong>AI-assisted writing for Chinese web novels</strong><br>
-  Authors choose the direction, edit generated content, and decide when to continue.
-</p>
+<p align="center">AI-assisted writing for Chinese web novels · Runs on your computer, in your browser</p>
 
 <p align="center">
-  <a href="#how-it-works">How it works</a> ·
   <a href="#quick-start">Try it</a> ·
-  <a href="#docs">Read the docs</a> ·
-  <a href="#roadmap">Development plans</a> ·
+  <a href="#how-it-works">Writing workflow</a> ·
+  <a href="#docs">Docs</a> ·
   <a href="./README.md">中文</a>
 </p>
 
 <p align="center">
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-5B6ABF" alt="MIT License"></a>
-  <a href="#quick-start"><img src="https://img.shields.io/badge/demo-no_API_key-2D8A78" alt="Demo mode needs no API key"></a>
-  <a href="#current-status"><img src="https://img.shields.io/badge/status-in_development-C47742" alt="In development"></a>
+  <a href="#current-status"><img src="https://img.shields.io/badge/status-in_development-555555?style=flat-square" alt="In development"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555?style=flat-square" alt="MIT License"></a>
 </p>
 
----
+Enter a story idea or upload text from a TXT, Markdown (`.md`), Word (`.docx`), or PDF document. AI proposes story directions, plans the plot, develops characters and world rules, and generates chapter prose. You choose the story direction, edit the content, and decide when to start the next chapter.
 
-**agent4novel is an open-source tool for writing Chinese web novels. It runs on your computer and you use it in a browser.** It is for authors who have a story idea and want AI assistance with planning and writing one chapter at a time.
+![The current app's chapter list, prose reading area, and editing control](./docs/assets/workspace-demo.jpg)
 
-Enter a story idea or upload text from a TXT, Markdown (`.md`), Word (`.docx`), or PDF document. AI uses this material to propose story directions, plan the plot, develop characters and world rules, and generate chapter prose.
+<p align="center"><sub>Actual interface in demo mode, shown in Chinese. The prose is a specially written example, not model output.</sub></p>
 
 ## How it works
 
@@ -45,15 +40,9 @@ Each chapter goes through both planning and prose. Approving the prose marks tha
 
 Approved settings and chapter plans cannot currently be changed. After you edit approved prose in an earlier chapter, existing later chapters are flagged for a continuity check: the author needs to check whether the plot still connects. Their text and approval status are preserved; the app does not rewrite them automatically.
 
-## Current status
-
-**Chapter-by-chapter writing is available. The project is still in development.** Current limitations:
-
-- **Stopping or restarting the server clears works.** Work data is held in the memory of the local server started by `pnpm dev`; it is not yet written to disk. Copy any text you need into local files.
-- **Prose saves automatically to the local server.** Once the page shows that it is saved, a browser refresh can recover it as long as the server has not stopped or restarted. Unsubmitted manual edits to settings and chapter plans remain in the current page. Refreshing the page or discarding edits to leave loses those edits.
-- **Full-novel generation quality has not yet been evaluated.** See the [chapter continuation verification record](./docs/wiki/006-chapter-continuation.md#测试与验证) for the scope and results of existing tests.
-
 ## Quick start
+
+> **Before trying the app: stopping or restarting the local server clears works.** Works are not yet saved to disk. Copy any text you need into local files.
 
 ### 1. Start demo mode
 
@@ -92,46 +81,40 @@ Save the file and run `pnpm dev` again.
 
 When you use a real model, your input and the story content needed for generation are sent to the chosen model service. Git does not add `.env.local` to version history by default; keep the key in that file. See [model configuration](./docs/wiki/016-model-runtime-provider-config.md#配置契约) for further options.
 
+## Current status
+
+**Chapter-by-chapter writing is available. The project is still in development.** Current limitations:
+
+- **Stopping or restarting the server clears works.** Work data is held in the memory of the local server started by `pnpm dev`; it is not yet written to disk. Copy any text you need into local files.
+- **Prose saves automatically to the local server.** Once the page shows that it is saved, a browser refresh can recover it as long as the server has not stopped or restarted. Unsubmitted manual edits to settings and chapter plans remain in the current page. Refreshing the page or discarding edits to leave loses those edits.
+- **Full-novel generation quality has not yet been evaluated.** See the [chapter continuation verification record](./docs/wiki/006-chapter-continuation.md#测试与验证) for the scope and results of existing tests.
+
 <a id="architecture"></a>
 
 ## Docs
 
-Most engineering documentation is in Chinese.
+**This README is for people using the app.** It covers the project, writing workflow, installation, and limitations.
 
-| Topic | Documentation |
-| --- | --- |
-| How to configure a model and its generation settings | [Model configuration](./docs/wiki/016-model-runtime-provider-config.md) |
-| How to operate works from the command line or run one generation step | [Command-line usage](./docs/wiki/014-agent-cli-telemetry.md) |
-| Why a feature was designed this way, how it works, and how it was verified | [Engineering Wiki](./docs/wiki/README.md) |
-| What the project's terms mean | [Domain glossary](./CONTEXT.md) |
-| How to contribute | [Development instructions](./AGENTS.md) |
-
-## Roadmap
-
-The [issue list](https://github.com/12bitsD/agent4novel/issues) records feature requests, acceptance criteria, and their status. The [initial feature scope](https://github.com/12bitsD/agent4novel/issues/1) describes the planned capabilities.
-
-Maintainers use the [Project board](https://github.com/users/12bitsD/projects/3) to set priorities and development order. The board is currently private and requires access permission.
+**Engineering documentation is primarily for development and operations agents**: AI assistants that develop, test, or operate the project. Human developers can also consult it. The Wiki holds engineering design and verification records, Issues hold requirements and acceptance criteria, and Project holds priorities and scheduling. Most engineering documentation is in Chinese.
 
 <a id="stack"></a>
 <a id="development-process"></a>
+<a id="development"></a>
 
-## Development
+<details>
+<summary>Engineering documentation for agents</summary>
 
-The frontend uses React and Vite; the server uses Hono. The code is written in TypeScript, and model calls use the Vercel AI SDK.
+- **Development rules:** [AGENTS.md](./AGENTS.md) and the [completion checklist](./docs/agents/ticket-completion-checklist.md).
+- **Operation and troubleshooting:** [runtime instructions](./.claude/skills/agent4novel-drive/SKILL.md), [model configuration](./docs/wiki/016-model-runtime-provider-config.md), and [command-line usage](./docs/wiki/014-agent-cli-telemetry.md).
+- **Design and implementation:** [Engineering Wiki](./docs/wiki/README.md), [architecture decisions](./docs/adr/), and [research](./docs/research/).
+- **Terms and data definitions:** [domain glossary](./CONTEXT.md) and [data model](./docs/schema.md).
+- **Task handoff:** [handoff record](./docs/handoff.md).
 
-Run these commands from the repository root:
+</details>
 
-```bash
-pnpm test        # run tests without calling remote models
-pnpm typecheck   # check TypeScript types
-pnpm build       # build the frontend
-```
+## Roadmap
 
-The command-line tool supports creating works, generating content, and submitting edits. Scripts and AI coding assistants can call it. View its help with:
-
-```bash
-./apps/cli/bin/a4n --help
-```
+[Issues](https://github.com/12bitsD/agent4novel/issues) record requirements, acceptance criteria, and status. The [initial feature scope](https://github.com/12bitsD/agent4novel/issues/1) describes the planned capabilities. The [Project board](https://github.com/users/12bitsD/projects/3) manages priorities and scheduling; it is currently private and requires access permission.
 
 ---
 
