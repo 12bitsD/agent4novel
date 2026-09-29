@@ -7,7 +7,7 @@ description: 用命令行驱动 agent4novel 创作链路、独立运行节点和
 
 本项目的创作链路用 CLI(`./apps/cli/bin/a4n`)驱动,**不要手搓 curl**。只有 `select`／`save-outline` 自动回填 `expectedHeadVersion`；Setting、Beat、Prose和start-chapter的专用写命令使用请求文件中的显式基线，不替换成最新head。正常结果的stdout是纯JSON，进度与错误走stderr。HTTP/传输错误会exit≠0，但`advance`/`start-chapter`即使HTTP200也可能返回`kind: "failed"`，必须同时检查JSON outcome。
 
-模型与 provider 配置的唯一 HOW 是 [`docs/wiki/016-model-runtime-provider-config.md`](../../../docs/wiki/016-model-runtime-provider-config.md)。本 skill 只保留运行时操作,不要在其他入口复制配置规则。
+模型与 provider 配置的唯一 HOW 是 [`docs/wiki/016-model-runtime-provider-config.md`](../../../docs/wiki/016-model-runtime-provider-config.md)；持久化、数据目录和备份恢复的 HOW 是 [Wiki 009](../../../docs/wiki/009-sqlite-persistence.md)。本 skill 只保留运行时操作,不要在其他入口复制配置规则。
 
 ## 启动服务
 
@@ -19,6 +19,8 @@ pnpm dev                         # server :8787 + web :5173
 ```
 
 Live 模式会把生成所需的素材和上游产物发送给所选远程 provider。
+
+服务默认读取项目根目录的 `.data/agent4novel.sqlite`；用 `A4N_DATA_DIR` 指向明确的数据目录。首次启动不自动放入示例作品；需要空库示例时显式设置 `A4N_SEED_DEMO=1`，初始化在事务中执行，非空库不重复添加。测试应使用独立临时目录和端口，勿把 smoke 写入用户作品库；不要停止或清空仍持有作品的旧版内存服务。备份前停止所有访问同一数据目录的进程，复制整个目录；恢复前先保留现有目录的备份，具体步骤看 Wiki 009。
 
 ## 独立运行节点与对照 SP
 
@@ -94,7 +96,7 @@ Prose文件沿用章号/id/version基线，content为`{text}`；save额外必须
 
 web 是 React SPA:`curl http://localhost:5173/` 只能拿到 HTML 壳 + 脚本标签,**看不到渲染后内容**。要内容一律走 API(CLI 就是封装);只有需要确认页面结构/样式资源时才读 HTML。`/api/*` 由 vite 代理到 8787。
 
-当前作品和telemetry都在内存里。正文自动保存成功后可浏览器刷新恢复，server重启后测试case仍会消失；准备多步case时保持同一server进程。通过后的正文默认阅读，进入编辑后保存仍approved；Setting／Beat通过后仍只读。#9才负责跨server重启恢复，#28/#29检索工具、长期记忆与作品Wiki均未接入当前逐章流程。Web用作品/章号链接恢复阅读；切章不会改变当前工作章或触发生成。旧章正文修改保留后章状态，needsContinuityReview只提示衔接，不能据此自动重写或重审。
+生产作品保存在 SQLite；同一数据目录中的已提交作品、各版本产物、状态和输入引用可跨 server 重启读取。未保存页面编辑不恢复，telemetry 仍是进程内窗口。重启不自动续跑模型：先用 get 读取作品与目标产物，再按原冻结请求和恢复规则决定动作；空日志不能证明未写入。通过后的正文默认阅读，进入编辑后保存仍 approved；Setting／Beat 通过后仍只读。#28/#29 检索工具、长期记忆与作品 Wiki 均未接入当前逐章流程。Web 用作品/章号链接恢复阅读；切章不会改变当前工作章或触发生成。旧章正文修改保留后章状态，needsContinuityReview 只提示衔接，不能据此自动重写或重审。
 
 Web首次生成遇到unknown（包括HTTP200业务结果）时保留原类型/章号，锁定切章和再次生成；通过“刷新作品”显式GET看到原目标后恢复。回读失败或缺少目标仍不代表未落库，不自动重发。起章unknown另保留冻结请求，允许作者重试同一目标/基线。返回书架的放弃确认会提示已发请求可能继续处理。
 

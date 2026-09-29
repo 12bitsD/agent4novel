@@ -8,9 +8,9 @@ topics: ["scaffold", "storage", "step-contract", "pipeline", "workflow-gates", "
 code_paths: ["packages/contracts/src/artifacts.ts", "packages/contracts/src/step.ts", "apps/server/src/store/work-store.ts", "apps/server/src/store/in-memory-store.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts", "apps/web/src/pages/Bookcase.tsx"]
 symbols: ["Artifact", "Work", "WorkStore", "InMemoryStore", "Step", "runStep", "Pipeline"]
 inherits: []
-changed_by: ["003", "010", "011", "014", "016"]
+changed_by: ["003", "010", "011", "014", "016", "009"]
 read_when: ["understand-project-foundation", "change-storage-contract", "change-step-contract", "change-pipeline-gates", "trace-bookcase-origin"]
-last_context_reviewed: "2026-09-04"
+last_context_reviewed: "2026-09-30"
 ---
 
 # 002 — 脚手架、存储、Pipeline 骨架与书架
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-09-04"
 - **原始目的**：用 fake 数据和 fake step 打通 contracts → store → Pipeline → Hono API → React 书架。
 - **实际落地**：monorepo、首版产物契约、`WorkStore`/`InMemoryStore`、可注入 Pipeline、两类关卡、作品 API 和书架均完成。
 - **当前价值**：存储与步骤是 seam、Pipeline 是深模块、产物追加版本、输入输出在边界校验等原则仍有效。
-- **后续变化**：003 加入口；010/011 接入并重构生成链；014 加 CLI/遥测；016 接管 provider。本页的首版枚举和 demo 链不是当前契约。
+- **后续变化**：003 加入口；010/011 接入并重构生成链；014 加 CLI/遥测；016 接管 provider；[Wiki 009](./009-sqlite-persistence.md) 在相同 WorkStore 接缝接入默认 SQLite。本页的首版枚举、内存装配和 demo 链保留为历史。
 - **代码入口**：[`step.ts`](../../packages/contracts/src/step.ts)、[`work-store.ts`](../../apps/server/src/store/work-store.ts)、[`pipeline.ts`](../../apps/server/src/pipeline/pipeline.ts)。
 
 ## 设计目的
@@ -76,6 +76,14 @@ last_context_reviewed: "2026-09-04"
 
 ## 上下文演进
 
+### 2026-09-30 — 持久化沿用原有存储接缝
+
+- **触发证据**：#9 需要让已保存作品在服务进程重启后恢复。
+- **原假设**：首版 InMemoryStore 足以验证整个创作链路，但不承担磁盘持久性。
+- **决定**：由 [Wiki 009](./009-sqlite-persistence.md) 接管 SQLite 实现与运行 HOW，沿用 WorkStore，不把持久化规则散入各写作 Step。
+- **影响**：生产启动使用 SQLite；内存实现继续用于快速行为测试，产物版本和关卡语义仍由同一接口保证。
+- **上下文处理**：preserve 最初模块边界、设计理由与测试历史；replace 当前后继入口，首版内存实现说明不改写成历史上已有 SQLite。
+
 ### 2026-08-22 — 首个纵向骨架落地
 
 - **触发证据**：后续写作步骤都需要同一条可启动、可验证的基础链路。
@@ -94,4 +102,4 @@ last_context_reviewed: "2026-09-04"
 
 ## 交接结论
 
-修改底层架构时保留三项约束：`WorkStore` 与 `Step` 是 seam，Pipeline 是集中规则的深模块，跨模块数据必须过 schema。当前工作流、CLI 和 provider 分别继续读 011、004、014、016。
+修改底层架构时保留三项约束：`WorkStore` 与 `Step` 是 seam，Pipeline 是集中规则的深模块，跨模块数据必须过 schema。当前工作流、CLI 和 provider 分别继续读 011、004、014、016；磁盘持久化与恢复读 [Wiki 009](./009-sqlite-persistence.md)。

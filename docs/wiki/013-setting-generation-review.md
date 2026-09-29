@@ -8,7 +8,7 @@ topics: ["setting", "setting-review", "artifact-finalization", "stable-ids", "co
 code_paths: ["packages/contracts/src/setting.ts", "packages/contracts/src/artifacts.ts", "apps/server/src/store/work-store.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts", "apps/server/src/start.ts", "apps/web/src/pages/Workspace.tsx", "apps/cli/src/commands.ts"]
 symbols: ["SettingContent", "SettingReviewDraft", "matchesSettingSubmission", "WorkStore", "finalizeArtifact", "approveSetting", "createSettingStep", "reduceSettingReview", "Pipeline.advance", "workflowOf", "expectedHeadVersion"]
 inherits: ["004", "011", "014", "016"]
-changed_by: ["005", "022", "019"]
+changed_by: ["005", "022", "019", "009"]
 read_when: ["implement-setting", "change-setting-schema", "change-setting-review", "change-artifact-finalization", "trace-setting-decisions"]
 last_context_reviewed: "2026-09-30"
 ---
@@ -23,6 +23,7 @@ last_context_reviewed: "2026-09-30"
 - **当前价值**：本页拥有设定生成与一次通过的工程 HOW；先读“原子写入与快照隔离”“提交结果确认”，再沿“代码落点”和测试矩阵核对。内容与公开协议归 [schema](../schema.md#setting13-已确认设计)，代码执行定义归 contracts。
 - **后续变化**：[Wiki 005](./005-beat-generation-review.md) 接入章纲，[Wiki 022](./022-prose-generation-review.md) 接入消费 approved Beat 与 Setting 的正文，六步链止于 `prose-approved`；正文保存不修改 Setting，正文通过后可编辑的例外不扩展到设定。通过后设定修改归 [#17](https://github.com/12bitsD/agent4novel/issues/17)，冲突澄清归 [#18](https://github.com/12bitsD/agent4novel/issues/18)，治理／存储等排期见 [handoff](../handoff.md)。
 - **契约治理后继**：[Wiki 019](./019-contract-governance.md) 扩展全 kind 内容与公开协议校验；本页 Setting 通过语义及原审核证据不变。
+- **持久化后继**：[Wiki 009](./009-sqlite-persistence.md) 将同版本定稿与上游条件写入落实为 SQLite 事务；已通过设定跨服务重启保留，尚未提交的页面编辑仍不保存。本页内存实现与验证属于 #13 当时基线。
 - **代码入口**：[内容契约](../../packages/contracts/src/setting.ts)、[结果对账](../../packages/contracts/src/setting-submission.ts)、[完成命令](../../apps/server/src/setting-review.ts)、[store](../../apps/server/src/store/work-store.ts)、[Web 状态](../../apps/web/src/setting-review.ts)、[工作台](../../apps/web/src/pages/Workspace.tsx)。
 
 ## 设计目的
@@ -442,6 +443,14 @@ CLI 一次进程调用内使用与 Web 相同的规范化和对账函数，网�
 全仓契约治理在 #13 后另做，#13 自身仍必须复用集中契约；Hono RPC 归 #15。独立 SQL 表、materials 生命周期及 SQLite 迁移不在本票，也不以 InMemoryStore 验证代替持久化验证。
 
 ## 上下文演进
+
+### 2026-09-30 — 同版本定稿接入 SQLite 事务
+
+- **触发证据**：#9 为 WorkStore 接入磁盘持久化，并要求保持 Setting 同 id/version 的内容与状态原子定稿。
+- **原假设**：#13 在内存临界区验证条件并完成更新，只保证同进程一致性。
+- **决定**：由 [Wiki 009](./009-sqlite-persistence.md) 负责 SQL 条件检查、事务和重启恢复，继续复用共享 Setting 校验与回读协议。
+- **影响**：已提交设定保存到磁盘；页面草稿、通过后只读、失败不留下半份结果的规则不变。
+- **上下文处理**：preserve 原始目的、Human 决定、失败实验和完成审核证据；replace 当前存储后继入口，不重写历史门禁。
 
 ### 2026-09-30 — 契约校验交接 #19
 

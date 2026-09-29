@@ -84,6 +84,43 @@ async function advance(app: ReturnType<typeof createApp>, workId: string) {
 }
 
 describe('works routes', () => {
+  it('selects a direction as one approved write even when a separate status write is unavailable', async () => {
+    class NoSecondWrite extends InMemoryStore {
+      override setStatus(): void { throw new Error('simulated interrupted second persistence operation') }
+    }
+    const store = new NoSecondWrite()
+    const work = store.createWork({ seed: 'atomic selection' })
+    const head = store.appendArtifact(work.id, 'creative', validCreative)
+    const { app } = makeApp({ store })
+    const response = await app.request(`/api/works/${work.id}/artifacts/creative/select`, {
+      method: 'POST', headers: jsonHeaders, body: JSON.stringify({ directionId: 'work-1-dir-1', expectedHeadVersion: head.version }),
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ humanStatus: 'approved', version: 2 })
+    expect(store.getWork(work.id)!.artifacts).toMatchObject([{ humanStatus: 'approved', version: 2 }])
+  })
+  it.each(['creative', 'outline'] as const)('rejects a concurrent %s replacement at the write boundary', async kind => {
+    class CompetingWrite extends InMemoryStore {
+      race = false
+      override appendArtifact(...args: Parameters<InMemoryStore['appendArtifact']>) {
+        if (this.race) { this.race = false; super.appendArtifact(args[0], args[1], args[2]) }
+        return super.appendArtifact(...args)
+      }
+    }
+    const store = new CompetingWrite()
+    const work = store.createWork({ seed: 'race' })
+    const content = kind === 'creative' ? validCreative : validOutline
+    const head = store.appendArtifact(work.id, kind, content)
+    const { app } = makeApp({ store })
+    store.race = true
+    const response = await app.request(`/api/works/${work.id}/artifacts/${kind}`, {
+      method: 'PUT', headers: jsonHeaders, body: JSON.stringify({ content, expectedHeadVersion: head.version }),
+    })
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({ code: 'version-conflict' })
+    expect(store.headVersion(work.id, kind)).toBe(2)
+  })
+
   it('rejects unknown create fields before creating any work', async () => {
     const { store, app } = makeApp()
     const response = await app.request('/api/works', { method: 'POST', headers: jsonHeaders,

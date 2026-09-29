@@ -430,10 +430,8 @@ export class Pipeline {
       throw new KnownError('llm-invalid-output', 'invalid prose output', { retryable: true })
     }
     if (execution) execution.stage = 'commit'
-    const artifact = this.store.appendArtifact(workId, entry.outputKind, output.content, { preconditions, chapter: entry.chapter, ...(entry.chapter ? { inputs } : {}) })
-    if (!entry.gateAfter) {
-      this.store.setStatus(workId, entry.outputKind, 'approved', { chapter: entry.chapter })
-    }
+    const artifact = this.store.appendArtifact(workId, entry.outputKind, output.content, { preconditions, chapter: entry.chapter,
+      humanStatus: entry.gateAfter ? 'pending' : 'approved', ...(entry.chapter ? { inputs } : {}) })
     // Chapter input references persist for continuity warnings; safe logs retain the same bounded identities.
     const consumed = Object.fromEntries(
       (entry.consumes ?? [])
@@ -459,7 +457,10 @@ export class Pipeline {
     if (kind === 'setting') {
       throw new KnownError('setting-approval-required', 'setting must use its full-content approval command')
     }
-    this.store.setStatus(workId, kind, 'approved', chapter !== undefined ? { chapter } : undefined)
+    const head = this.store.getWork(workId)?.artifacts.find(a => a.kind === kind && a.chapter === chapter)
+    if (!head) throw new KnownError('artifact-not-found', 'artifact not found')
+    this.store.setStatus(workId, kind, 'approved', { chapter, preconditions: [{ kind, chapter,
+      head: { artifactId: head.id, version: head.version, humanStatus: head.humanStatus } }] })
     this.lastFailure.delete(workId)
   }
 }

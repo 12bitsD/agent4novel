@@ -18,7 +18,7 @@ import {
   creativeDraftRequestSchema, selectCreativeRequestSchema, outlineDraftRequestSchema, approveRequestSchema,
   advanceOutcomeDtoSchema, pipelineStateSchema, settingApproveResponseSchema, diagnosticResponseSchema, httpErrorSchema,
 } from '@agent4novel/contracts'
-import type { ApiError, ArtifactKind, OutlineContent, OutlineDraft, WorkflowState, WorkView, LlmTelemetry } from '@agent4novel/contracts'
+import type { ApiError, Artifact, JsonValue, HumanStatus, ArtifactKind, OutlineContent, OutlineDraft, WorkflowState, WorkView, LlmTelemetry } from '@agent4novel/contracts'
 import type { Pipeline } from '../pipeline/pipeline.js'
 import { KnownError } from '../errors.js'
 import { diagnosticsFor, withRequest, currentRequest, recordCommand } from '../steps/telemetry.js'
@@ -108,22 +108,22 @@ function routeError(c: Context, err: unknown): Response {
   return responseUnavailable(c)
 }
 
-// 乐观锁:expectedHeadVersion 必须等于当前 head,否则 409(#3c 决策 9)
-function assertHead(
-  c: Context,
-  store: WorkStore,
-  workId: string,
-  kind: ArtifactKind,
-  expected: number,
-): Response | null {
-  const head = store.headVersion(workId, kind)
-  if (head === undefined || head !== expected) {
-    return c.json(
-      errorBody('version-conflict', `head is ${head ?? 'none'}, expected ${expected}`),
-      409,
-    )
+// The same observed head validates the request and conditions the actual store commit.
+function assertHead(c: Context, head: Artifact | undefined, expected: number): Response | null {
+  if (!head || head.version !== expected) {
+    return c.json(errorBody('version-conflict', 'artifact head changed'), 409)
   }
   return null
+}
+
+function appendFromHead(c: Context, store: WorkStore, head: Artifact, content: JsonValue, humanStatus: HumanStatus = 'pending') {
+  try {
+    const artifact = store.appendArtifact(head.workId, head.kind, content, { chapter: head.chapter, humanStatus,
+      preconditions: [{ kind: head.kind, chapter: head.chapter,
+        head: { artifactId: head.id, version: head.version, humanStatus: head.humanStatus } }],
+    })
+    return contractJson(c, artifactSchema, artifact)
+  } catch (error) { return routeError(c, error) }
 }
 
 // 读模型(#3c 决策 11,#4 按 pendingGate.kind 分派):与 artifacts 同一快照派生,web 只渲染不重建状态机
@@ -360,7 +360,8 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
   // saveCreativeDraft:存全部方向,永远 pending(不再是「人工保存即通过」)
   app.put('/api/works/:id/artifacts/creative', async (c) => {
     const workId = c.req.param('id')
-    if (!store.getWork(workId)) return c.json(errorBody('work-not-found', 'not found'), 404)
+    const work = store.getWork(workId)
+    if (!work) return c.json(errorBody('work-not-found', 'not found'), 404)
     const body = await readJsonBody(c)
     if (!body.ok) return body.response
     const parsed = creativeDraftRequestSchema.safeParse(body.data)
@@ -370,10 +371,10 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
         422,
       )
     }
-    const conflict = assertHead(c, store, workId, 'creative', parsed.data.expectedHeadVersion)
+    const current = work.artifacts.find(a => a.kind === 'creative')
+    const conflict = assertHead(c, current, parsed.data.expectedHeadVersion)
     if (conflict) return conflict
-    const artifact = store.appendArtifact(workId, 'creative', parsed.data.content)
-    return contractJson(c, artifactSchema, artifact)
+    return appendFromHead(c, store, current!, parsed.data.content)
   })
 
   // selectCreativeDirection:显式选定单方向 → 单方向新版本 + approved
@@ -390,9 +391,9 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
         400,
       )
     }
-    const conflict = assertHead(c, store, workId, 'creative', parsed.data.expectedHeadVersion)
-    if (conflict) return conflict
     const current = work.artifacts.find((a) => a.kind === 'creative')
+    const conflict = assertHead(c, current, parsed.data.expectedHeadVersion)
+    if (conflict) return conflict
     const content = creativeContentSchema.safeParse(current?.content)
     if (!current || !content.success) {
       return c.json(errorBody('artifact-not-found', 'no creative artifact'), 404)
@@ -404,15 +405,14 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
         409,
       )
     }
-    store.appendArtifact(workId, 'creative', { directions: [pack] })
-    store.setStatus(workId, 'creative', 'approved')
-    return contractJson(c, artifactSchema, store.getWork(workId)!.artifacts.find((artifact) => artifact.kind === 'creative')!)
+    return appendFromHead(c, store, current, { directions: [pack] }, 'approved')
   })
 
   // saveOutlineDraft(#4):保存大纲草稿,永远 pending;「通过」走通用 /approve
   app.put('/api/works/:id/artifacts/outline', async (c) => {
     const workId = c.req.param('id')
-    if (!store.getWork(workId)) return c.json(errorBody('work-not-found', 'not found'), 404)
+    const work = store.getWork(workId)
+    if (!work) return c.json(errorBody('work-not-found', 'not found'), 404)
     const body = await readJsonBody(c)
     if (!body.ok) return body.response
     const parsed = outlineDraftRequestSchema.safeParse(body.data)
@@ -422,14 +422,10 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
         422,
       )
     }
-    const conflict = assertHead(c, store, workId, 'outline', parsed.data.expectedHeadVersion)
+    const current = work.artifacts.find(a => a.kind === 'outline')
+    const conflict = assertHead(c, current, parsed.data.expectedHeadVersion)
     if (conflict) return conflict
-    const artifact = store.appendArtifact(
-      workId,
-      'outline',
-      normalizeOutlineIds(workId, parsed.data.content),
-    )
-    return contractJson(c, artifactSchema, artifact)
+    return appendFromHead(c, store, current!, normalizeOutlineIds(workId, parsed.data.content))
   })
 
   // advance = 推进到下一个关卡(链式);返回可穷举 outcome。

@@ -1,4 +1,4 @@
-import { emptyAgentConfig, perChapterKinds, perWorkKinds, artifactSchema, workSchema, workDetailSchema, workCreateRequestSchema, workListResponseSchema } from '@agent4novel/contracts'
+import { emptyAgentConfig, artifactSchema, workSchema, workDetailSchema, workCreateRequestSchema, workListResponseSchema } from '@agent4novel/contracts'
 import { randomUUID } from 'node:crypto'
 import type {
   Artifact,
@@ -14,17 +14,9 @@ import { KnownError } from '../errors.js'
 import type { AppendOptions, ArtifactPrecondition, FinalizeArtifactInput, SaveArtifactInput, WorkStore } from './work-store.js'
 
 import { validateStoreValue } from './validation.js'
+import { assertBucketAddress, assertDirectStatusAllowed } from './invariants.js'
 
 type Bucket = { kind: ArtifactKind; chapter?: number; versions: Artifact[] }
-
-function assertBucketAddress(kind: ArtifactKind, chapter?: number): void {
-  if (perChapterKinds.includes(kind) && (chapter === undefined || !Number.isSafeInteger(chapter) || chapter <= 0)) {
-    throw new Error(`kind "${kind}" requires a chapter (positive safe integer)`)
-  }
-  if (perWorkKinds.includes(kind) && chapter !== undefined) {
-    throw new Error(`kind "${kind}" must not have a chapter`)
-  }
-}
 
 export class InMemoryStore implements WorkStore {
   private works = new Map<string, Work>()
@@ -111,6 +103,7 @@ export class InMemoryStore implements WorkStore {
     const options = structuredClone(opts)
     const chapter = options?.chapter
     assertBucketAddress(kind, chapter)
+    if (options?.humanStatus === 'approved') assertDirectStatusAllowed(kind)
     const storedContent = structuredClone(content)
     this.assertPreconditions(workId, kind, chapter, options?.preconditions)
     const bucket = this.findBucket(workId, kind, chapter)
@@ -121,7 +114,7 @@ export class InMemoryStore implements WorkStore {
       chapter,
       version: (bucket?.versions.length ?? 0) + 1,
       content: storedContent,
-      humanStatus: 'pending',
+      humanStatus: options?.humanStatus ?? 'pending',
       createdAt: new Date().toISOString(),
       ...(options?.inputs ? { inputs: options.inputs } : {}),
     }
@@ -179,13 +172,11 @@ export class InMemoryStore implements WorkStore {
     workId: string,
     kind: ArtifactKind,
     status: HumanStatus,
-    opts?: { chapter?: number },
+    opts?: { chapter?: number; preconditions?: readonly ArtifactPrecondition[] },
   ): void {
-    if (kind === 'prose') throw new KnownError('prose-approval-required', 'prose requires the dedicated finalization command')
-    if (kind === 'beat') throw new KnownError('beat-approval-required', 'beat requires the dedicated finalization command')
-    if (kind === 'setting') {
-      throw new KnownError('setting-approval-required', 'setting requires the dedicated finalization command')
-    }
+    assertDirectStatusAllowed(kind)
+    assertBucketAddress(kind, opts?.chapter)
+    this.assertPreconditions(workId, kind, opts?.chapter, opts?.preconditions)
     const bucket = this.findBucket(workId, kind, opts?.chapter)
     if (!bucket || bucket.versions.length === 0) {
       throw new KnownError(

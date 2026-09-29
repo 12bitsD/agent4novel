@@ -13,6 +13,7 @@ export type ArtifactPrecondition = {
 
 export type AppendOptions = {
   chapter?: number
+  humanStatus?: HumanStatus
   preconditions?: readonly ArtifactPrecondition[]
   inputs?: Artifact['inputs']
 }
@@ -48,7 +49,7 @@ export interface WorkStore {
     workId: string,
     kind: ArtifactKind,
     status: HumanStatus,
-    opts?: { chapter?: number },
+    opts?: { chapter?: number; preconditions?: readonly ArtifactPrecondition[] },
   ): void
   // 某 bucket 最新版本号(无产物 → undefined);供 expectedHeadVersion 乐观锁比对
   headVersion(workId: string, kind: ArtifactKind, opts?: { chapter?: number }): number | undefined

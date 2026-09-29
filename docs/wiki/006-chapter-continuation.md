@@ -2,13 +2,13 @@
 wiki_id: "006"
 ticket: 6
 ticket_state: done
-context_state: current
+context_state: mixed
 summary: "后续章显式推进、上一章承接、跨章阅读与编辑隔离；交付状态以 issue 为准。"
 topics: ["chapter-continuation", "human-review", "upstream-snapshot", "chapter-navigation"]
 code_paths: ["apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts", "packages/contracts/src/artifacts.ts", "apps/web/src/pages/Workspace.tsx", "apps/cli/src/commands.ts"]
 symbols: ["startChapter", "currentChapter", "previousChapter", "needsContinuityReview", "start-chapter"]
 inherits: ["022", "005", "004", "014", "025"]
-changed_by: ["019"]
+changed_by: ["019", "009"]
 read_when: ["continue-chapter", "navigate-chapters", "edit-previous-prose", "debug-chapter-context"]
 last_context_reviewed: "2026-09-30"
 ---
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-09-30"
 - **原始目的**：让已完成首章的作品继续逐章创作，同时保留各章独立关卡；WHAT/AC 以 [#6](https://github.com/12bitsD/agent4novel/issues/6) 为准。
 - **实际落地**：显式起章、可重复的章纲/正文双关卡、上一章输入、章节目录与链接重入、历史正文编辑和衔接提示均已实现；交付状态以 issue/PR 为准。
 - **当前价值**：继承 #22 的正文自动保存、通过后显式编辑、冻结提交与未知结果恢复；把工作进度和当前阅读的章节分开。
-- **后续变化**：#6 已随 PR #32 合并关闭；[Wiki 019](./019-contract-governance.md) 收敛本页多章协议的共享校验，行为与原审核证据保留。后续顺序和 Docker/CI 拆票见 [handoff](../handoff.md)。
+- **后续变化**：#6 已随 PR #32 合并关闭；[Wiki 019](./019-contract-governance.md) 收敛本页多章协议的共享校验；[Wiki 009](./009-sqlite-persistence.md) 接入服务重启恢复，本页当次“内存／重启丢失”限制不再描述当前生产存储。多章行为与原审核证据保留；当前交接见 [handoff](../handoff.md)。
 - **代码入口**：Pipeline 负责章节循环和实际依赖快照，Store 原子条件写入；公共协议供 HTTP/Web/CLI 使用，Step 接收明确的上一章内容。
 
 ## 设计目的
@@ -130,6 +130,14 @@ Web 把传输失败和 HTTP 200 中 `writeOutcome:unknown` 都按未知结果保
 
 ## 上下文演进
 
+### 2026-09-30 — 多章产物及衔接依据持久保存
+
+- **触发证据**：#9 需要跨服务重启保留作品、各章产物版本、通过状态及生成输入引用。
+- **原假设**：#6 只承诺同一服务进程内的多章阅读和编辑恢复。
+- **决定**：SQLite 与重启语义由 [Wiki 009](./009-sqlite-persistence.md) 承接，生成输入引用随产物一同保存；重启不自动调用模型。
+- **影响**：已保存内容及衔接提示可从同一数据库恢复；章节循环、作者显式起章、历史正文编辑权限不变，未保存页面内容仍不持久化。
+- **上下文处理**：preserve 原始 Human 决定、scope 和完成审核证据；replace 顶部当前存储边界，旧测试不充当 SQLite 验证。
+
 ### 2026-09-30 — 契约校验交接 #19
 
 - **触发证据**：#6 已交付，#19 开始收敛存储和公开协议的验证责任。
@@ -157,4 +165,4 @@ Web 把传输失败和 HTTP 200 中 `writeOutcome:unknown` 都按未知结果保
 
 ## 交接结论
 
-可继承的能力是逐章双关卡、上一章承接、历史正文编辑、衔接提示与按章恢复保护；不能假定长篇记忆、自动修复衔接或服务重启恢复已经存在。发布状态回读 #6 与对应 PR。完成本票后再单独对齐 #19 的全仓契约治理，然后 #9、#7；不要批量关闭后续需求。
+可继承的能力是逐章双关卡、上一章承接、历史正文编辑、衔接提示与按章恢复保护；不能假定长篇记忆或自动修复衔接已经存在。共享验证读 [Wiki 019](./019-contract-governance.md)，服务重启恢复读 [Wiki 009](./009-sqlite-persistence.md)。本页审核记录只证明 #6 当次交付；后续票分别验收，发布状态回读各 issue/PR。
