@@ -53,12 +53,17 @@ describe('step experiment contracts', () => {
 
   it('keeps failure diagnostics separate from generated content and raw provider output', () => {
     const base = { runId: 'experiment-test', stepId: 'caption', executionMode: 'live', model: 'longcat:LongCat-2.0', telemetry: [] }
-    const success = { ...base, kind: 'succeeded', content: { summary: 'validated content' } }
+    const success = { ...base, kind: 'succeeded', content: { inputStage: '脑洞', summary: 'validated content', elements: [], gaps: [] } }
     const failure = { ...base, kind: 'failed', code: 'llm-invalid-output', retryable: true }
     expect(stepExperimentResponseSchema.safeParse(success).success).toBe(true)
     expect(stepExperimentResponseSchema.safeParse(failure).success).toBe(true)
     for (const invalid of [{ ...success, raw: 'provider text' }, { ...failure, content: {} }, { ...failure, message: 'provider error' }]) {
       expect(stepExperimentResponseSchema.safeParse(invalid).success).toBe(false)
     }
+  })
+  it.each(['caption', 'creative', 'outline', 'setting', 'beat', 'prose'])('rejects a successful %s experiment with content for the wrong step', stepId => {
+    const base = { runId: 'experiment-test', stepId, executionMode: 'live', model: 'longcat:LongCat-2.0', telemetry: [], kind: 'succeeded' }
+    expect(stepExperimentResponseSchema.safeParse({ ...base, content: {} }).success).toBe(false)
+    if (stepId !== 'prose') expect(stepExperimentResponseSchema.safeParse({ ...base, content: { text: 'different artifact' } }).success).toBe(false)
   })
 })

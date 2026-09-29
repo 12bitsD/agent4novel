@@ -1,5 +1,5 @@
 // 独立 server 进程入口。stdin 接收实验请求，stdout 只返回单个 JSON 结果。
-import { stepExperimentRequestSchema } from '@agent4novel/contracts'
+import { stepExperimentRequestSchema, stepExperimentResponseSchema } from '@agent4novel/contracts'
 import { loadLocalEnv } from './config/local-env.js'
 
 async function main() {
@@ -31,7 +31,11 @@ async function main() {
   console.log = (...args: unknown[]) => console.error(...args)
   const { runIsolatedStep } = await import('./steps/isolated-runner.js')
   const result = await runIsolatedStep(parsed.data)
-  process.stdout.write(JSON.stringify(result) + '\n')
+  const response = stepExperimentResponseSchema.safeParse(result)
+  if (!response.success) {
+    console.error(JSON.stringify({ code: 'invalid-response' })); process.exitCode = 1; return
+  }
+  process.stdout.write(JSON.stringify(response.data) + '\n')
   if (result.kind === 'failed') process.exitCode = 1
 }
 main().catch(() => {

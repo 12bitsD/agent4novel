@@ -1,16 +1,16 @@
 ---
 wiki_id: "006"
 ticket: 6
-ticket_state: active
+ticket_state: done
 context_state: current
 summary: "后续章显式推进、上一章承接、跨章阅读与编辑隔离；交付状态以 issue 为准。"
 topics: ["chapter-continuation", "human-review", "upstream-snapshot", "chapter-navigation"]
 code_paths: ["apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts", "packages/contracts/src/artifacts.ts", "apps/web/src/pages/Workspace.tsx", "apps/cli/src/commands.ts"]
 symbols: ["startChapter", "currentChapter", "previousChapter", "needsContinuityReview", "start-chapter"]
 inherits: ["022", "005", "004", "014", "025"]
-changed_by: []
+changed_by: ["019"]
 read_when: ["continue-chapter", "navigate-chapters", "edit-previous-prose", "debug-chapter-context"]
-last_context_reviewed: "2026-09-29"
+last_context_reviewed: "2026-09-30"
 ---
 
 # 006 — 后续章续写与跨章创作
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-09-29"
 - **原始目的**：让已完成首章的作品继续逐章创作，同时保留各章独立关卡；WHAT/AC 以 [#6](https://github.com/12bitsD/agent4novel/issues/6) 为准。
 - **实际落地**：显式起章、可重复的章纲/正文双关卡、上一章输入、章节目录与链接重入、历史正文编辑和衔接提示均已实现；交付状态以 issue/PR 为准。
 - **当前价值**：继承 #22 的正文自动保存、通过后显式编辑、冻结提交与未知结果恢复；把工作进度和当前阅读的章节分开。
-- **后续变化**：#6 先于 #19 契约治理和 #9 SQLite；#7 配置及 Docker/CI 方向留到该票开工对齐，#8 仍为 MVP 项；#28/#29 长期记忆和 Wiki 扩展保持后置。
+- **后续变化**：#6 已随 PR #32 合并关闭；[Wiki 019](./019-contract-governance.md) 收敛本页多章协议的共享校验，行为与原审核证据保留。后续顺序和 Docker/CI 拆票见 [handoff](../handoff.md)。
 - **代码入口**：Pipeline 负责章节循环和实际依赖快照，Store 原子条件写入；公共协议供 HTTP/Web/CLI 使用，Step 接收明确的上一章内容。
 
 ## 设计目的
@@ -129,6 +129,15 @@ Web 把传输失败和 HTTP 200 中 `writeOutcome:unknown` 都按未知结果保
 不做 SQLite、长期记忆、工具循环、作品 Wiki 更新、已通过章纲/设定回改、历史版本比较、自动完本判断或自动连跑后续章。#19 保留全仓契约收敛，本票只改多章能力所需边界。服务重启仍丢失作品；跨浏览器刷新恢复依赖原服务进程。
 
 ## 上下文演进
+
+### 2026-09-30 — 契约校验交接 #19
+
+- **触发证据**：#6 已交付，#19 开始收敛存储和公开协议的验证责任。
+- **原假设**：各票仅收敛自身经过的内容和命令。
+- **决定**：共同校验与职责清单由 [Wiki 019](./019-contract-governance.md) 交接，本页继续说明原产品行为。
+- **影响**：非法内容在 Store/公开边界统一拒绝，既有版本与关卡语义保留。
+- **上下文处理**：preserve 原始目的、Human 决定及完成审核证据；replace 路由与当前后继指针。
+
 
 ### 2026-09-29 — 续写优先与 MVP 编辑边界
 

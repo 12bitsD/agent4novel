@@ -1,48 +1,16 @@
 import { z } from 'zod'
 import { agentConfigSchema } from './step.js'
 
-export const artifactKinds = ['caption', 'creative', 'outline', 'setting', 'beat', 'prose'] as const
-export type ArtifactKind = (typeof artifactKinds)[number]
-
-export const humanStatuses = ['pending', 'approved'] as const
-export type HumanStatus = (typeof humanStatuses)[number]
-
-export const perChapterKinds: ArtifactKind[] = ['beat', 'prose']
-export const perWorkKinds: ArtifactKind[] = ['caption', 'creative', 'outline', 'setting']
-
-export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue }
-
-export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
-  z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(jsonValueSchema), z.record(jsonValueSchema)]),
-)
-
-export const artifactInputSchema = z.object({
-  kind: z.enum(artifactKinds), chapter: z.number().int().positive().safe().optional(),
-  artifactId: z.string().min(1), version: z.number().int().positive().safe(),
-}).strict().superRefine((input, ctx) => {
-  if (perChapterKinds.includes(input.kind) !== (input.chapter !== undefined)) ctx.addIssue({ code: 'custom', path: ['chapter'], message: 'input chapter 与 kind 不匹配' })
-})
-export type ArtifactInput = z.infer<typeof artifactInputSchema>
-
-export const artifactEnvelopeSchema = z.object({
-  id: z.string().min(1),
-  workId: z.string().min(1),
-  kind: z.enum(artifactKinds),
-  chapter: z.number().int().positive().safe().optional(),
-  version: z.number().int().positive().safe(),
-  content: jsonValueSchema,
-  humanStatus: z.enum(humanStatuses),
-  createdAt: z.string().min(1),
-  inputs: z.array(artifactInputSchema).optional(),
-}).strict()
+import { artifactEnvelopeSchema, humanStatuses, perChapterKinds } from './artifact-envelope.js'
+import { artifactContentSchemaFor } from './artifact-content.js'
+import { workSummarySchema } from './work-requests.js'
+export * from './artifact-envelope.js'
 
 export const artifactSchema = artifactEnvelopeSchema.superRefine((artifact, ctx) => {
+  const parsed = artifactContentSchemaFor(artifact.kind, artifact.humanStatus).safeParse(artifact.content)
+  if (!parsed.success) for (const issue of parsed.error.issues) {
+    ctx.addIssue({ ...issue, path: ['content', ...issue.path] })
+  }
   if (perChapterKinds.includes(artifact.kind) !== (artifact.chapter !== undefined)) {
     ctx.addIssue({ code: 'custom', path: ['chapter'], message: 'chapter 与产物 kind 不匹配' })
   }
@@ -55,14 +23,19 @@ export const workSchema = z.object({
 }).strict()
 export type Work = z.infer<typeof workSchema>
 
-export type WorkSummary = {
-  id: string
-  title: string
-  seedPreview: string
-  chapterCount: number
-}
+export type WorkSummary = z.infer<typeof workSummarySchema>
 
-export const workDetailSchema = workSchema.extend({ artifacts: z.array(artifactSchema) })
+const workDetailEnvelopeSchema = workSchema.extend({ artifacts: z.array(artifactSchema) })
+export function validateWorkArtifacts(work: z.infer<typeof workDetailEnvelopeSchema>, ctx: z.RefinementCtx): void {
+  const heads = new Set<string>()
+  work.artifacts.forEach((artifact, i) => {
+    if (artifact.workId !== work.id) ctx.addIssue({ code: 'custom', path: ['artifacts', i, 'workId'], message: '产物必须属于当前作品' })
+    const address = `${artifact.kind}:${artifact.chapter ?? ''}`
+    if (heads.has(address)) ctx.addIssue({ code: 'custom', path: ['artifacts', i], message: '同一产物地址只能有一个当前版本' })
+    heads.add(address)
+  })
+}
+export const workDetailSchema = workDetailEnvelopeSchema.superRefine(validateWorkArtifacts)
 export type WorkDetail = z.infer<typeof workDetailSchema>
 
 // 读模型(#3c / #4):GET /works/:id 同快照附带,web 只渲染不重建状态机。
@@ -95,7 +68,7 @@ export const startChapterRequestSchema = z.object({
 }).strict()
 export type StartChapterRequest = z.infer<typeof startChapterRequestSchema>
 
-export const workViewEnvelopeSchema = workDetailSchema.extend({
+export const workViewEnvelopeSchema = workDetailEnvelopeSchema.extend({
   currentChapter: z.number().int().positive().safe().default(1), chapters: z.array(chapterSummarySchema).default([]),
   workflowState: z.enum(workflowStates), allowedActions: z.array(z.string()), nextStepId: z.string().nullable(),
 })

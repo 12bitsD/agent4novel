@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { artifactEnvelopeSchema } from './artifacts.js'
+import { artifactEnvelopeSchema } from './artifact-envelope.js'
 
 export const beatLimits = {
   title: 256, id: 96, text: 20_000, totalText: 100_000, items: 128,

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { CliError, createClient, parseCliTimeoutMs } from '../src/client.js'
 import * as cmd from '../src/commands.js'
+import { creativeContent, outlineContent } from './public-fixtures.js'
 
 // 假 fetch:按 method+path 路由到预置响应,同时记录调用序列
 function fakeFetch(routes: Record<string, { status?: number; body: unknown }>) {
@@ -23,8 +24,8 @@ const workView = {
   config: {},
   createdAt: 'x',
   artifacts: [
-    { id: 'a1', workId: 'w1', kind: 'creative', version: 3, content: { directions: [{ directionId: 'w1-dir-1' }] }, humanStatus: 'pending', createdAt: 'x' },
-    { id: 'a2', workId: 'w1', kind: 'outline', version: 7, content: { arcs: [] }, humanStatus: 'pending', createdAt: 'x' },
+    { id: 'a1', workId: 'w1', kind: 'creative', version: 3, content: creativeContent(), humanStatus: 'pending', createdAt: 'x' },
+    { id: 'a2', workId: 'w1', kind: 'outline', version: 7, content: outlineContent(), humanStatus: 'pending', createdAt: 'x' },
   ],
   workflowState: 'awaiting-selection',
   allowedActions: ['select'],
@@ -76,7 +77,7 @@ describe('cli client/commands(#14)', () => {
   it('select 自动回填 creative headVersion', async () => {
     const { fn, calls } = fakeFetch({
       'GET /api/works/w1': { body: workView },
-      'POST /api/works/w1/artifacts/creative/select': { body: { kind: 'creative', version: 4 } },
+      'POST /api/works/w1/artifacts/creative/select': { body: { ...workView.artifacts[0], version: 4, humanStatus: 'approved' } },
     })
     const client = createClient({ baseUrl: 'http://x', fetch: fn })
     await cmd.select(client, 'w1', 'w1-dir-1')
@@ -90,7 +91,7 @@ describe('cli client/commands(#14)', () => {
   it('select 缺省 directionId 取第一个方向', async () => {
     const { fn, calls } = fakeFetch({
       'GET /api/works/w1': { body: workView },
-      'POST /api/works/w1/artifacts/creative/select': { body: {} },
+      'POST /api/works/w1/artifacts/creative/select': { body: { ...workView.artifacts[0], version: 4, humanStatus: 'approved' } },
     })
     const client = createClient({ baseUrl: 'http://x', fetch: fn })
     await cmd.select(client, 'w1')
@@ -100,12 +101,12 @@ describe('cli client/commands(#14)', () => {
   it('save-outline 自动回填 outline headVersion', async () => {
     const { fn, calls } = fakeFetch({
       'GET /api/works/w1': { body: workView },
-      'PUT /api/works/w1/artifacts/outline': { body: { kind: 'outline', version: 8 } },
+      'PUT /api/works/w1/artifacts/outline': { body: { ...workView.artifacts[1], version: 8 } },
     })
     const client = createClient({ baseUrl: 'http://x', fetch: fn })
-    const draft = { arcs: [] } as never
+    const draft = outlineContent()
     await cmd.saveOutline(client, 'w1', draft)
-    expect(calls[1]?.body).toMatchObject({ content: { arcs: [] }, expectedHeadVersion: 7 })
+    expect(calls[1]?.body).toMatchObject({ content: outlineContent(), expectedHeadVersion: 7 })
   })
 
   it('get --kind 只取该产物;缺产物报 artifact-not-found', async () => {
@@ -143,8 +144,8 @@ describe('cli client/commands(#14)', () => {
       'POST /api/works': { status: 201, body: created },
       'POST /api/works/w9/advance': { body: advancedOutcome('w9') },
       'GET /api/works/w9': { body: { ...afterCreate, workflowState: 'outline-approved' } },
-      'POST /api/works/w9/artifacts/creative/select': { body: { kind: 'creative', version: 4, humanStatus: 'approved' } },
-      'POST /api/works/w9/approve': { body: { stage: 'complete' } },
+      'POST /api/works/w9/artifacts/creative/select': { body: { ...afterCreate.artifacts[0], version: 4, humanStatus: 'approved' } },
+      'POST /api/works/w9/approve': { body: { workId: 'w9', stage: 'complete', nextStepId: null } },
     })
     const client = createClient({ baseUrl: 'http://x', fetch: fn })
     await expect(cmd.smoke(client, { seed: 's' }, () => {})).rejects.toMatchObject({ code: 'smoke-incomplete' })

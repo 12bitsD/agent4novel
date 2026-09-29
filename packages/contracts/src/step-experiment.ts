@@ -5,6 +5,7 @@ import { seedCharBudget } from './limits.js'
 import { proseEditDraftSchema, proseLimits } from './prose.js'
 import { beatEditDraftSchema, beatLimits } from './beat.js'
 import { llmTelemetrySchema } from './telemetry.js'
+import { artifactContentSchemas } from './artifact-content.js'
 
 export const experimentStepIds = ['caption', 'creative', 'outline', 'setting', 'beat', 'prose'] as const
 export const stepExperimentRequestSchema = z.object({
@@ -37,5 +38,9 @@ const base = z.object({ runId: z.string(), stepId: z.enum(experimentStepIds), ex
 export const stepExperimentResponseSchema = z.discriminatedUnion('kind', [
   base.extend({ kind: z.literal('succeeded'), content: jsonValueSchema }).strict(),
   base.extend({ kind: z.literal('failed'), code: z.string(), retryable: z.boolean() }).strict(),
-])
+]).superRefine((result, ctx) => {
+  if (result.kind !== 'succeeded') return
+  const parsed = artifactContentSchemas[result.stepId].safeParse(result.content)
+  if (!parsed.success) for (const issue of parsed.error.issues) ctx.addIssue({ ...issue, path: ['content', ...issue.path] })
+})
 export type StepExperimentResponse = z.infer<typeof stepExperimentResponseSchema>

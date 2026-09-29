@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。最后更新：2026-09-29。#5/#22 已交付并关闭，当前推进 #6 后续章与跨章操作，候选实现和验证见 Wiki006；完整 MVP #1 尚未完成。最新队列 #6 → #19 → #9 → #7；#28/#29 保持后置扩展。先读下方里程碑与验证边界，再进入对应 Wiki。
+> 用途：context compaction / 新会话接力。最后更新：2026-09-30。#5/#22/#6 已合并关闭，当前推进 #19 契约治理；完整 MVP #1 尚未完成。剩余 #19 → #9 → #33 → #7 → #8 → 联验；#28/#29 后置。先读下方里程碑与验证边界，再进入对应 Wiki。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -10,14 +10,14 @@
 ## 开发流程（用户的硬规矩，每票都走）
 
 既有硬规则全部保留：每票 grill 对齐、实现前给执行计划、建立 Wiki 上下文、TDD 红绿切片、回写代码落点与变化原因、三轮自校准、Standards/Spec 双轴 review、修复后再交付。开始每票时完整读取并按 [Ticket 完成审核清单](./agents/ticket-completion-checklist.md) 执行；它是提交、直推或 PR/merge、远端回读顺序的唯一权威来源，逐票证据写入数字 Wiki、GitHub issue 与可回读远端状态。
-回复用中文；wiki/文档是 agent 消费的；需要 Human 裁决的决策类问题提供 (a)/(b)/(c) 选项并最小化提问。
+回复用中文。2026-09-30 用户授权每个任务和实质 gap 内部完成三方案研究，普通工程选择自主收敛；只有产品范围、不可逆数据影响、新权限/费用或核心体验降低升级 Human。当前关键裁决已完成：本机 Docker + CI。完整决定见 [交付研究](./research/mvp-delivery-options.md)，不重复询问已定选择。
 
 ## 当前里程碑与验证边界
 
-**首章已交付，当前推进多章续写，完整 MVP 尚未完成。** #6 将原六步扩为作品准备加逐章 Beat/Prose 双关卡，提供显式下一章、章节目录、稳定章节链接与历史正文编辑；本票当前候选及验证从 [Wiki 006](./wiki/006-chapter-continuation.md) 进入，交付状态以 #6 issue/PR 为准。
+**首章与续章已交付，当前治理契约，完整 MVP 未完成。** #6 提供显式下一章、章节目录、稳定章节链接与历史正文编辑；#19 候选与门禁从 [Wiki 019](./wiki/019-contract-governance.md) 进入。
 
-- **交付状态**：2026-09-29 回读 [#22](https://github.com/12bitsD/agent4novel/issues/22) CLOSED、[PR #30](https://github.com/12bitsD/agent4novel/pull/30) MERGED。实现和发布前审核见 [Wiki 022](./wiki/022-prose-generation-review.md)，远端交付及终止核验见 [完成评论](https://github.com/12bitsD/agent4novel/issues/22#issuecomment-5875092744)。不重复交付 #5/#22。
-- **已验证**：fake 首章全链路、完整本地测试／类型检查／构建；真实 Prose 节点生成、保存和通过；浏览器已通过正文编辑、自动保存、刷新与书架重入。真实节点验收的前五步使用 fake，不是六步全真实模型验收，也不证明长篇质量。原始证据及原生 beforeunload 人工验证限制见 Wiki022。
+- **交付状态**：#22/PR #30、#6/[PR #32](https://github.com/12bitsD/agent4novel/pull/32) 已关闭/合并；#6 终止状态见 [完成评论](https://github.com/12bitsD/agent4novel/issues/6#issuecomment-5884089960)，不重复交付。
+- **已验证基线**：#6 有 fake 多章、CLI/Web、独立真实 Beat2/Prose2 和本地门禁证据，见 [Wiki 006](./wiki/006-chapter-continuation.md)。真实节点使用合成上游，不是全书/全部节点真实模型验收，也不证明长篇质量。#19 的当前候选验证只看其本票 Wiki，不能沿用 #6 测试结论。
 - **尚未具备**：跨服务重启恢复、作者侧 Agent 配置、坏例收集分析、长期历史记忆与 Wiki 检索。当前仍是 InMemoryStore，刷新可恢复不等于重启不丢数据；已有模型运行配置与 CLI 参数不等于 #7 作者配置已交付。
 - **MVP 收尾条件**：按 [总票 #1](https://github.com/12bitsD/agent4novel/issues/1) 完成剩余需求后，联验两章双关卡、重启恢复、配置生效及坏例回看，并分别记录 fake、真实模型与 SQLite 重启证据。#1 当前保持 OPEN。
 
@@ -54,13 +54,13 @@
 - **workflow 骨架 + 步骤内 agent**；Step 零感知 kind，输出 `{content}` 装整个 JSON；kind = 节点名；pipeline 管解析/组装/持久化，是深模块不是 swap seam。
 - **两个真 seam**：store（InMemoryStore / #9 做 SQLiteStore）、step（FakeStep / RealStep）。
 - **模型路由边界**：ModelRuntime 位于 RealStep 内部，不是第三个 Pipeline 注入 seam；已注册 provider 通过模型 ID 切换，新增 provider 需要对应 adapter、registry 注册与 key 契约。完整 HOW 只看 [wiki 016](./wiki/016-model-runtime-provider-config.md)。
-- **6 节点 kind**：caption/creative/outline/setting 每作品一份；beat/prose 每作品×每章，生产复用beat/prose逐章推进；章号是正安全整数，每章独立版本。Artifact.content: JsonValue；humanStatus: pending | approved；appendArtifact版本+1。Setting／Beat／Prose专用finalize同版本原子定稿，通用setStatus均拒绝。Prose saveArtifact追加版本并保留匹配基线状态，不改变其他产物保存策略。
+- **6 节点 kind**：caption/creative/outline/setting 每作品一份；beat/prose 每作品×每章，生产复用beat/prose逐章推进；章号是正安全整数，每章独立版本。Artifact.content 的 JSON 表示由共享 kind/status schema 校验；humanStatus: pending | approved；appendArtifact版本+1。Setting／Beat／Prose专用finalize同版本原子定稿，通用setStatus均拒绝。Prose saveArtifact追加版本并保留匹配基线状态，不改变其他产物保存策略。
 - **creative 保存语义**（#3c 起，取代「人工保存即通过」）：`PUT /artifacts/creative` = saveCreativeDraft，存全部方向、永远 pending、带 `expectedHeadVersion` 乐观锁；`POST /artifacts/creative/select` = selectCreativeDirection，落**单方向**新版本 + approved。`directionId` 由 server 注入（`${workId}-dir-N`），web 永不生成、编辑不可改。
 - **pipeline（#3c）**：definition 加 `consumes`（只指前序 outputKind，启动校验唯一/禁环）；`PipelineInput = {workId, seed, upstream}`，upstream 读**最新版且必须 approved**；`advance()` 链式推进到下一个关卡（上限 = definition 长度），per-work 互斥锁（finally 释放，冲突 → 409 `advance-in-progress`），当前章返回可穷举 outcome `advanced | awaiting-approval | complete | failed(stepId, code, retryable, attemptId)`；interview 机制零残留。
 - **读模型**：`GET /works/:id` 同快照附带 `workflowState`、`nextStepId`、`allowedActions` 及 `currentChapter/chapters`；生产新增awaiting-prose-review/prose-approved。pending正文动作save-draft/approve/regenerate，approved保留save-draft；完成章数只计approved正文head。outline-approved/setting-approved/beat-approved保留给旧定义。`generating`是Web本地瞬态；按pendingGate.kind分派，Web不重建关卡状态机，历史阅读按章摘要取得动作；`start-chapter` 使用明确章号与前章基线，不依阅读选择决定推进位置。
 - **LLM 调用**：`steps/llm-call.ts`统一generateObject + zod + maxOutputTokens（outline/setting/prose 16000，其余默认8000）+ 可配置超时 + 类型化错误。advance业务失败可为HTTP200 + failed outcome，不能只按HTTP成功判断。原始素材>100K字符截断，结构化上游不静默截断；Prose实际system+prompt超过400000字符在模型前拒绝。Setting/Beat/Prose显式SDK maxRetries=0；Pipeline不自动重试。ModelRuntime唯一HOW见 [Wiki 016](./wiki/016-model-runtime-provider-config.md)。
 - **CLI**：`./apps/cli/bin/a4n <cmd>`（stdout纯JSON）或`pnpm -s cli`；仅select/save-outline自动回填版本。Prose支持get、save-prose、approve-prose、regenerate-prose，文件显式绑定chapter/id/version，save另带expectedHumanStatus，重写另带instructions；结果未知最多回读一次，不自动重复写入。smoke延伸至正文生成、作者全文save、同版approve、精确回读prose-approved且无第二章；不是文学质量验收。独立run-step支持任意合法章号的Beat/Prose，后续章必须提供previousChapter，不写作品；start-chapter用文件显式绑定目标章与前章正文id/version。
-- **错误**：HTTP 统一 `{code, retryable, attemptId?, message, issues?}`；Setting 字段错误 issues 只含 path/code/message。明确 4xx 均在写前，传输/5xx/非法成功响应可能已写入，必须按 Wiki 013 的冻结提交与回读规则处理。
+- **错误**：HTTP 统一 `{code, retryable, attemptId?, message, issues?}`；Setting 字段错误 issues 只含 path/code/message。合法且匹配命令的拒绝包才证明写前拒绝；传输/5xx/畸形响应（包括畸形 4xx）可能已写入，必须按对应恢复契约冻结请求并回读。
 - **web 设计系统**（#3c）：`apps/web/src/styles.css` 唯一全局面，亮暗双主题 CSS 变量（prefers-color-scheme + data-theme 预留）；多巴胺在点缀层（主 CTA 珊瑚 accent，方向 tab 珊瑚/紫/青轮转，chip 用强调色），底色纸白/墨黑极简；**内联样式只许 var(--*)，禁硬编码色值**。创意海报风险面抽纯函数 `web/src/creative-compare.ts`（tab↔directionId、保存全部、选定、409 保 dirty），vitest 覆盖，无浏览器 E2E。
 - 栈：pnpm workspaces + TS E2E、Vite+React(5173 /api proxy)、Hono(8787)、zod、Vitest、tsx、AI SDK v7 + `@ai-sdk/deepseek` + `@ai-sdk/openai-compatible`。Setting 使用 mdast-util-from-markdown + 自有允许列表 React renderer；测试计数与最终命令证据只记本票 Wiki。
 
@@ -100,17 +100,19 @@ CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化
 
 #22 已合入 main；其原 source、固定点和候选审核记录均属于已交付历史，入口为 [Wiki 022](./wiki/022-prose-generation-review.md)。新票从当前 main 核对基线，不能把旧票授权或审核结论当成新票完成证据。
 
-**当前先完成 #6 后续章**。2026-09-29 作者调整队列为 **#6 → #19 契约治理 → #9 SQLite → #7 配置**，逐票对齐和开发。#6 已确认全层可读、按已有权限编辑；先承接上一章；旧章修改保留后章并提示，过期生成拒绝落库。#7 新增 Docker/CI 方向，待开工与原 Agent 配置 AC、部署目标一并收敛。#8 仍为 MVP 必需项，插入排期另行对齐。#28/#29 保持后置扩展。以上票仍 OPEN，不批量关闭；队列不新增硬依赖。
+**当前 #19 → #9 → #33 → #7 → #8 → MVP 联验**。范围已按三方案研究收敛并写回对应 issue，普通工程细节不再逐项请求 Human；新增重大冲突仍需升级。
 
 | 交付批次 | 可验收结果 | 后续衔接 |
 |---|---|---|
-| #6 后续章（当前） | 显式开始下一章、双关卡、按章阅读/编辑和衔接提示 | 先完成上一章承接，长期记忆与 Wiki 后置；再交接 #19 |
-| #19 契约治理 | 各产物与命令边界一致，非法内容在入口／读回被拒绝 | 覆盖已落地的多章身份、输入引用、Prose保存及错误语义 |
-| #9 SQLite | 作品与产物跨实际重启可回读，继承条件写入和身份规则 | 与 #8 联验坏例的作品／章节关联及持久化 |
-| #7 / #8 MVP 需求 | 作者配置实际影响生成；坏例可收集、备注与回看分析 | #7 同时对齐新增 Docker/CI 方向；#8 排期另定，再与持久化联验 |
-| #28 / #29 扩展 | 分别完成设定查询工具循环、作品Wiki档案演进；当前未实现 | 每票单独对齐接入范围；#29接入时正文与档案联合通过 |
+| #19 契约治理（当前） | 六 kind/status、Store、公开请求响应及消费者验证一致，非法内容零写入 | 保留多章/CAS/unknown，交接 #9 同接口测试 |
+| #9 SQLite | 全部产物版本、状态和输入引用跨真实进程重启恢复 | 显式幂等演示初始化、不自动续跑模型 |
+| #33 本机 Docker/CI | 单容器同源服务、数据目录卷恢复、远端 fake CI | 不做公网部署/镜像发布/自动部署 |
+| #7 Agent 配置 | 作品默认＋每步覆盖，生成冻结配置和文件版本 | Prompt/Skill 文件沿 ADR0002，工具执行归 #28 |
+| #8 坏例 | 已保存正文选段、备注、原文快照和来源版本、列表回看 | 自动分析及持续重定位后置 |
+| #1 MVP 联验 | 两章双关卡、历史修改、服务/容器重启、配置生效、坏例回看 | 各票和实际贯通证据均完成才能关闭 |
+| #28/#29 扩展 | 设定查询工具循环、作品 Wiki 档案演进 | 当前均未实现，保持后置 |
 
-MVP 的 WHAT 与当前排期以 [父票 #1](https://github.com/12bitsD/agent4novel/issues/1) 为入口，每票按各自 AC 和原生依赖验收；本表只作接手导航，不缩减 MVP、不新建依赖或承诺日期，也不提前设计章节重生。
+WHAT/AC 和依赖以 [父票 #1](https://github.com/12bitsD/agent4novel/issues/1) 及子票为准；[研究与决定清单](./research/mvp-delivery-options.md) 保存取舍。#33 的 SQLite 恢复 AC 原生依赖 #9；不为纯排期增加其他硬依赖。不迁移或清空旧内存实例；若以后需要切换且内有重要作品，先保全。配置/坏例/SQLite/容器仍未实现，不能把方案已确定当作能力已验证。
 
 继续继承条件写入、快照隔离、冻结提交与回读对账，不能照搬Outline保存／通过流程。#29中的WorkWiki指本书设定库，初始Setting与Wiki应呈现一套正式事实；正文与新增／更新档案一同通过、失败不保存一半、重试不重复历史，均是该扩展接入时的目标。通过后正文编辑的异步Wiki更新也是#29待对齐项，#22不预建任务。#17独立设定修改、#18冲突澄清、#20章纲比较、#21章节重生继续后置；#12/#15既有边界不变。
 

@@ -52,7 +52,7 @@ Artifact = {
   kind: ArtifactKind    // caption | creative | outline | setting | beat | prose
   chapter?: number      // 仅 beat / prose 有
   version: number       // 每次追加 +1，旧版本保留
-  content: JsonValue    // 任意 JSON；各 kind 的形状见上表与 packages/contracts
+  content: JsonValue    // 传输表示；运行时按 kind/humanStatus 的共享内容 schema 精确校验
   humanStatus: HumanStatus   // pending | approved；SQLite 列名 human_status
   createdAt: string
   inputs?: Array<{ kind: ArtifactKind; chapter?: number; artifactId: string; version: number }>
@@ -74,6 +74,20 @@ Artifact = {
 - 人工保存语义分节点：caption 落库即 `approved`（无关卡）；creative 保存草稿 = 新版本 + `pending`（`saveCreativeDraft`），显式选定方向 = 单方向新版本 + `approved`（`selectCreativeDirection`）；outline（#4）保存草稿 = 新版本 + `pending`（`saveOutlineDraft`，新增弧线/剧情点的 id 由 server 补注入），通过 = 通用 `/approve`；setting（#13）不保存中间草稿，专用完成命令将同 id／version 的内容和状态原子定稿，不追加 V2
 - Prose 保存追加新 ID／版本并保留匹配基线的 `humanStatus`；pending 草稿可为空，approved 内容必须非空。通过仍是同 ID／版本原子定稿。通过后可编辑是 Prose 的明确例外，不改变 Setting／Beat 通过后只读的语义。
 - 关卡在步骤边界：`gateAfter` 的步骤产出后置 `pending` 等 approve；`gateBefore` 的步骤要求目标产物已 `approved`；`consumes` 的上游产物读最新版且必须 `approved`
+
+## 共享验证边界：#19
+
+`Artifact.content` 的传输表示仍是 JSON；有效性由 `artifactContentSchemas` 和 `artifactContentSchemaFor(kind, humanStatus)` 决定。Caption、Creative、Outline、Setting、Beat 使用对应正式内容形态；pending Prose 使用编辑形态，approved Prose 使用非空正式内容。模型输出的无 ID 变体不作为存储形态，服务端注入身份后仍需最终复验。
+
+`artifactSchema` 同时检查内容及 kind/chapter 地址；`workDetailSchema` 和 `workViewSchema` 使用同一归属/唯一 head 规则。每个产物必须属于当前作品，同一 kind/chapter 只出现一个当前版本；本规则不把公开读取扩展成全部历史列表。Config 的未知字段拒绝，不静默丢弃以掩盖协议漂移。
+
+Store 在写入及状态转换前校验候选，保留原有版本与上游条件检查；失败不得创建空 bucket、增加版本或改变状态。读取校验本次返回的内容，快照不暴露内部可变引用。公开 GET 仍只返回各地址 head，不承诺扫描未被读取的历史；SQLite 恢复和未来历史读取必须复用同一验证入口。
+
+公开创建、列表、创意稿保存/选择、大纲保存、通用通过、应用配置、推进及各专用命令均复用 `packages/contracts`。HTTP 成功输出也校验；输出失败统一安全 500，不含原始内容，不宣称操作未发生。错误公共联合 `httpErrorSchema` 保留基础错误以及 Beat/Prose command 与遥测扩展。CLI 本地诊断包装和 Step 私有 I/O 不被强行并入 HTTP 错误形。
+
+Web/CLI 在消费端解析公开响应并核对资源身份。错误体畸形、身份不匹配或成功响应无效时，写操作按结果未知处理；不能仅凭 4xx 认定未写入，也不能自动重复 POST。既有 Beat/Prose 专用恢复层仍保留原始状态与响应，按各自共享命令契约对账。
+
+独立 Step 实验成功包按 `stepId` 校验正式内容；请求与 Step 调度包装仍为各自私有边界。完整契约清单与保留重复的理由见 [契约治理](./agents/contract-governance.md)，本票设计和证据见 [Wiki 019](./wiki/019-contract-governance.md)。
 
 ## Setting：#13 已确认设计
 
@@ -175,7 +189,7 @@ type SettingApiError = ApiError & { issues?: ValidationIssue[] }
 
 `WorkView` 包含 `nextStepId: string | null`，其值来自 Pipeline 状态；新增 `awaiting-setting-review`、`setting-approved` 两个工作流状态。通用 `ready-to-generate`、`failed` 继续复用，不为每种产物复制一组状态。`outline-approved` 保留给以 Outline 结束的旧定义／测试；生产定义在大纲通过后进入 ready，具体可生成步骤由 `nextStepId` 标识。
 
-#13 已集中本次经过的 WorkView／Artifact envelope 与 advance 响应（含既有 state、telemetry）定义，并复用 AgentConfig／telemetry schema。Setting 内容执行精确校验；其他 kind 的具体内容仍按现有各自入口校验，全 kind 注册表及剩余协议收敛归 #19。
+#13 起集中 WorkView／Artifact envelope 与 advance 响应（含 state、telemetry）。#19 将六 kind 内容映射和其余公开协议收敛到共享定义，继承本节的 Setting 语义；当前验证责任见 [契约治理](./agents/contract-governance.md) 和 [Wiki 019](./wiki/019-contract-governance.md)。
 
 规范化只去除纯文本标题的首尾空白。总览与正文用去空白结果判断是否非空，但保留原 Markdown 源文本、缩进和换行；不以渲染结果或 Markdown 语义等价比较内容。模型原始输出、请求与存储均复用此规则。
 

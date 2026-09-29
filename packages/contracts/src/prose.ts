@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { artifactEnvelopeSchema } from './artifacts.js'
+import { artifactEnvelopeSchema } from './artifact-envelope.js'
 
 export const proseLimits = { text: 100_000, instructions: 10_000, bodyBytes: 1024 * 1024, maxPromptChars: 400_000 } as const
 const text = z.string().max(proseLimits.text)

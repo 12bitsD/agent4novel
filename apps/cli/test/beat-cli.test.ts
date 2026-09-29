@@ -26,7 +26,7 @@ describe('Agent Beat CLI', () => {
   it('includes safe partial steps and the verified execution mode when smoke fails', async () => {
     const client = createClient({ baseUrl: 'http://example.test', fetch: async url => {
       if (url.endsWith('/api/config')) return new Response(JSON.stringify({ demo: true }))
-      if (url.endsWith('/api/works')) return new Response(JSON.stringify({ id: 'work-test' }))
+      if (url.endsWith('/api/works')) return new Response(JSON.stringify({ id: 'work-test', seed: 'synthetic smoke', title: '作品', config: {}, createdAt: 'today' }))
       return new Response(JSON.stringify({ kind: 'failed', stepId: 'caption', code: 'llm-timeout', retryable: true,
         state: { workId: 'work-test', stage: 'ready', nextStepId: 'caption' }, telemetry: [] }))
     } })

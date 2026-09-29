@@ -1,4 +1,4 @@
-import type { Artifact, ArtifactKind, HumanStatus, JsonValue, Work, WorkDetail, WorkSummary } from '@agent4novel/contracts'
+import type { Artifact, ArtifactKind, HumanStatus, JsonValue, Work, WorkDetail, WorkSummary, WorkCreateRequest } from '@agent4novel/contracts'
 
 export type ArtifactPrecondition = {
   kind: ArtifactKind
@@ -31,7 +31,7 @@ export type SaveArtifactInput = FinalizeArtifactInput & { expectedHumanStatus: H
 
 export interface WorkStore {
   // Inputs and returned snapshots must not expose mutable store-owned references.
-  createWork(input: { seed: string; title?: string }): Work
+  createWork(input: WorkCreateRequest): Work
   listWorks(): WorkSummary[]
   getWork(id: string): WorkDetail | undefined
   appendArtifact(
