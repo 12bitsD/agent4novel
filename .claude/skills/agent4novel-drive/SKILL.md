@@ -72,6 +72,8 @@ Prose文件沿用章号/id/version基线，content为`{text}`；save额外必须
 
 `start-chapter`文件形如`{"chapter":2,"expectedPreviousProseId":"<前章正文ID>","expectedPreviousProseVersion":2}`，为严格UTF-8 JSON且≤1MiB。命令只发送校验后的三字段请求；目标必须为连续下一章且前章正文approved。结果未知时不自动回读或重发，先手动get检查；不得改成新的章号或最新基线猜测重试。已存在目标只返回当前状态，不重复生成或覆盖。后续章使用该章Beat/Prose命令把关，advance只推进工作章。详细行为见 [Wiki 006](../../../docs/wiki/006-chapter-continuation.md)。
 
+#19 起，公开响应和六类产物内容统一校验。`invalid-response`、畸形错误包或资源身份不匹配不证明写入失败，即使 HTTP 为 4xx；保留原请求，按对应命令回读，不自动重发。合法命令错误中的 `writeOutcome: unknown` 优先于 HTTP 状态。独立 `run-step` 的成功内容也按 stepId 校验；共享边界与安全失败见 [Wiki 019](../../../docs/wiki/019-contract-governance.md)。
+
 `advance`或`start-chapter`返回`kind: "failed"`时，先读内联telemetry或运行logs，再根据retryable及writeOutcome决定后续动作；unknown先回读，不能因报错就认定没有落库。再次advance按当前关卡状态推进，已落库产物不会自动重跑。Pipeline不自动重试；Setting、Beat、Prose还显式设置SDK maxRetries:0，其他步骤沿用SDK默认请求重试行为。
 
 ## 遥测:分析每次 LLM 调用

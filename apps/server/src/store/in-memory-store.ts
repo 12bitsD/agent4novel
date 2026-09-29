@@ -1,4 +1,4 @@
-import { emptyAgentConfig, perChapterKinds, perWorkKinds } from '@agent4novel/contracts'
+import { emptyAgentConfig, perChapterKinds, perWorkKinds, artifactSchema, workSchema, workDetailSchema, workCreateRequestSchema, workListResponseSchema } from '@agent4novel/contracts'
 import { randomUUID } from 'node:crypto'
 import type {
   Artifact,
@@ -8,9 +8,12 @@ import type {
   Work,
   WorkDetail,
   WorkSummary,
+  WorkCreateRequest,
 } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
 import type { AppendOptions, ArtifactPrecondition, FinalizeArtifactInput, SaveArtifactInput, WorkStore } from './work-store.js'
+
+import { validateStoreValue } from './validation.js'
 
 type Bucket = { kind: ArtifactKind; chapter?: number; versions: Artifact[] }
 
@@ -59,23 +62,25 @@ export class InMemoryStore implements WorkStore {
     }
   }
 
-  createWork(input: { seed: string; title?: string }): Work {
-    const title = input.title?.trim() || undefined
+  createWork(input: WorkCreateRequest): Work {
+    const parsed = validateStoreValue(workCreateRequestSchema, input, 'input')
+    const title = parsed.title?.trim() || undefined
     const work: Work = {
       id: this.nextId('work'),
-      title: title ?? input.seed.slice(0, 20),
-      seed: input.seed,
+      title: title ?? parsed.seed.slice(0, 20),
+      seed: parsed.seed,
       config: structuredClone(emptyAgentConfig),
       createdAt: new Date().toISOString(),
     }
-    const snapshot = structuredClone(work)
+    const snapshot = validateStoreValue(workSchema, work, 'input')
     this.works.set(work.id, work)
     this.buckets.set(work.id, [])
     return snapshot
   }
 
   listWorks(): WorkSummary[] {
-    return [...this.works.values()].map((w) => {
+    return validateStoreValue(workListResponseSchema, [...this.works.keys()].map((id) => {
+      const w = this.getWork(id)!
       const buckets = this.buckets.get(w.id) ?? []
       const chapterCount = buckets.filter((b) => b.kind === 'prose' && b.versions.at(-1)?.humanStatus === 'approved').length
       return {
@@ -84,7 +89,7 @@ export class InMemoryStore implements WorkStore {
         seedPreview: w.seed.length > 40 ? `${w.seed.slice(0, 40)}…` : w.seed,
         chapterCount,
       }
-    })
+    }), 'stored')
   }
 
   getWork(id: string): WorkDetail | undefined {
@@ -93,7 +98,7 @@ export class InMemoryStore implements WorkStore {
     const artifacts = (this.buckets.get(id) ?? [])
       .map((b) => b.versions[b.versions.length - 1])
       .filter((a): a is Artifact => a !== undefined)
-    return structuredClone({ ...work, artifacts })
+    return validateStoreValue(workDetailSchema, { ...work, artifacts }, 'stored')
   }
 
   appendArtifact(
@@ -120,7 +125,7 @@ export class InMemoryStore implements WorkStore {
       createdAt: new Date().toISOString(),
       ...(options?.inputs ? { inputs: options.inputs } : {}),
     }
-    const snapshot = structuredClone(artifact)
+    const snapshot = validateStoreValue(artifactSchema, artifact, 'input')
     const candidate: Bucket = { kind, chapter, versions: [...(bucket?.versions ?? []), artifact] }
     const previous = this.buckets.get(workId)!
     const next = bucket
@@ -145,7 +150,7 @@ export class InMemoryStore implements WorkStore {
     }
     this.assertPreconditions(workId, kind, chapter, request.preconditions)
     const artifact: Artifact = { ...head, content: request.content, humanStatus: 'approved' }
-    const snapshot = structuredClone(artifact)
+    const snapshot = validateStoreValue(artifactSchema, artifact, 'input')
     const candidate: Bucket = { ...bucket, versions: [...bucket.versions.slice(0, -1), artifact] }
     const next = this.buckets.get(workId)!.map((entry) => entry === bucket ? candidate : entry)
     this.buckets.set(workId, next)
@@ -164,7 +169,7 @@ export class InMemoryStore implements WorkStore {
     }
     this.assertPreconditions(workId, kind, chapter, request.preconditions)
     const artifact: Artifact = { ...head, id: this.nextId('artifact'), version: head.version + 1, content: request.content, createdAt: new Date().toISOString() }
-    const snapshot = structuredClone(artifact)
+    const snapshot = validateStoreValue(artifactSchema, artifact, 'input')
     const candidate: Bucket = { ...bucket, versions: [...bucket.versions, artifact] }
     this.buckets.set(workId, this.buckets.get(workId)!.map(entry => entry === bucket ? candidate : entry))
     return snapshot
@@ -188,13 +193,15 @@ export class InMemoryStore implements WorkStore {
         `artifact not found: ${workId}/${kind}${opts?.chapter !== undefined ? `#${opts.chapter}` : ''}`,
       )
     }
-    bucket.versions[bucket.versions.length - 1].humanStatus = status
+    const index = bucket.versions.length - 1
+    const candidate = validateStoreValue(artifactSchema, { ...bucket.versions[index], humanStatus: status }, 'input')
+    bucket.versions[index] = candidate
   }
 
   headVersion(workId: string, kind: ArtifactKind, opts?: { chapter?: number }): number | undefined {
     const bucket = this.findBucket(workId, kind, opts?.chapter)
     return bucket && bucket.versions.length > 0
-      ? bucket.versions[bucket.versions.length - 1].version
+      ? validateStoreValue(artifactSchema, bucket.versions[bucket.versions.length - 1], 'stored').version
       : undefined
   }
 }

@@ -59,7 +59,7 @@ describe('first chapter Prose pipeline', () => {
       async run(input) { seen.push(input.upstream); return { content: beat.content } },
     }
     // A synthetic receipt uses the unused beat#2 address in this test-only definition.
-    // Production has six steps and ends at prose#1; this consumer does not write fiction.
+    // This isolated definition ends at prose#1; this consumer does not write fiction.
     const downstream = new Pipeline({ store, consumeGuards, resolveConfig: () => ({}), steps: new Map([['prose', consumer], ['test-only-consumer', consumer]]),
       definition: [
         { stepId: 'prose', outputKind: 'prose', chapter: 1, gateAfter: { kind: 'prose', chapter: 1 } },
@@ -80,8 +80,9 @@ describe('first chapter Prose pipeline', () => {
     expect(seen).toEqual([{ prose: content }])
     const pending = store.appendArtifact(work.id, 'prose', { text: '后来的待审正文' }, { chapter: 1 })
     expect((await downstream.advance(work.id)).kind).toBe('awaiting-approval')
-    store.finalizeArtifact({ workId: work.id, kind: 'prose', chapter: 1, expectedArtifactId: pending.id, expectedHeadVersion: pending.version, content: { text: '' } })
-    expect(await downstream.advance(work.id)).toMatchObject({ kind: 'awaiting-approval', state: { stage: 'blocked', pendingGate: { kind: 'prose', chapter: 1 } } })
+    expect(() => store.finalizeArtifact({ workId: work.id, kind: 'prose', chapter: 1, expectedArtifactId: pending.id, expectedHeadVersion: pending.version, content: { text: '' } })).toThrow()
+    expect(store.getWork(work.id)!.artifacts.find(a => a.kind === 'prose')).toEqual(pending)
+    expect(await downstream.advance(work.id)).toMatchObject({ kind: 'awaiting-approval', state: { stage: 'awaiting-approval', pendingGate: { kind: 'prose', chapter: 1 } } })
     expect(seen).toHaveLength(1)
   })
   it('finalizes exact author text on the same identity and forbids generic status changes', async () => {

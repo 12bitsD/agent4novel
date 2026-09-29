@@ -1,16 +1,15 @@
-import { advanceOutcomeDtoSchema, apiErrorSchema, settingApproveResponseSchema, workViewSchema, diagnosticResponseSchema, diagnosticQuerySchema } from '@agent4novel/contracts'
-import type { BeatSubmission, ProseSubmission, DiagnosticQuery, StartChapterRequest } from '@agent4novel/contracts'
-import { appConfigSchema } from '@agent4novel/contracts'
+import { advanceOutcomeDtoSchema, httpErrorSchema, artifactSchema, workSchema, workListResponseSchema, pipelineStateSchema, settingApproveResponseSchema, workViewSchema, diagnosticResponseSchema, diagnosticQuerySchema } from '@agent4novel/contracts'
+import type { BeatSubmission, ProseSubmission, DiagnosticQuery, StartChapterRequest, WorkCreateRequest, SelectCreativeRequest, OutlineDraftRequest, ApproveRequest } from '@agent4novel/contracts'
+import { appConfigSchema, matchesStartChapterResponse } from '@agent4novel/contracts'
 import type {
-  Artifact,
   ArtifactKind,
-  LlmTelemetry,
   OutlineDraft,
   SettingApproveRequest,
   ValidationIssue,
   Work,
   WorkSummary,
   WorkView,
+  HttpError,
 } from '@agent4novel/contracts'
 
 // 普通 REST 请求沿用 300s；advance 可能串行执行多个 LLM step，单独覆盖当前最长两步链：
@@ -64,12 +63,24 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
   const timeoutOverrideMs =
     opts.timeoutMs === undefined ? undefined : parseCliTimeoutMs(String(opts.timeoutMs))
 
+  function invalidResponse(write: boolean): CliError {
+    return new CliError('Invalid server response; inspect the work before retrying a write', 'invalid-response', undefined,
+      false, undefined, undefined, write ? { writeOutcome: 'unknown' } : undefined)
+  }
+  function validate<T>(schema: { safeParse: (data: unknown) => { success: true; data: T } | { success: false } },
+    data: unknown, matches: (result: T) => boolean = () => true, write = false): T {
+    const parsed = schema.safeParse(data)
+    if (!parsed.success || !matches(parsed.data)) throw invalidResponse(write)
+    return parsed.data
+  }
+
   async function call<T>(
     method: string,
     path: string,
     body?: unknown,
     defaultTimeoutMs = DEFAULT_CLI_TIMEOUT_MS,
     raw = false,
+    matchesError: (error: HttpError) => boolean = () => true,
   ): Promise<T> {
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -89,10 +100,15 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
       const data: unknown = await res.json().catch(() => null)
       if (raw) return { status: res.status, body: data } as T
       if (!res.ok) {
-        const parsed = apiErrorSchema.safeParse(data)
-        if (!parsed.success) throw new CliError('Invalid server error response', 'invalid-response', res.status)
+        const parsed = httpErrorSchema.safeParse(data)
+        if (!parsed.success || !matchesError(parsed.data)) throw invalidResponse(method !== 'GET')
         const e = parsed.data
-        throw new CliError(e.message, e.code, res.status, e.retryable, e.attemptId, e.issues)
+        const requestedWork = /^\/api\/works\/([^/?]+)/.exec(path)?.[1]
+        if ('command' in e && e.command.kind === 'execution-result' && requestedWork !== undefined
+          && e.command.target.workId !== decodeURIComponent(requestedWork)) throw invalidResponse(method !== 'GET')
+        const unknownWrite = 'command' in e && e.command.writeOutcome === 'unknown'
+        throw new CliError(e.message, e.code, unknownWrite ? undefined : res.status, e.retryable, e.attemptId, e.issues,
+          'command' in e ? { command: e.command, telemetry: e.telemetry, writeOutcome: e.command.writeOutcome } : undefined)
       }
       return data as T
     }
@@ -107,53 +123,36 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
   }
 
   return {
-    getConfig: async () => appConfigSchema.parse(await call<unknown>('GET', '/api/config')),
-    listWorks: () => call<WorkSummary[]>('GET', '/api/works'),
-    createWork: (input: { seed: string; title?: string }) =>
-      call<Work>('POST', '/api/works', input),
+    getConfig: async () => validate(appConfigSchema, await call<unknown>('GET', '/api/config')),
+    listWorks: async (): Promise<WorkSummary[]> => validate(workListResponseSchema, await call<unknown>('GET', '/api/works')),
+    createWork: async (input: WorkCreateRequest): Promise<Work> =>
+      validate(workSchema, await call<unknown>('POST', '/api/works', input), result => result.seed === input.seed, true),
     getWork: async (workId: string, reconcile = false): Promise<WorkView> => {
       const data = await call<unknown>('GET', `/api/works/${encodeURIComponent(workId)}`, undefined, reconcile ? 10_000 : DEFAULT_CLI_TIMEOUT_MS)
-      const parsed = workViewSchema.safeParse(data)
-      if (!parsed.success || parsed.data.id !== workId) {
-        throw new CliError('Invalid work response', 'invalid-response', 200)
-      }
-      return parsed.data
+      return validate(workViewSchema, data, result => result.id === workId)
     },
     advance: async (workId: string) => {
-      const data = await call<unknown>('POST', `/api/works/${workId}/advance`, undefined, DEFAULT_ADVANCE_TIMEOUT_MS)
-      const parsed = advanceOutcomeDtoSchema.safeParse(data)
-      if (!parsed.success || parsed.data.state.workId !== workId) {
-        throw new CliError('Invalid advance response', 'invalid-response', 200)
-      }
-      return parsed.data
+      const data = await call<unknown>('POST', `/api/works/${encodeURIComponent(workId)}/advance`, undefined, DEFAULT_ADVANCE_TIMEOUT_MS)
+      return validate(advanceOutcomeDtoSchema, data, result => result.state.workId === workId, true)
     },
     startChapter: async (workId: string, request: StartChapterRequest) => {
-      const data = await call<unknown>('POST', `/api/works/${encodeURIComponent(workId)}/chapters/start`, request, 920_000)
-      const parsed = advanceOutcomeDtoSchema.safeParse(data)
-      if (!parsed.success || parsed.data.state.workId !== workId) {
-        throw new CliError('Invalid chapter start response; inspect the work before retrying', 'invalid-response', 200)
-      }
-      return parsed.data
+      const data = await call<unknown>('POST', `/api/works/${encodeURIComponent(workId)}/chapters/start`, request, 920_000, false,
+        error => matchesStartChapterResponse(error, workId, request.chapter))
+      return validate(advanceOutcomeDtoSchema, data, result => matchesStartChapterResponse(result, workId, request.chapter), true)
     },
-    select: (workId: string, directionId: string, expectedHeadVersion: number) =>
-      call<Artifact>('POST', `/api/works/${workId}/artifacts/creative/select`, {
-        directionId,
-        expectedHeadVersion,
-      }),
-    saveOutline: (workId: string, content: OutlineDraft, expectedHeadVersion: number) =>
-      call<Artifact>('PUT', `/api/works/${workId}/artifacts/outline`, {
-        content,
-        expectedHeadVersion,
-      }),
-    approve: (workId: string, kind: ArtifactKind) =>
-      call<unknown>('POST', `/api/works/${workId}/approve`, { kind }),
+    select: async (workId: string, directionId: string, expectedHeadVersion: number) =>
+      validate(artifactSchema, await call<unknown>('POST', `/api/works/${encodeURIComponent(workId)}/artifacts/creative/select`, {
+        directionId, expectedHeadVersion,
+      } satisfies SelectCreativeRequest), result => result.workId === workId && result.kind === 'creative' && result.chapter === undefined && result.humanStatus === 'approved', true),
+    saveOutline: async (workId: string, content: OutlineDraft, expectedHeadVersion: number) =>
+      validate(artifactSchema, await call<unknown>('PUT', `/api/works/${encodeURIComponent(workId)}/artifacts/outline`, {
+        content, expectedHeadVersion,
+      } satisfies OutlineDraftRequest), result => result.workId === workId && result.kind === 'outline' && result.chapter === undefined && result.humanStatus === 'pending', true),
+    approve: async (workId: string, kind: ArtifactKind) =>
+      validate(pipelineStateSchema, await call<unknown>('POST', `/api/works/${encodeURIComponent(workId)}/approve`, { kind } satisfies ApproveRequest), result => result.workId === workId, true),
     approveSetting: async (workId: string, request: SettingApproveRequest) => {
-      const data = await call<unknown>('POST', `/api/works/${workId}/artifacts/setting/approve`, request)
-      const parsed = settingApproveResponseSchema.safeParse(data)
-      if (!parsed.success || parsed.data.workId !== workId) {
-        throw new CliError('Invalid setting approval response', 'invalid-response', 200)
-      }
-      return parsed.data
+      const data = await call<unknown>('POST', `/api/works/${encodeURIComponent(workId)}/artifacts/setting/approve`, request)
+      return validate(settingApproveResponseSchema, data, result => result.workId === workId, true)
     },
     // LLM 遥测回看(#14)
     getTelemetry: async (workId: string, query: DiagnosticQuery = {}) => {
@@ -161,7 +160,7 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
       for (const [key, value] of Object.entries(diagnosticQuerySchema.parse(query))) {
         if (value !== undefined) params.set(key, value)
       }
-      const result = diagnosticResponseSchema.parse(await call<unknown>('GET', `/api/works/${encodeURIComponent(workId)}/telemetry${params.size ? `?${params}` : ''}`))
+      const result = validate(diagnosticResponseSchema, await call<unknown>('GET', `/api/works/${encodeURIComponent(workId)}/telemetry${params.size ? `?${params}` : ''}`))
       if (result.workId !== workId) throw new CliError('Diagnostic response belongs to a different work', 'invalid-response')
       return result
     },

@@ -223,7 +223,7 @@ describe('CLI command discovery and syntax', () => {
   })
 
   it('preserves leading global options, equals values, pnpm separators and literal help values', async () => {
-    response = { id: 'work-synthetic', title: 'Synthetic work', seed: '--help' }
+    response = { id: 'work-synthetic', title: 'Synthetic work', seed: '--help', config: {}, createdAt: 'today' }
     const result = await invoke(['--', '--url', baseUrl, '--timeout-ms=1000', 'create', '--', '--seed=--help', '--title=Synthetic work'], {
       A4N_BASE_URL: 'http://127.0.0.1:1',
     })

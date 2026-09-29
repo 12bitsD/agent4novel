@@ -77,9 +77,9 @@ describe('first chapter Beat', () => {
     })).status).toBe(200)
     await downstream.advance(work.id)
     expect(consumed).toEqual([{ beat: content }])
-    const poisoned = store.appendArtifact(work.id, 'beat', { invalid: true }, { chapter: 1 })
-    store.finalizeArtifact({ workId: work.id, kind: 'beat', chapter: 1, expectedArtifactId: poisoned.id,
-      expectedHeadVersion: poisoned.version, content: { invalid: true } })
+    const unchanged = store.getWork(work.id)
+    expect(() => store.appendArtifact(work.id, 'beat', { invalid: true }, { chapter: 1 })).toThrow()
+    expect(store.getWork(work.id)).toEqual(unchanged)
     expect((await downstream.advance(work.id)).kind).toBe('awaiting-approval')
     expect(consumed).toHaveLength(1)
   })
@@ -172,15 +172,16 @@ describe('first chapter Beat', () => {
     expect(current.artifacts.some((a: { kind: string }) => a.kind === 'prose')).toBe(false)
     expect(await (await app.request(`/api/works/${work.id}/advance`, { method: 'POST' })).json()).toMatchObject({ kind: 'awaiting-approval' })
   })
-  it('rechecks an invalid approved upstream even when a later Beat is already pending', async () => {
+  it('rejects corrupt upstream content without disturbing a later pending Beat', async () => {
     const { app, work, store } = await ready()
     await app.request(`/api/works/${work.id}/advance`, { method: 'POST' })
-    store.appendArtifact(work.id, 'outline', { invalid: true })
-    store.setStatus(work.id, 'outline', 'approved')
+    const unchanged = store.getWork(work.id)
+    expect(() => store.appendArtifact(work.id, 'outline', { invalid: true })).toThrow()
+    expect(store.getWork(work.id)).toEqual(unchanged)
     const view = await (await app.request(`/api/works/${work.id}`)).json()
-    expect(view).toMatchObject({ workflowState: 'ready-to-generate', allowedActions: [] })
+    expect(view).toMatchObject({ workflowState: 'awaiting-beat-review', allowedActions: ['approve', 'regenerate'] })
     expect(await (await app.request(`/api/works/${work.id}/advance`, { method: 'POST' })).json()).toMatchObject({
-      kind: 'awaiting-approval', state: { stage: 'blocked', pendingGate: { kind: 'outline' } },
+      kind: 'awaiting-approval', state: { stage: 'awaiting-approval', pendingGate: { kind: 'beat', chapter: 1 } },
     })
   })
   it('approves the edited full content atomically without adding a version or generating prose', async () => {
@@ -374,13 +375,24 @@ describe('first chapter Beat', () => {
     expect(store.getWork(work.id)).toEqual(before)
   })
   it('bounds validation diagnostics and does not expose polluted Beat content in GET', async () => {
-    const { app, store, work } = await ready()
+    // Fault-inject at the Store port: a broken adapter must not leak its returned content.
+    class PollutedReader extends InMemoryStore {
+      polluted = false
+      override getWork(id: string) {
+        const result = super.getWork(id)
+        const beat = result?.artifacts.find(a => a.kind === 'beat')
+        if (this.polluted && beat) beat.content = { poisoned: 'SYNTHETIC_PRIVATE_MARKER' }
+        return result
+      }
+    }
+    const reader = new PollutedReader()
+    const { app, store, work } = await ready(undefined, reader)
     await app.request(`/api/works/${work.id}/advance`, { method: 'POST' })
     const head = store.getWork(work.id)!.artifacts.find(a => a.kind === 'beat')!
     const response = await app.request(`/api/works/${work.id}/artifacts/beat/approve`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ chapter: 1, expectedArtifactId: head.id, expectedHeadVersion: 1, content: { ...beatContent, writingPlan: Array.from({ length: 10_000 }, () => ({})) } }) })
     expect(response.status).toBe(422)
     expect(await response.json()).toMatchObject({ issues: [{ path: ['content', 'writingPlan'] }], command: { writeOutcome: 'not-committed' } })
-    store.appendArtifact(work.id, 'beat', { poisoned: 'SYNTHETIC_PRIVATE_MARKER' }, { chapter: 1 })
+    reader.polluted = true
     const invalid = await app.request(`/api/works/${work.id}`)
     expect(invalid.status).toBe(500)
     expect(await invalid.text()).not.toContain('SYNTHETIC_PRIVATE_MARKER')

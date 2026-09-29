@@ -3,6 +3,7 @@ import type { Artifact, BeatArtifact, SettingApproveRequest, SettingArtifact, Wo
 import { beatApproveRequestSchema, settingApproveRequestSchema } from '@agent4novel/contracts'
 import { createClient } from '../src/client.js'
 import * as cmd from '../src/commands.js'
+import { creativeContent, outlineContent } from './public-fixtures.js'
 
 const baseline: SettingArtifact = {
   id: 'setting-1', workId: 'w1', kind: 'setting', version: 1, humanStatus: 'pending', createdAt: 'created-once',
@@ -139,14 +140,14 @@ describe('setting CLI submission', () => {
         const kind = (['creative', 'outline', 'setting', 'beat'] as const)[advances++]!
         const artifact: Artifact = kind === 'beat' ? beat : kind === 'setting' ? baseline : {
           id: `artifact-${kind}`, workId: 'w1', kind, version: 1, humanStatus: 'pending' as const, createdAt: 'created-once',
-          content: kind === 'creative' ? { directions: [{ directionId: 'direction-one' }] } : { arcs: [] },
+          content: kind === 'creative' ? creativeContent('direction-one') : outlineContent(),
         }
         current = {
           ...current, artifacts: [...current.artifacts, artifact], nextStepId: null,
           workflowState: kind === 'creative' ? 'awaiting-selection' : kind === 'outline' ? 'awaiting-outline-review' : kind === 'beat' ? 'awaiting-beat-review' : 'awaiting-setting-review',
           allowedActions: kind === 'creative' ? ['select'] : ['approve'],
         }
-        return json({ kind: 'advanced', stepId: kind, state: { workId: 'w1', stage: 'awaiting-approval', nextStepId: null, pendingGate: { kind } }, telemetry: [] })
+        return json({ kind: 'advanced', stepId: kind, state: { workId: 'w1', stage: 'awaiting-approval', nextStepId: null, pendingGate: { kind, ...(kind === 'beat' ? { chapter: 1 } : {}) } }, telemetry: [] })
       }
       if (path.endsWith('/select') || path === '/api/works/w1/approve') {
         const kind = path.endsWith('/select') ? 'creative' : 'outline'
@@ -189,7 +190,7 @@ describe('setting CLI submission', () => {
     const client = createClient({ baseUrl: 'http://x', fetch: async (url, init) => {
       calls.push(`${init?.method} ${new URL(url).pathname}`)
       if (new URL(url).pathname === '/api/config') return json({ demo: true })
-      if (new URL(url).pathname === '/api/works') return json({ id: 'w1', title: 't', seed: 's', config: {}, createdAt: 'created-once' })
+      if (new URL(url).pathname === '/api/works') return json({ id: 'w1', title: 't', seed: '合成素材', config: {}, createdAt: 'created-once' })
       if (new URL(url).pathname.endsWith('/advance')) return json({
         kind: 'failed', stepId: 'creative', code: 'llm-timeout', retryable: true, attemptId: 'attempt-1',
         state: { workId: 'w1', stage: 'ready', nextStepId: 'creative' }, telemetry: [],

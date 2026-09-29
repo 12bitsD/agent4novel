@@ -1,14 +1,11 @@
 import { Hono } from 'hono'
+import { contractJson, responseUnavailable } from '../contract-response.js'
 import { bodyLimit } from 'hono/body-limit'
 import type { Context } from 'hono'
 import { z } from 'zod'
 import {
-  artifactKinds,
   creativeContentSchema,
   outlineContentSchema,
-  outlineDraftSchema,
-  perChapterKinds,
-  perWorkKinds,
   settingApproveRequestSchema,
   settingLimits,
   beatApproveRequestSchema, beatRequestHeadSchema, beatLimits, beatCommandResponseSchema, beatCommandErrorSchema,
@@ -17,6 +14,9 @@ import {
   proseRegenerateRequestSchema, proseSaveRequestSchema,
   diagnosticQuerySchema,
   workViewSchema, startChapterRequestSchema,
+  workCreateRequestSchema, workListResponseSchema, workSchema, artifactSchema,
+  creativeDraftRequestSchema, selectCreativeRequestSchema, outlineDraftRequestSchema, approveRequestSchema,
+  advanceOutcomeDtoSchema, pipelineStateSchema, settingApproveResponseSchema, diagnosticResponseSchema, httpErrorSchema,
 } from '@agent4novel/contracts'
 import type { ApiError, ArtifactKind, OutlineContent, OutlineDraft, WorkflowState, WorkView, LlmTelemetry } from '@agent4novel/contracts'
 import type { Pipeline } from '../pipeline/pipeline.js'
@@ -30,29 +30,6 @@ import { approveProse, saveProse } from '../prose-review.js'
 import { observeProse, ProseCommandError, proseFailureCode, proseResponseError } from '../prose-command.js'
 import { safeLog } from '../safe-log.js'
 import { chapterSummaries, currentChapterOf } from '../chapter-view.js'
-
-const workCreateSchema = z.object({
-  seed: z.string().min(1),
-  title: z.string().optional(),
-})
-
-// saveCreativeDraft(#3c):保存全部方向,永远 pending;expectedHeadVersion 乐观锁
-const saveCreativeSchema = z.object({
-  content: creativeContentSchema,
-  expectedHeadVersion: z.number().int().min(1),
-})
-
-// selectCreativeDirection(#3c):显式选定单方向 → 落单方向新版本 + approved
-const selectCreativeSchema = z.object({
-  directionId: z.string().min(1),
-  expectedHeadVersion: z.number().int().min(1),
-})
-
-// saveOutlineDraft(#4):保存草稿,永远 pending;id 可缺省(新增项),server 规整时补注入
-const saveOutlineSchema = z.object({
-  content: outlineDraftSchema,
-  expectedHeadVersion: z.number().int().min(1),
-})
 
 // id 规整(#4 决策 6):已有 id 保留(上下移/编辑不动标识),新项(无 id)按「现存最大序号 +1」
 // 补注入,保持与生成时相同的位置编号格式(删除后按位置重排会撞号,故取 max+1)
@@ -80,23 +57,6 @@ function normalizeOutlineIds(workId: string, draft: OutlineDraft): OutlineConten
   }
   return outlineContentSchema.parse(content)
 }
-
-const approveBodySchema = z
-  .object({
-    kind: z.enum(artifactKinds),
-    chapter: z.number().optional(),
-  })
-  .superRefine((v, ctx) => {
-    if (perChapterKinds.includes(v.kind) && v.chapter === undefined) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `kind "${v.kind}" requires a chapter` })
-    }
-    if (perWorkKinds.includes(v.kind) && v.chapter !== undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `kind "${v.kind}" must not have a chapter`,
-      })
-    }
-  })
 
 function errorBody(code: string, message: string, retryable = false, attemptId?: string): ApiError {
   return { code, message, retryable, ...(attemptId ? { attemptId } : {}) }
@@ -145,7 +105,7 @@ function routeError(c: Context, err: unknown): Response {
         return c.json(body, 422)
     }
   }
-  return c.json(errorBody('internal', msg), 500)
+  return responseUnavailable(c)
 }
 
 // 乐观锁:expectedHeadVersion 必须等于当前 head,否则 409(#3c 决策 9)
@@ -215,6 +175,14 @@ export type WorksRoutesDeps = {
 
 export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
   const app = new Hono()
+  app.onError((_error, c) => responseUnavailable(c))
+  app.use('*', async (c, next) => {
+    await next()
+    if (c.res.status >= 400) {
+      const body: unknown = await c.res.clone().json().catch(() => null)
+      if (!httpErrorSchema.safeParse(body).success) c.res = responseUnavailable(c)
+    }
+  })
 
   app.use('/api/works/:id/artifacts/beat/*', async (_c, next) => withRequest(crypto.randomUUID(), meta?.demo ?? true, next))
   const rejectBeatRequest = (c: Context, code: 'bad-json' | 'invalid-input' | 'unsupported-chapter' | 'payload-too-large') => {
@@ -347,7 +315,7 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
       }, contentError ? 422 : 400)
     }
     try {
-      return c.json(approveSetting(store, c.req.param('id'), parsed.data))
+      return contractJson(c, settingApproveResponseSchema, approveSetting(store, c.req.param('id'), parsed.data))
     } catch (err) {
       if (err instanceof SettingValidationError) return c.json({
         ...errorBody('invalid-content', 'invalid setting content'),
@@ -357,20 +325,20 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
     }
   })
 
-  app.get('/api/works', (c) => c.json(store.listWorks()))
+  app.get('/api/works', (c) => contractJson(c, workListResponseSchema, store.listWorks()))
 
   app.post('/api/works', async (c) => {
     const body = await readJsonBody(c)
     if (!body.ok) return body.response
-    const parsed = workCreateSchema.safeParse(body.data)
+    const parsed = workCreateRequestSchema.safeParse(body.data)
     if (!parsed.success) {
       return c.json(
-        { ...errorBody('invalid-input', 'invalid input'), issues: parsed.error.issues },
+        { ...errorBody('invalid-input', 'invalid input'), issues: parsed.error.issues.map(({ path, code }) => ({ path, code, message: 'invalid field' })) },
         400,
       )
     }
     const work = store.createWork(parsed.data)
-    return c.json(work, 201)
+    return contractJson(c, workSchema, work, 201)
   })
 
   app.get('/api/works/:id', (c) => {
@@ -395,17 +363,17 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
     if (!store.getWork(workId)) return c.json(errorBody('work-not-found', 'not found'), 404)
     const body = await readJsonBody(c)
     if (!body.ok) return body.response
-    const parsed = saveCreativeSchema.safeParse(body.data)
+    const parsed = creativeDraftRequestSchema.safeParse(body.data)
     if (!parsed.success) {
       return c.json(
-        { ...errorBody('invalid-content', 'invalid content'), issues: parsed.error.issues },
+        { ...errorBody('invalid-content', 'invalid content'), issues: parsed.error.issues.map(({ path, code }) => ({ path, code, message: 'invalid field' })) },
         422,
       )
     }
     const conflict = assertHead(c, store, workId, 'creative', parsed.data.expectedHeadVersion)
     if (conflict) return conflict
     const artifact = store.appendArtifact(workId, 'creative', parsed.data.content)
-    return c.json(artifact)
+    return contractJson(c, artifactSchema, artifact)
   })
 
   // selectCreativeDirection:显式选定单方向 → 单方向新版本 + approved
@@ -415,10 +383,10 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
     if (!work) return c.json(errorBody('work-not-found', 'not found'), 404)
     const body = await readJsonBody(c)
     if (!body.ok) return body.response
-    const parsed = selectCreativeSchema.safeParse(body.data)
+    const parsed = selectCreativeRequestSchema.safeParse(body.data)
     if (!parsed.success) {
       return c.json(
-        { ...errorBody('invalid-input', 'invalid input'), issues: parsed.error.issues },
+        { ...errorBody('invalid-input', 'invalid input'), issues: parsed.error.issues.map(({ path, code }) => ({ path, code, message: 'invalid field' })) },
         400,
       )
     }
@@ -438,7 +406,7 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
     }
     store.appendArtifact(workId, 'creative', { directions: [pack] })
     store.setStatus(workId, 'creative', 'approved')
-    return c.json(store.getWork(workId)!.artifacts.find((artifact) => artifact.kind === 'creative')!)
+    return contractJson(c, artifactSchema, store.getWork(workId)!.artifacts.find((artifact) => artifact.kind === 'creative')!)
   })
 
   // saveOutlineDraft(#4):保存大纲草稿,永远 pending;「通过」走通用 /approve
@@ -447,10 +415,10 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
     if (!store.getWork(workId)) return c.json(errorBody('work-not-found', 'not found'), 404)
     const body = await readJsonBody(c)
     if (!body.ok) return body.response
-    const parsed = saveOutlineSchema.safeParse(body.data)
+    const parsed = outlineDraftRequestSchema.safeParse(body.data)
     if (!parsed.success) {
       return c.json(
-        { ...errorBody('invalid-content', 'invalid content'), issues: parsed.error.issues },
+        { ...errorBody('invalid-content', 'invalid content'), issues: parsed.error.issues.map(({ path, code }) => ({ path, code, message: 'invalid field' })) },
         422,
       )
     }
@@ -461,7 +429,7 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
       'outline',
       normalizeOutlineIds(workId, parsed.data.content),
     )
-    return c.json(artifact)
+    return contractJson(c, artifactSchema, artifact)
   })
 
   // advance = 推进到下一个关卡(链式);返回可穷举 outcome。
@@ -483,7 +451,7 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
           outcome: outcome.kind,
           latencyMs: Date.now() - started,
         })
-      return c.json({ ...outcome, telemetry })
+      return contractJson(c, advanceOutcomeDtoSchema, { ...outcome, telemetry })
     } catch (err) {
       if (err instanceof BeatCommandError) return c.json(beatCommandErrorSchema.parse({
         code: 'internal-error', message: 'internal-error', retryable: false, command: err.command, telemetry,
@@ -511,7 +479,7 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
         return pipeline.startChapter(c.req.param('id'), parsed.data)
       })
       safeLog({ event: 'pipeline.start-chapter', requestId, workId: c.req.param('id'), chapter: parsed.data.chapter, outcome: outcome.kind })
-      return c.json({ ...outcome, telemetry })
+      return contractJson(c, advanceOutcomeDtoSchema, { ...outcome, telemetry })
     } catch (err) {
       if (err instanceof BeatCommandError) return c.json(beatCommandErrorSchema.parse({
         code: 'internal-error', message: 'internal-error', retryable: false, command: err.command, telemetry,
@@ -528,16 +496,16 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
     if (Object.values(raw).some(values => values.length !== 1)) return c.json(errorBody('invalid-input', 'invalid diagnostic query'), 400)
     const query = diagnosticQuerySchema.safeParse(c.req.query())
     if (!query.success) return c.json(errorBody('invalid-input', 'invalid diagnostic query'), 400)
-    return c.json(diagnosticsFor(workId, query.data))
+    return contractJson(c, diagnosticResponseSchema, diagnosticsFor(workId, query.data))
   })
 
   app.post('/api/works/:id/approve', async (c) => {
     const body = await readJsonBody(c)
     if (!body.ok) return body.response
-    const parsed = approveBodySchema.safeParse(body.data)
+    const parsed = approveRequestSchema.safeParse(body.data)
     if (!parsed.success) {
       return c.json(
-        { ...errorBody('invalid-input', 'invalid input'), issues: parsed.error.issues },
+        { ...errorBody('invalid-input', 'invalid input'), issues: parsed.error.issues.map(({ path, code }) => ({ path, code, message: 'invalid field' })) },
         400,
       )
     }
@@ -554,7 +522,7 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
     try {
       const workId = c.req.param('id')
       pipeline.approve(workId, parsed.data.kind, parsed.data.chapter)
-      return c.json(pipeline.getState(workId))
+      return contractJson(c, pipelineStateSchema, pipeline.getState(workId))
     } catch (err) {
       return routeError(c, err)
     }

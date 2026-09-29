@@ -52,8 +52,8 @@ function arc(id: string) {
 const validOutline = { arcs: [arc('w-arc-1'), arc('w-arc-2'), arc('w-arc-3')] }
 
 // 与生产装配同形:store + pipeline(caption → creative gateAfter → outline gateAfter)+ consumeGuards + meta
-function makeApp(opts?: { demo?: boolean; config?: AgentConfig }) {
-  const store = new InMemoryStore()
+function makeApp(opts?: { demo?: boolean; config?: AgentConfig; store?: InMemoryStore }) {
+  const store = opts?.store ?? new InMemoryStore()
   const caption = fakeArtifactStep('caption', validCaption)
   const creative = fakeArtifactStep('creative', validCreative)
   const outline = fakeArtifactStep('outline', validOutline)
@@ -84,6 +84,39 @@ async function advance(app: ReturnType<typeof createApp>, workId: string) {
 }
 
 describe('works routes', () => {
+  it('rejects unknown create fields before creating any work', async () => {
+    const { store, app } = makeApp()
+    const response = await app.request('/api/works', { method: 'POST', headers: jsonHeaders,
+      body: JSON.stringify({ seed: '脑洞', config: { model: 'injected' } }) })
+    expect(response.status).toBe(400)
+    expect(store.listWorks()).toEqual([])
+  })
+  it('does not publish an invalid adapter list or exception message', async () => {
+    class InvalidReadStore extends InMemoryStore {
+      override listWorks() { return [{ id: 'w1', title: 'private text', seedPreview: 'private text', chapterCount: -1 }] }
+    }
+    const { app } = makeApp({ store: new InvalidReadStore() })
+    const response = await app.request('/api/works')
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ code: 'internal-error', message: 'response unavailable', retryable: false })
+  })
+  it('validates create response after the adapter write without claiming it did not commit', async () => {
+    class InvalidCreateStore extends InMemoryStore {
+      override createWork(input: { seed: string; title?: string }) { return { ...super.createWork(input), id: '' } }
+    }
+    const { app, store } = makeApp({ store: new InvalidCreateStore() })
+    const response = await app.request('/api/works', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ seed: '脑洞' }) })
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ code: 'internal-error', message: 'response unavailable', retryable: false })
+    expect(store.listWorks()).toHaveLength(1)
+  })
+  it.each([0, 1.5, Number.MAX_SAFE_INTEGER + 1])('rejects invalid general approval chapter %s before mutation', async chapter => {
+    const { app, store } = makeApp()
+    const work = store.createWork({ seed: '脑洞' })
+    const response = await app.request(`/api/works/${work.id}/approve`, { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ kind: 'beat', chapter }) })
+    expect(response.status).toBe(400)
+    expect(store.getWork(work.id)!.artifacts).toEqual([])
+  })
   it('lists seeded works', async () => {
     const { store, app } = makeApp()
     seed(store)

@@ -1,8 +1,8 @@
 import { expect, it } from 'vitest'
-import { advanceOutcomeDtoSchema, workViewSchema, apiErrorSchema } from '../src/index.js'
+import { advanceOutcomeDtoSchema, workViewSchema, apiErrorSchema, gateRefSchema } from '../src/index.js'
 
 const view = { id: 'w1', title: '海港', seed: '海港故事', config: {}, createdAt: 'today', workflowState: 'ready-to-generate', nextStepId: 'setting', allowedActions: ['generate'] }
-const artifact = { id: 'outline-1', workId: 'w1', kind: 'outline', version: 1, humanStatus: 'approved', content: {}, createdAt: 'today' }
+const artifact = { id: 'outline-1', workId: 'w1', kind: 'caption', version: 1, humanStatus: 'approved', content: { inputStage: '脑洞', summary: '海港故事', elements: [], gaps: [] }, createdAt: 'today' }
 
 it('公开作品读模型拒绝来自其他作品的产物，并定位归属字段', () => {
   expect(workViewSchema.safeParse({ ...view, artifacts: [artifact] }).success).toBe(true)
@@ -29,4 +29,16 @@ it('公开读模型携带下一步，advance 保留状态和遥测，错误保�
   expect(advanceOutcomeDtoSchema.safeParse({ ...advance, state: undefined }).success).toBe(false)
   const error = { code: 'invalid-content', message: '内容无效', retryable: false, issues: [{ path: ['content', 'world', 0, 'title'], code: 'too_small', message: '不能为空' }] }
   expect(apiErrorSchema.parse(error).issues?.[0]?.path).toEqual(['content', 'world', 0, 'title'])
+})
+
+it('关卡地址与产物地址使用相同的章节边界', () => {
+  expect(gateRefSchema.parse({ kind: 'beat', chapter: 2 })).toEqual({ kind: 'beat', chapter: 2 })
+  for (const gate of [{ kind: 'beat' }, { kind: 'prose', chapter: Number.MAX_SAFE_INTEGER + 1 }, { kind: 'setting', chapter: 1 }]) {
+    expect(gateRefSchema.safeParse(gate).success).toBe(false)
+  }
+})
+
+it('作品读模型拒绝未知配置字段，不静默忽略协议漂移', () => {
+  expect(workViewSchema.safeParse({ ...view, artifacts: [], config: { model: 'test-model', futureOption: true } }).success).toBe(false)
+  expect(workViewSchema.safeParse({ ...view, artifacts: [], config: { model: 'test-model' } }).success).toBe(true)
 })

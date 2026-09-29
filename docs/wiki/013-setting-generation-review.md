@@ -8,9 +8,9 @@ topics: ["setting", "setting-review", "artifact-finalization", "stable-ids", "co
 code_paths: ["packages/contracts/src/setting.ts", "packages/contracts/src/artifacts.ts", "apps/server/src/store/work-store.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts", "apps/server/src/start.ts", "apps/web/src/pages/Workspace.tsx", "apps/cli/src/commands.ts"]
 symbols: ["SettingContent", "SettingReviewDraft", "matchesSettingSubmission", "WorkStore", "finalizeArtifact", "approveSetting", "createSettingStep", "reduceSettingReview", "Pipeline.advance", "workflowOf", "expectedHeadVersion"]
 inherits: ["004", "011", "014", "016"]
-changed_by: ["005", "022"]
+changed_by: ["005", "022", "019"]
 read_when: ["implement-setting", "change-setting-schema", "change-setting-review", "change-artifact-finalization", "trace-setting-decisions"]
-last_context_reviewed: "2026-09-29"
+last_context_reviewed: "2026-09-30"
 ---
 
 # 013 — 完整设定生成与一次通过
@@ -22,6 +22,7 @@ last_context_reviewed: "2026-09-29"
 - **实际落地**：#13 当时交付 caption → creative → outline → setting 四步链；设定生成 pending、页内编辑、专用命令同版本原子通过、approved 只读仍有效。2026-09-05 的 TDD 与交付门禁只证明本票基线；当前完整生产链已由 #5／#22 延伸至首章正文通过。
 - **当前价值**：本页拥有设定生成与一次通过的工程 HOW；先读“原子写入与快照隔离”“提交结果确认”，再沿“代码落点”和测试矩阵核对。内容与公开协议归 [schema](../schema.md#setting13-已确认设计)，代码执行定义归 contracts。
 - **后续变化**：[Wiki 005](./005-beat-generation-review.md) 接入章纲，[Wiki 022](./022-prose-generation-review.md) 接入消费 approved Beat 与 Setting 的正文，六步链止于 `prose-approved`；正文保存不修改 Setting，正文通过后可编辑的例外不扩展到设定。通过后设定修改归 [#17](https://github.com/12bitsD/agent4novel/issues/17)，冲突澄清归 [#18](https://github.com/12bitsD/agent4novel/issues/18)，治理／存储等排期见 [handoff](../handoff.md)。
+- **契约治理后继**：[Wiki 019](./019-contract-governance.md) 扩展全 kind 内容与公开协议校验；本页 Setting 通过语义及原审核证据不变。
 - **代码入口**：[内容契约](../../packages/contracts/src/setting.ts)、[结果对账](../../packages/contracts/src/setting-submission.ts)、[完成命令](../../apps/server/src/setting-review.ts)、[store](../../apps/server/src/store/work-store.ts)、[Web 状态](../../apps/web/src/setting-review.ts)、[工作台](../../apps/web/src/pages/Workspace.tsx)。
 
 ## 设计目的
@@ -441,6 +442,15 @@ CLI 一次进程调用内使用与 Web 相同的规范化和对账函数，网�
 全仓契约治理在 #13 后另做，#13 自身仍必须复用集中契约；Hono RPC 归 #15。独立 SQL 表、materials 生命周期及 SQLite 迁移不在本票，也不以 InMemoryStore 验证代替持久化验证。
 
 ## 上下文演进
+
+### 2026-09-30 — 契约校验交接 #19
+
+- **触发证据**：#6 已交付，#19 开始收敛存储和公开协议的验证责任。
+- **原假设**：各票仅收敛自身经过的内容和命令。
+- **决定**：共同校验与职责清单由 [Wiki 019](./019-contract-governance.md) 交接，本页继续说明原产品行为。
+- **影响**：非法内容在 Store/公开边界统一拒绝，既有版本与关卡语义保留。
+- **上下文处理**：preserve 原始目的、Human 决定及完成审核证据；replace 路由与当前后继指针。
+
 
 ### 2026-09-29 — 正文消费正式设定并延伸首章链路
 

@@ -11,6 +11,12 @@ import type {
   PipelineOutput,
 } from '../src/pipeline/pipeline.js'
 
+import { caption, creative, outline } from './fixtures/artifact-content.js'
+
+const captionContent = (summary = 'caption') => caption(summary)
+const creativeContent = (title = 'creative') => creative(title)
+const outlineContent = outline('outline')
+
 // 步骤输入契约(#3c):pipeline 组装 { workId, seed, upstream },step 按需取用
 const stepInputSchema = z.object({
   workId: z.string(),
@@ -53,10 +59,10 @@ const definition: PipelineDefinitionEntry[] = [
 
 function makePipeline() {
   const store = new InMemoryStore()
-  const creative = recordingStep('creative', { made: 'creative' })
-  const outline = recordingStep('outline', { made: 'outline' })
+  const creative = recordingStep('creative', creativeContent())
+  const outline = recordingStep('outline', outlineContent)
   const steps = new Map<string, ArtifactStep>([
-    ['caption', fakeStep('caption', { made: 'caption' })],
+    ['caption', fakeStep('caption', captionContent())],
     ['creative', creative.step],
     ['outline', outline.step],
   ])
@@ -69,19 +75,19 @@ describe('Pipeline(#3c 链式 advance)', () => {
     const store = new InMemoryStore()
     let release!: () => void
     const paused = new Promise<void>((resolve) => { release = resolve })
-    const creative = fakeStep('creative', { made: 'creative' })
-    creative.run = async () => { await paused; return { content: { made: 'stale' } } }
+    const creative = fakeStep('creative', creativeContent())
+    creative.run = async () => { await paused; return { content: creativeContent('stale') } }
     const pipeline = new Pipeline({
       store,
-      steps: new Map([['caption', fakeStep('caption', 'caption')], ['creative', creative]]),
+      steps: new Map([['caption', fakeStep('caption', captionContent())], ['creative', creative]]),
       definition: definition.slice(0, 2),
       resolveConfig: () => ({}),
     })
     const work = store.createWork({ seed: 'race' })
-    store.appendArtifact(work.id, 'caption', 'old caption')
+    store.appendArtifact(work.id, 'caption', captionContent('old caption'))
     store.setStatus(work.id, 'caption', 'approved')
     const advancing = pipeline.advance(work.id)
-    store.appendArtifact(work.id, 'caption', 'new caption')
+    store.appendArtifact(work.id, 'caption', captionContent('new caption'))
     store.setStatus(work.id, 'caption', 'approved')
     release()
     expect(await advancing).toMatchObject({ kind: 'failed', code: 'upstream-changed' })
@@ -118,7 +124,7 @@ describe('Pipeline(#3c 链式 advance)', () => {
     expect(seen.creative[0]).toMatchObject({
       workId: w.id,
       seed: '种子文本',
-      upstream: { caption: { made: 'caption' } },
+      upstream: { caption: captionContent() },
     })
   })
 
@@ -150,7 +156,7 @@ describe('Pipeline(#3c 链式 advance)', () => {
     await pipeline.advance(w.id)
     pipeline.approve(w.id, 'creative')
     // 人工保存草稿 → 最新版 pending → 停在该关卡,outline 不推进
-    store.appendArtifact(w.id, 'creative', { made: 'draft' })
+    store.appendArtifact(w.id, 'creative', creativeContent('draft'))
     const state = pipeline.getState(w.id)
     expect(state.stage).toBe('awaiting-approval')
     expect(state.pendingGate?.kind).toBe('creative')
@@ -168,13 +174,13 @@ describe('Pipeline(#3c 链式 advance)', () => {
       outputSchema: z.object({ content: jsonValueSchema }),
       async run() {
         if (fail) throw new KnownError('llm-timeout', 'boom', { retryable: true, attemptId: 'a1' })
-        return { content: { made: 'creative' } }
+        return { content: creativeContent() }
       },
     }
     const steps = new Map<string, ArtifactStep>([
-      ['caption', fakeStep('caption', { made: 'caption' })],
+      ['caption', fakeStep('caption', captionContent())],
       ['creative', flaky],
-      ['outline', fakeStep('outline', 'ok')],
+      ['outline', fakeStep('outline', outlineContent)],
     ])
     const pipeline = new Pipeline({ store, steps, definition, resolveConfig: () => ({}) })
     const w = store.createWork({ seed: 'x' })
@@ -202,12 +208,12 @@ describe('Pipeline(#3c 链式 advance)', () => {
       id: 'caption',
       inputSchema: stepInputSchema,
       outputSchema: z.object({ content: jsonValueSchema }),
-      run: () => new Promise((res) => (release = () => res({ content: 'slow' }))),
+      run: () => new Promise((res) => (release = () => res({ content: captionContent('slow') }))),
     }
     const steps = new Map<string, ArtifactStep>([
       ['caption', slow],
-      ['creative', fakeStep('creative', 'ok')],
-      ['outline', fakeStep('outline', 'ok')],
+      ['creative', fakeStep('creative', creativeContent())],
+      ['outline', fakeStep('outline', outlineContent)],
     ])
     const pipeline = new Pipeline({ store, steps, definition, resolveConfig: () => ({}) })
     const w = store.createWork({ seed: 'x' })
@@ -231,8 +237,8 @@ describe('Pipeline(#3c 链式 advance)', () => {
     }
     const steps = new Map<string, ArtifactStep>([
       ['caption', badStep],
-      ['creative', fakeStep('creative', 'ok')],
-      ['outline', fakeStep('outline', 'ok')],
+      ['creative', fakeStep('creative', creativeContent())],
+      ['outline', fakeStep('outline', outlineContent)],
     ])
     const pipeline = new Pipeline({ store, steps, definition, resolveConfig: () => ({}) })
     const w = store.createWork({ seed: 'x' })
@@ -310,8 +316,8 @@ describe('Pipeline(#3c 链式 advance)', () => {
     const store = new InMemoryStore()
     const steps = new Map<string, ArtifactStep>([
       ['caption', fakeStep('caption', { inputStage: '脑洞', summary: '提炼稿', elements: [{ kind: '设定', content: '雾城' }], gaps: [] })],
-      ['creative', fakeStep('creative', { made: 'creative' })],
-      ['outline', fakeStep('outline', 'ok')],
+      ['creative', fakeStep('creative', creativeContent())],
+      ['outline', fakeStep('outline', outlineContent)],
     ])
     const pipeline = new Pipeline({ store, steps, definition, resolveConfig: () => ({}), consumeGuards })
     const w = store.createWork({ seed: 'x' })
