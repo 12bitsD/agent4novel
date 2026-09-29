@@ -1,14 +1,14 @@
 ---
 wiki_id: "022"
 ticket: 22
-ticket_state: active
-context_state: current
-summary: "第一章正文生成、服务端自动保存、整章重写、同版通过及通过后编辑；首章结束。"
+ticket_state: done
+context_state: mixed
+summary: "正文自动保存、整章重写、同版通过及通过后编辑；首章交付历史与后续章继承边界。"
 topics: ["prose", "human-review", "autosave", "conditional-write", "agent-observability"]
 code_paths: ["packages/contracts/src/prose.ts", "packages/contracts/src/prose-submission.ts", "apps/server/src/steps/prose-step.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts", "apps/web/src/pages/ProseReview.tsx", "apps/cli/src/commands.ts"]
 symbols: ["ProseContent", "ProseSubmission", "recoverProseSubmission", "regenerateProse", "save-prose", "awaiting-prose-review", "prose-approved"]
 inherits: ["005", "013", "014", "016", "025"]
-changed_by: []
+changed_by: ["006"]
 read_when: ["implement-prose", "review-prose", "debug-prose-submission", "change-prose-autosave", "continue-chapter"]
 last_context_reviewed: "2026-09-29"
 ---
@@ -17,11 +17,11 @@ last_context_reviewed: "2026-09-29"
 
 ## Agent Context
 
-- **读取时机**：实现或排查第一章正文、服务端自动保存、通过后编辑、全文重写、同版通过、未知提交与 CLI 正文命令。
+- **读取时机**：实现或排查正文编辑机制及首章交付历史、服务端自动保存、通过后编辑、全文重写、同版通过、未知提交与 CLI 正文命令。
 - **原始目的**：由作者最终通过的章纲和设定写出正文，让作者直接修改或重写后独立把关；WHAT/AC 看 [#22](https://github.com/12bitsD/agent4novel/issues/22)。
-- **实际落地**：已接通真实/fake Prose Step、六步生产链、HTTP/Web/CLI 保存与审阅；完成状态、刷新及书架重入均可读回。发布前审核结果见下方证据，远端完成状态以 live issue 为准。
-- **当前价值**：继承 #5 的按章身份、条件写入、冻结请求与保守恢复；正文自动保存到服务端、刷新恢复，approved 默认阅读且可显式进入编辑，保存保留 approved。旧页内草稿/只读假设的变化原因见“上下文演进”。
-- **后续变化**：先完成 #22，止于第一章；设定检索 tools [#28](https://github.com/12bitsD/agent4novel/issues/28) 与作品 Wiki 异步更新 [#29](https://github.com/12bitsD/agent4novel/issues/29) 后置待 triage，不阻塞本票。契约治理 #19、SQLite #9、续写 #6 及配置 #7、坏例 #8 仍按父票排期分别交付。
+- **实际落地**：已接通真实/fake Prose Step、六步生产链、HTTP/Web/CLI 保存与审阅；完成状态、刷新及书架重入均可读回。2026-09-29 回读 #22 已关闭；发布与终止核验结果见 [完成评论](https://github.com/12bitsD/agent4novel/issues/22#issuecomment-5875092744)，本页保留当次发布前审核证据；当前多章推进与浏览由 [Wiki 006](./006-chapter-continuation.md) 扩展。
+- **当前价值**：继承 #5 的按章身份、条件写入、冻结请求与保守恢复；正文自动保存到服务端、刷新恢复，approved 默认阅读且可显式进入编辑，保存保留 approved。旧页内草稿/只读假设的变化原因见“上下文演进”。本页技术方案、非目标及完成审核中的“只到第一章／无下一章”属于 #22 当时范围，当前章循环不受此历史限制。
+- **后续变化**：首章闭环已交付，完整 MVP 尚未完成；[Wiki 006](./006-chapter-continuation.md) 承接显式下一章、前章输入、跨章阅读与编辑隔离。最新队列为 #6 → #19 → #9 → #7，#8 排期另定且仍属 MVP。设定检索 tools [#28](https://github.com/12bitsD/agent4novel/issues/28) 与作品 Wiki 异步更新 [#29](https://github.com/12bitsD/agent4novel/issues/29) 保持后置待 triage。当前进度及验证边界统一见 [交接快照](../handoff.md#当前里程碑与验证边界)。
 - **代码入口**：先看共享正文契约及提交恢复，随后对应 Step/Pipeline、HTTP、Web 和 CLI。当前形状最终维护于 [schema](../schema.md)。
 
 ## 设计目的
@@ -35,6 +35,8 @@ last_context_reviewed: "2026-09-29"
 架构继承 [ADR0001](../adr/0001-orchestration-ai-sdk-thin-workflow.md)、[ADR0002](../adr/0002-storage-sqlite-skills-as-files.md)。本期仍是进程内 WorkStore；不能称跨重启持久化。
 
 ## 技术方案
+
+本节保留 #22 的首章实施方案和 Human 决定；其中首章限制及“没有下一章入口”已由 [Wiki 006](./006-chapter-continuation.md) 扩展。正文保存／通过／恢复机制继续复用，各章独立身份与编辑状态；本页旧验收证据不证明后续章能力。
 
 ### 本轮范围与对齐
 
@@ -102,7 +104,7 @@ unknown 后保留冻结全文/意见，最多自动回读一次；旧 unknown �
 | AC4 | `prose-routes.test.ts`、`prose-step.test.ts`、`prose-review.test.ts` | 当前草稿/意见参与重写；成功 pending，失败保留；Beat 不变 |
 | AC5 | `prose-cli-integration.test.ts`、`Workspace.prose.test.tsx` | prose-approved、完成一章、无第二章自动生成 |
 | AC6 | contracts `prose*.test.ts`、HTTP/CLI/Web 测试 | 错误分类、CAS、共享锁、响应丢失与 body deadline |
-| AC7 | 本页审核证据及远端 PR/issue | TDD/文档已备；双轴及发布审核按下表收口 |
+| AC7 | 本页审核证据及远端 PR/issue | 发布前审核见下表；交付终态见 #22 完成评论及 live issue |
 | AC8–AC9 | `prose-save.test.ts`、`prose-routes.test.ts`、`Workspace.autosave.test.tsx` | 自动保存、状态绑定、空文边界、在途编辑、冲突与回读 |
 | AC10 | `App.prose.test.tsx`、`Workspace.prose.test.tsx` | 稳定 `?work=<id>` 重入、切换隔离、刷新不发模型请求 |
 | AC11 | `Workspace.prose.test.tsx` | 合并按钮一次衔接；通过回包丢失恢复；生成失败可重试 |
@@ -112,6 +114,8 @@ RED/GREEN 按切片保留：`prose-s1-content-*` / `prose-s1-recovery-*`、`pros
 2026-09-29：`pnpm test`、`pnpm typecheck`、`pnpm build` 均成功（`prose-final-{test,typecheck,build}.log`）。build 保留现有 docx 约504.5 KB chunk 警告，没有扩票优化。测试不调用真实 provider。
 
 真实验证用隔离 loopback fixture，**前五步为 fake，仅 Prose 使用 LongCat-2.0**；合成素材 CLI smoke 完成生成、pending 编辑保存和通过，回读 prose v2 approved。唯一真实模型调用约50.3秒，输入801/output1795 tokens，`finishReason=stop`；只验证工程契约与流程，不宣称长篇质量。浏览器又编辑已通过全文，保存为 v3 approved，刷新与书架重入仍为完成一章；再次编辑保存为 v4 approved 并保持编辑器打开；返回/编辑入口在 IAB 语义点击偶有不生效时用截图坐标完成。证据 `prose-live-smoke.json`、`prose-live-telemetry.json`、`prose-live-after-browser.json` 和 `prose-browser-acceptance.md`。原生 beforeunload 对话框未作浏览器人工确认；mounted handler 覆盖 dirty 保护。
+
+以下“完成审核证据”保留 #22 当次发布前候选的原始记录，其中 AC7 待发布、后续终止核验等描述按当时时点理解。后续发布结果只链接 [完成评论](https://github.com/12bitsD/agent4novel/issues/22#issuecomment-5875092744) 与 live issue，不改写原始审核结论。
 
 ### 完成审核证据
 
@@ -134,6 +138,14 @@ RED/GREEN 按切片保留：`prose-s1-content-*` / `prose-s1-recovery-*`、`pros
 
 ## 上下文演进
 
+### 2026-09-29 — 正文保存与审阅扩展到后续章
+
+- **触发证据**：作者在 #6 对齐中确认先完成上一章承接、全层可读及原权限编辑、旧章修改保留后章并提示；当前 [章节读模型](../../apps/server/src/chapter-view.ts) 与 [Pipeline](../../apps/server/src/pipeline/pipeline.ts) 已区分工作章和章级动作。
+- **原假设**：#22 以首章闭环验证正文保存和独立关卡，因此明确没有第二章入口；其 approved 正文可编辑的 Human 决定并未限制为只能编辑最新章节。
+- **决定**：由 [Wiki 006](./006-chapter-continuation.md) 承接手动逐章推进及历史阅读，复用正文保存的 id/version/status 条件与冻结请求恢复；各章通过后仍停在阅读，由作者另行开始下一章。
+- **影响**：历史 approved 正文仍可保存且保持 approved，后章保留内容与状态并显示衔接提示；新生成读取前章最新已保存内容，生成期间输入变化拒绝过期结果。没有自动级联重写、重审、长期记忆或 Wiki 更新。
+- **上下文处理**：preserve 原首章交付目的、Human 保存／编辑决定、失败经验和完成审核证据；replace 当前摘要、后续排期与交接入口，旧首章限制保留并标明历史范围；下一跳为 Wiki 006。
+
 ### 2026-09-28 — 恢复第一章正文的独立交付
 
 - **触发证据**：用户要求继续开发并关闭MVP；#22已从#5拆分，章纲实现已合并。
@@ -150,6 +162,16 @@ RED/GREEN 按切片保留：`prose-s1-content-*` / `prose-s1-recovery-*`、`pros
 - **影响**：共享契约、Store/HTTP 条件写入、提交恢复、Web 阅读/编辑及 CLI 保存路径均须按新计划实施和验证；迟到 pending 保存不得覆盖已通过正文，过时版本不得自动覆盖当前编辑。旧计划和其验证记录不能替代本轮受影响接缝的新证据。
 - **上下文处理**：preserve 旧草案的范围动机及原始首章、独立关卡决定；replace 本页当前摘要、保存/编辑计划、验收切片和非目标。#28/#29 仅作为后续扩展入口，尚未改变本票可执行事实，不加入 changed_by，也不构成 #22 完成依赖。
 
+### 2026-09-29 — 首章交付后的 MVP 状态收敛
+
+- **触发证据**：用户询问 MVP 是否跑通，并要求更新 Wiki 与 context；GitHub 回读 #22 CLOSED、#1 及 #19/#9/#6/#7/#8 OPEN。
+- **原假设**：发布前文档把 #22 保持为 active，并将“完成首章”列作下一步；继续沿用会让接手者重复交付已关闭票，也容易把首章验证扩大为完整 MVP 验收。
+- **决定**：本页状态改为 done，下一步指向 #19 的独立范围对齐；明确首章闭环已跑通、完整 MVP 尚未完成。本次真实模型证据仅覆盖 Prose，上游五步为 fake。
+- **影响**：更新本页当前入口、交接结论和项目进度导航；后续仍须完成持久化、续写、配置、坏例及最终联验。#28/#29 保持后置扩展，不因本次文档更新开工或关闭。
+- **上下文处理**：preserve 原始目的、Human 决定、失败边界和发布前审核证据；replace 已漂移的票面状态与下一步描述。整体进度留在 handoff，WHAT/AC 与远端交付记录继续链接 GitHub，不改变知识归属。
+
 ## 交接结论
 
-接手先读本页审核证据及 #22 live issue；正文自动保存，approved 默认阅读且允许显式编辑后保持 approved。不要沿用“仅页内草稿”或“approved 永久只读”的旧假设。运行事实可由共享契约和 HTTP/Web/CLI 测试复核，发布结果以 PR/main/issue 回读为准。不能假定支持跨服务重启、第二章、作品 Wiki 自动更新或长篇质量。#28/#29 后置不阻塞，其他 MVP 票按父 #1 的最新排期推进。
+首章正文已交付，#22 无需重新开工；接手先读 [完成评论](https://github.com/12bitsD/agent4novel/issues/22#issuecomment-5875092744) 和 [当前里程碑](../handoff.md#当前里程碑与验证边界)。正文自动保存，approved 默认阅读且允许显式编辑后保持 approved；不要沿用“仅页内草稿”或“approved 永久只读”的旧假设。
+
+运行事实可由共享契约和 HTTP/Web/CLI 测试复核。fake 首章全链路与真实 Prose 节点均已有验证，但不是全链路真实模型或长篇质量验收。后续章能力与验证从 [Wiki 006](./006-chapter-continuation.md) 读取，不能用首章证据替代多章验收；跨服务重启与作品 Wiki 自动更新仍未接入。最新队列为 #6 → #19 → #9 → #7，#8 排期另定，#28/#29 保持后置扩展。

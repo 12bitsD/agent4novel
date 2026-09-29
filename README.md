@@ -1,80 +1,93 @@
 <p align="center">
-  <img src="./docs/assets/logo.svg" alt="agent4novel: spark → gate → book" width="300">
+  <img src="./docs/assets/logo.svg" alt="agent4novel：灵感 → 关卡 → 成书" width="300">
 </p>
 
 <h1 align="center">agent4novel</h1>
 
 <p align="center">
-  <strong>From a one-line idea to a finished web-novel serial.</strong>
+  <strong>从一句话脑洞，到一部完本长篇。</strong>
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick start</a> ·
-  <a href="#how-it-works">Pipeline</a> ·
-  <a href="#architecture">Architecture</a> ·
-  <a href="#docs">Docs</a> ·
-  <a href="#roadmap">Roadmap</a> ·
-  <a href="./README.zh-CN.md">中文</a>
+  <a href="#当前状态">当前状态</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#它是怎么工作的">流水线</a> ·
+  <a href="#架构">架构</a> ·
+  <a href="#文档">文档</a> ·
+  <a href="#路线图">路线图</a> ·
+  <a href="./README.en.md">English</a>
 </p>
 
 <p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/demo_mode-no_API_key_needed-brightgreen" alt="Demo mode: no API key needed">
+  <a href="#快速开始"><img src="https://img.shields.io/badge/%E6%BC%94%E7%A4%BA%E6%A8%A1%E5%BC%8F-%E5%85%8D_API_Key-brightgreen" alt="演示模式：免 API Key"></a>
   <img src="https://img.shields.io/badge/AI_SDK-v7-000000" alt="AI SDK v7">
 </p>
 
 ---
 
-Novel writing has long been a cottage craft: one author, one pen, hundreds of thousands of characters ground out word by word. agent4novel moves it onto a collaborative workflow — the AI works like an on-call editorial team, developing creative directions, structuring the outline, and filling out the setting; you are the editor-in-chief, with the final say at every author-facing gate. The goal: raw inspiration in, a finished book out.
+小说创作长期是手工作坊式的活计：一个作者，一支笔，几十万字一点点磨。agent4novel 想把它搬进一条人机协作流水线——AI 像一支随叫随到的编辑团队，负责展开创意、排大纲、补设定；你是唯一的主编，故事方向与每道作者关卡都由你把握。目标是从模糊脑洞，走到一部完本长篇。
 
-It is built for authors who have ideas but no writing training. The chain turns a one-line idea (or an uploaded setting doc) into a distilled caption, creative directions to compare and pick, a book outline, a complete setting, and first-chapter Beat and prose with separate author gates. [#22](https://github.com/12bitsD/agent4novel/issues/22) adds prose editing, autosave, whole-chapter rewriting, and approval. Delivery evidence is recorded in [Wiki 022](./docs/wiki/022-prose-generation-review.md). The app and its store run locally: demo mode never calls a model service, while live mode sends the generation inputs to your configured model provider, whose privacy terms then apply.
+它面向「有想法但没受过写作训练」的作者。链路接收一句话脑洞（或一份设定文档），依次生成提炼稿、供你比较选定的创意稿、全书大纲、完整设定，以及分别把关的各章章纲和正文。[#22](https://github.com/12bitsD/agent4novel/issues/22) 接入正文编辑、自动保存、整章重写与通过，首章交付证据见 [Wiki 022](./docs/wiki/022-prose-generation-review.md)；后续章与跨章操作见 [Wiki 006](./docs/wiki/006-chapter-continuation.md)。应用与存储都在本地运行：演示模式不会调用模型服务；实时模型模式会把生成所需输入发给你配置的模型供应商，并适用该供应商的隐私条款。
 
-## Quick start
+## 当前状态
+
+**已接入逐章续写与跨章浏览，完整 MVP 仍在开发中。** 首章 [#22](https://github.com/12bitsD/agent4novel/issues/22) 已交付；后续章 [#6](https://github.com/12bitsD/agent4novel/issues/6) 的实现与验证见 [Wiki 006](./docs/wiki/006-chapter-continuation.md)，交付终态以 issue/PR 为准。
+
+- **当前能力**：脑洞 → 提炼稿 → 创意方向 → 大纲 → 设定 →（章纲 → 正文），各章分别把关。正文自动保存、整章重写、通过后编辑；手动开始下一章，从目录或章节链接回看旧章。
+- **验证范围**：首章已有 fake 全链路与真实 Prose 节点证据；本轮多章的 fake、CLI、Web 及真实节点证据分别记录在 Wiki 006。少量章节验证不等于全书真实模型或长篇质量验收。
+- **MVP 待完成**：契约治理（#19）、SQLite 持久化（#9）、作者侧 Agent 配置（#7）、坏例收集与分析（#8）。**当前服务重启会丢失作品和编辑。** 本票后逐个对齐开发，Docker / CI 的新增范围在 #7 开工时确定。
+
+设定检索与工具执行（#28）、作品 Wiki 与档案演进（#29）保留为后续扩展。当前接手上下文见 [交接文档](./docs/handoff.md#当前里程碑与验证边界)，完整验收范围见 [MVP 总票](https://github.com/12bitsD/agent4novel/issues/1)。
+
+## 快速开始
 
 ```bash
 pnpm install
 pnpm dev        # server :8787 + web :5173
 ```
 
-Open <http://localhost:5173>. No API key needed to try it: without one, the app runs in demo mode, where a built-in fake produces sample content and no real model is called.
+打开 <http://localhost:5173>。不配 API key 也能跑：此时是演示模式，由内置 fake 生成示例内容，不会调用真实模型。
 
-With a real model (DeepSeek, or LongCat through its OpenAI-compatible Chat Completions endpoint):
+接真实模型（支持 DeepSeek，以及 LongCat 的 OpenAI-compatible Chat Completions 接口）：
 
 ```bash
 cp .env.example .env.local
 chmod 600 .env.local
-# edit .env.local: set A4N_MODEL and the matching provider API key
+# 编辑 .env.local：设置 A4N_MODEL 与对应 provider 的 API key
 pnpm dev
 ```
 
-The server loads `.env.local` at startup and Git ignores it; environment variables already supplied by the shell or CI take precedence. If `A4N_MODEL` is explicit, its provider key is required. Without an explicit model, the server selects an available provider in this order: DeepSeek → LongCat → demo mode. Model IDs use `provider:model`, for example `longcat:LongCat-2.0` or `deepseek:deepseek-chat`.
+`.env.local` 会在 server 启动时读取且已被 Git 忽略；shell/CI 中已有的环境变量优先。显式设置 `A4N_MODEL` 时必须同时提供对应 provider 的 key；未显式设置时按 DeepSeek → LongCat → 演示模式的顺序选择。模型 ID 采用 `provider:model`，例如 `longcat:LongCat-2.0` 或 `deepseek:deepseek-chat`。
 
-Credentials, base URLs, and provider adapters remain server-only. `Work.config.model` is an internal per-work override seam; there is no public UI or API for changing it yet. The current LongCat adapter targets its documented Chat Completions surface, not blanket compatibility with every OpenAI protocol such as Responses. See [wiki 016](./docs/wiki/016-model-runtime-provider-config.md) for the configuration contract, safety rules, and verified cases.
+凭据、base URL 与 provider adapter 只存在于 server。`Work.config.model` 是作品级内部覆盖接缝，目前没有公开 UI/API。当前 LongCat adapter 只对接其文档明确支持的 Chat Completions，不代表兼容 Responses 等全部 OpenAI 协议。配置契约、安全规则与实测案例统一见 [wiki 016](./docs/wiki/016-model-runtime-provider-config.md)。
 
-LongCat defaults to thinking disabled, temperature `0.9`, and top-p `0.95`. Single-step experiments can override these through a config file or CLI flags; see [generation parameters](./docs/wiki/016-model-runtime-provider-config.md#生成参数与单节点覆盖).
+LongCat 默认关闭 thinking，temperature 为 `0.9`，top-p 为 `0.95`。单节点实验可通过配置文件或 CLI 参数覆盖，规则见 [生成参数](./docs/wiki/016-model-runtime-provider-config.md#生成参数与单节点覆盖)。
 
-### CLI (for scripts and agents)
+### CLI（供脚本和 Agent 使用）
 
-Generation and review are also drivable from the command line — successful command results on stdout are pure JSON:
+生成与把关也能从命令行驱动——成功命令结果以纯 JSON 写入 stdout：
 
 ```bash
-./apps/cli/bin/a4n --help                       # command list, no I/O
-./apps/cli/bin/a4n save-prose --help            # input shape, example, and effects
-./apps/cli/bin/a4n smoke --seed-file seed.txt   # edit/save/approve chapter-one prose and read it back
+./apps/cli/bin/a4n --help                       # 命令目录，不执行 I/O
+./apps/cli/bin/a4n save-prose --help            # 请求形状、例子与副作用
+./apps/cli/bin/a4n smoke --seed-file seed.txt   # 编辑、保存、通过第一章正文并回读
 ./apps/cli/bin/a4n list                         # create / get / advance / select / approve / logs …
-./apps/cli/bin/a4n get work-1 --kind setting    # replace work-1 with your work ID
+./apps/cli/bin/a4n get work-1 --kind setting    # 将 work-1 替换成你的作品 ID
 ./apps/cli/bin/a4n approve-setting work-1 --file setting-request.json
 ```
 
-Help (`--help` / `-h`) at the top level or on any command exits 0 before reading files, contacting the server, or starting a model worker. Help text goes to stderr. Unknown, duplicate, missing, or empty options and invalid argument counts fail before I/O with a safe `usage` JSON error on stderr and exit 1. `create` and `smoke` require exactly one of `--seed` and `--seed-file`. A standalone help token takes precedence; use `--seed=--help` for that literal value. Existing `--flag=value` and pnpm `--` separators remain supported. See [CLI command safety](./docs/wiki/025-cli-command-safety.md).
+顶级及所有子命令的 `--help` / `-h` 在读文件、访问服务或启动模型 worker 前 exit 0，帮助文字写 stderr。未知、重复、缺值、空值选项和错误的位置参数数量会在 I/O 前失败，stderr 返回安全的 `usage` JSON，exit 1。`create` / `smoke` 必须恰好提供 `--seed`、`--seed-file` 之一。独立帮助 token 优先；需要该字面值时使用 `--seed=--help`。保留 `--flag=value` 与 pnpm 的 `--` 分隔符。详见 [CLI 调用安全](./docs/wiki/025-cli-command-safety.md)。
 
-`setting-request.json` contains the complete `{ content, expectedHeadVersion }` request. Keep the version from the setting you reviewed: `approve-setting` never replaces it with the latest version. Automatic version lookup remains limited to `select` and `save-outline`; `smoke` exercises an actual setting edit before approval.
+`setting-request.json` 包含完整的 `{ content, expectedHeadVersion }` 请求。版本号应来自你实际查看的设定；`approve-setting` 不会将它替换成最新版本。只有 `select` 和 `save-outline` 自动查询版本；`smoke` 会实际修改设定后再通过。
 
-Beat CLI also supports `get <workId> --kind beat --chapter 1`, `regenerate-beat <workId> --file request.json`, and `approve-beat <workId> --file request.json`. Files require `chapter: 1`, `expectedArtifactId`, `expectedHeadVersion`, and complete `content`; regeneration additionally requires `instructions` (which may be empty). It preserves the reviewed baseline and never automatically resubmits an uncertain write. See [Wiki 005](./docs/wiki/005-beat-generation-review.md).
+章纲 CLI 还支持 `get <workId> --kind beat --chapter 1`、`regenerate-beat <workId> --file request.json`、`approve-beat <workId> --file request.json`。文件要求目标章的正整章号 `chapter`、`expectedArtifactId`、`expectedHeadVersion` 和整份 `content`；再生额外要求 `instructions`（可为空）。命令保留查看时的基线，不自动重发结果未知的写请求。协议见 [Wiki 005](./docs/wiki/005-beat-generation-review.md)。
 
-Prose uses `get <workId> --kind prose --chapter 1`, plus `save-prose`, `approve-prose`, and `regenerate-prose`, each with `<workId> --file request.json`. Content is `{ "text": "full chapter text" }`. Files carry the same chapter, artifact ID, and version baseline; saving also requires `expectedHumanStatus: "pending" | "approved"`, and rewriting requires `instructions`. Saving appends a version and preserves its review status; approval finalizes the pending version. Files are strict UTF-8 JSON, at most 1 MiB. An uncertain result may trigger one readback, never an automatic repeated write. See [Wiki 022](./docs/wiki/022-prose-generation-review.md).
+正文使用 `get <workId> --kind prose --chapter 1`，以及 `save-prose`、`approve-prose`、`regenerate-prose` 三个带 `<workId> --file request.json` 的命令。内容为 `{ "text": "完整正文" }`；文件同样携带章号、产物 ID 和版本，保存还必须带 `expectedHumanStatus: "pending" | "approved"`，重写则带 `instructions`。保存追加版本并保留审批状态，通过原子定稿当前 pending 版本。文件须为严格 UTF-8 JSON，上限1 MiB；结果未知时最多自动回读一次，不自动重复写入。协议见 [Wiki 022](./docs/wiki/022-prose-generation-review.md)。
 
-Run one production step with supplied inputs or a custom system prompt:
+前章正文通过后，执行 `start-chapter <workId> --file chapter-request.json`，文件形如 `{ "chapter": 2, "expectedPreviousProseId": "<前章正文 ID>", "expectedPreviousProseVersion": 2 }`。它只生成指定下一章的章纲；之后使用该章的 Beat/Prose 命令和 `advance` 完成双关卡。结果包含业务 outcome，不能只看 HTTP 成功；超时或结果未知时先 `get` 回读，不自动重发或替换基线。默认 `smoke` 仍验证首章，续章验收见 [Wiki 006](./docs/wiki/006-chapter-continuation.md)。
+
+提供输入或自定义 system prompt，独立运行一个生产节点：
 
 ```bash
 ./apps/cli/bin/a4n run-step caption --seed-file seed.txt \
@@ -82,44 +95,46 @@ Run one production step with supplied inputs or a custom system prompt:
 ./apps/cli/bin/a4n run-step setting --input-file setting-input.json --config-file generation.json
 ```
 
-`run-step` supports `caption`, `creative`, `outline`, `setting`, `beat`, and `prose` (the latter two require chapter 1). It requires the installed full monorepo and a configured live provider, starts a local server worker, and needs no running HTTP server. It does not create or update a work. Choose exactly one of `--seed-file` and `--input-file`; downstream steps need JSON with `seed` and the required upstream `content`. Prose requires `chapter: 1` and `upstream: { beat, setting }`. A custom SP replaces only the system prompt; omitting it uses the production prompt. `--top-k` is explicitly unsupported.
+`run-step` 支持 `caption`、`creative`、`outline`、`setting`、`beat` 和 `prose`（后两者必须显式提供正整章号）。它要求已安装依赖的完整 monorepo 和可用的真实 provider，启动本地 server worker，无需运行 HTTP server，也不创建或修改作品。`--seed-file` 与 `--input-file` 必须二选一；下游节点需要含 `seed` 和必需上游 `content` 的 JSON。正文要求 `chapter` 和 `upstream: { beat, setting }`；章号大于 1 时，Beat/Prose 都必须额外提供 `upstream.previousChapter: { chapter, beat, prose }`，其中章号恰为前一章，第一章不接受该字段。自定义 SP 只替换 system prompt，省略时使用生产提示词。明确不支持 `--top-k`。
 
-Success returns schema-validated `content` and safe `telemetry` as JSON; failures write a JSON error to stderr and exit 1. Raw model output and reasoning are not returned. The worker's default total deadline is 920 seconds, overridable with `--timeout-ms` or `A4N_CLI_TIMEOUT_MS`. See [single-step inputs, limits, and output](./docs/wiki/014-agent-cli-telemetry.md#单节点实验-run-step).
+成功时以 JSON 返回通过 schema 校验的 `content` 和安全 `telemetry`；失败向 stderr 写 JSON 错误并 exit 1。不返回 raw 模型输出或推理内容。worker 总等待默认 920 秒，可由 `--timeout-ms` 或 `A4N_CLI_TIMEOUT_MS` 覆盖。输入格式、限制和结果边界见 [单节点运行](./docs/wiki/014-agent-cli-telemetry.md#单节点实验-run-step)。
 
-Agents opening this repo get the full recipe via the bundled skill `.claude/skills/agent4novel-drive`.
+打开本仓库的 Agent 可通过内置 skill `.claude/skills/agent4novel-drive` 获得完整用法。
 
-## How it works
-
-<p align="center">
-  <img src="./docs/assets/pipeline.en.svg" alt="Six-step pipeline through first-chapter prose approval; later chapters remain planned" width="960">
-</p>
-<p align="center"><sub>Fig. 1 · Six steps end at prose-approved; dashed paths show future chapter continuation</sub></p>
-
-The internal caption interprets the source material, makes story-development judgments, and proposes concrete plot ideas, distinguishing source content from inferences and suggestions. It is auto-approved. Select a creative direction, approve the outline and setting, then edit or regenerate the first chapter’s Beat. **Approve Beat and generate prose** explicitly starts prose once that Beat is confirmed approved. Opening or refreshing a ready work does not start generation; it offers a manual generate action. The endpoint is first-chapter `prose-approved`; no second chapter starts.
-
-A Beat contains a title, goal, ordered writing-plan cards, and ending. Pending edits and regeneration instructions stay in page memory; leaving asks before discarding them. Whole-plan regeneration consumes those edits and instructions, creating a new pending version. Approval stores the final content on the same ID/version and makes it read-only. Version comparison (#20) and post-approval chapter regeneration (#21) remain separate work.
-
-Edits to a pending setting live only in page memory: refreshing or leaving discards unsubmitted changes. Clicking **Approve** stores the edited content and approves the same artifact ID and version in one operation—there is no separate save-draft step or approval v2. The approved setting is read-only and remains the work's fixed reference; later changes and extensions belong to #17.
-
-Prose is plain text with its whitespace preserved. Pending text autosaves to the server and can be restored after a browser refresh; it may be temporarily empty, but approval requires nonblank full text. Whole-chapter rewriting uses the current edited text and optional instructions, creates a new pending version, and preserves your input on failure. Approved prose opens for reading; **Edit** enables autosave while keeping it approved. This exception applies only to prose: it does not reopen Beat or Setting, or update a work Wiki.
-
-Saved works can be reopened from the bookcase. Only approved prose counts as a completed chapter. Wait for a successful save before relying on refresh recovery; unsaved or uncertain input remains protected in the current page. Storage is still in memory: restarting the server loses works and edits. Durable storage across server restarts belongs to [#9](https://github.com/12bitsD/agent4novel/issues/9); history browsing and later chapters belong to #6.
-
-## Architecture
-
-The architecture is built around **human-in-the-loop**: machines generate, authors judge, and author-facing artifacts must pass their review gates before the next step consumes them. The internal caption is the auto-approved preprocessing exception.
+## 它是怎么工作的
 
 <p align="center">
-  <img src="./docs/assets/workflow.en.svg" alt="Pipeline drives six steps through first-chapter prose. Store saves versions and atomically approves full text; SQLite remains planned" width="760">
+  <img src="./docs/assets/pipeline.svg" alt="作品准备后逐章经过章纲和正文双关卡，手动开始下一章" width="960">
 </p>
-<p align="center"><sub>Fig. 2 · Six steps with separate author gates; versioned prose saves and atomic approval use the in-memory Store</sub></p>
+<p align="center"><sub>图 1 · 每章经过两个关卡，正文通过后手动开始下一章</sub></p>
 
-- **The orchestrator (Pipeline)** drives caption → creative → outline → setting → beat#1 → prose#1 in a fixed order and enforces gates with a state machine (ready → awaiting-approval → complete, derived from artifact status). Caption is auto-approved; each later artifact waits for the author's explicit action. Pipeline coordinates progression, while Store's conditional writes protect the committed artifacts.
-- **Steps** are contract-bound AI generations: `runStep` zod-validates both input and output, and prompts live in SKILL.md files so prompt iteration never touches code. A step doesn't know where it sits in the pipeline, which makes it independently testable and replaceable.
-- **Artifacts** are grouped by "work + kind + chapter" (`{kind, chapter?, version, content, humanStatus}`). Creative, outline, and prose saves append versions. Prose saves match ID, version, and review status, then preserve that status; Setting, Beat, and Prose approval finalize content and status atomically on the same ID and version. The public API returns only the latest artifact in each group, not arbitrary historical versions.
-- **Swappable points**: the Pipeline's dependency seams are storage (in-memory out of the box ↔ SQLite persistence in #9) and Step (`FakeStep` ↔ `RealStep`). Inside `RealStep`, `ModelRuntime` owns provider routing, credentials, base URLs, and request timeout. Switching between registered providers changes only the provider-qualified model ID; adding a provider still requires its adapter, registry entry, and key contract. Tests use fake models or mocked provider transport; executable CLI integration uses a loopback test server, never a remote model.
+内部提炼稿在理解素材后作故事开发判断并给出具体剧情提案，区分原有内容、推测与建议，自动通过。先选定创意方向，通过大纲和设定，再编辑或重新生成当前章章纲。点击**通过章纲并生成正文**，在章纲通过结果得到确认后生成一次正文；打开或刷新待生成作品只提供手动生成入口，不触发生成。每章正文通过后停在 `prose-approved` 阅读状态；点击**开始下一章**才生成下一章章纲，不会自动连跑。下一章结合全书大纲、设定及上一章实际内容续写，不把一个剧情点强制对应一章。
 
-## Stack
+章纲包含章标题、本章目标、有序写作安排、章末落点与承接。修改与再生意见只保存在本页，离开前提示丢弃；整份再生消费当前编辑和意见，成功后产生新版 pending。通过将最终内容存入同一 ID/版本并设为只读。版本比较（#20）、通过后的章节重生（#21）仍是独立后续需求。
+
+待把关设定的修改只保存在本页内存中，刷新或离开会丢弃尚未提交的修改。点击**通过**时，编辑内容与通过状态一次落库，保持同一个产物 ID 和版本；没有单独的保存草稿，也不会新增通过版 v2。通过后的设定只读，作为作品固定基准；后续修改与扩展归 #17。
+
+正文采用纯文本并保留空白与段落。待把关正文编辑自动保存服务端，浏览器刷新后可恢复；草稿可暂时为空，通过时必须提交非空全文。整章重写使用当前编辑文本和可选意见，成功产生新版 pending，失败保留输入。已通过正文默认阅读，点击**编辑**后自动保存，状态仍为已通过。此例外只适用于正文，不开放章纲或设定回改，也不更新作品 Wiki。
+
+作品可从书架、稳定作品及章节链接重新打开；章节目录区分当前工作章和正在阅读的历史章，只有已通过正文计为完成章节。所有中间产物可查看；已通过章纲和设定仍只读。修改旧章正文会保留已生成后章，并提示检查衔接，不自动重写或退回关卡。生成期间实际输入发生变化时，过期结果不会提交，可回读后显式重试。
+
+依赖刷新恢复前应等待保存成功；未保存、在途或结果未知的编辑受切章保护。存储目前仍在内存中，服务重启会丢失作品和编辑；真正跨服务重启保存归 [#9](https://github.com/12bitsD/agent4novel/issues/9)。
+
+## 架构
+
+架构围绕 **human-in-the-loop**：机器负责生成，作者负责判断；面向作者的产物通过关卡后，下游才能消费。内部提炼稿是预处理例外，会自动通过。
+
+<p align="center">
+  <img src="./docs/assets/workflow.svg" alt="Pipeline 驱动作品准备和逐章双关卡；Store 保存版本及输入引用，SQLite 尚待实现" width="760">
+</p>
+<p align="center"><sub>图 2 · 作品准备和章级循环共用 Pipeline，正文保存与通过使用内存 Store</sub></p>
+
+- **编排器（Pipeline）**：先按提炼稿 → 创意稿 → 大纲 → 设定推进，再重复章纲 → 正文的双关卡，用状态机（ready → awaiting-approval → complete，由产物状态推导）强制关卡。提炼稿自动通过，后续产物等待作者显式操作。Pipeline 协调流程，Store 的条件写入保护已落库产物。
+- **步骤（Step）**：每个环节是一次受契约约束的 AI 生成：`runStep` 对输入输出做双向 zod 校验；提示词维护在 SKILL.md 文件里，调 prompt 不用改代码。步骤不感知自己在流水线中的位置，因此可独立测试、独立替换。
+- **产物（Artifact）**：按「作品 + 类型 + 章节」归档（`{kind, chapter?, version, content, humanStatus}`）。创意稿、大纲和正文的保存操作追加版本；正文保存校验 ID、版本和审批状态，再保留该状态。设定、章纲和正文通过则原子定稿同一 ID、同一版本的内容与状态。生成时记录实际输入的身份/版本引用，供衔接检查；公开 API 返回各章产物的最新版本，不提供任意历史版本回读。
+- **可替换点**：Pipeline 的依赖注入接缝是存储（内存版开箱即用 ↔ SQLite 持久化，#9）与 Step（`FakeStep` ↔ `RealStep`）。`RealStep` 内部由 `ModelRuntime` 统一管理 provider 路由、凭据、base URL 与请求超时。切换已注册 provider 只需更换带 provider 前缀的模型 ID；新增 provider 仍需增加 adapter、registry 注册与 key 契约。测试使用 fake 模型或 mock 供应商传输；CLI 集成只访问本机测试服务，不调用远程模型。
+
+## 技术栈
 
 <p align="center">
   <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
@@ -131,62 +146,63 @@ The architecture is built around **human-in-the-loop**: machines generate, autho
   <img src="https://img.shields.io/badge/Vitest-6E9F18?logo=vitest&logoColor=white" alt="Vitest">
 </p>
 
-<p align="center">Vercel AI SDK v7 (<code>@ai-sdk/deepseek</code> + <code>@ai-sdk/openai-compatible</code>) · pnpm workspaces · TypeScript end-to-end</p>
+<p align="center">Vercel AI SDK v7（<code>@ai-sdk/deepseek</code> + <code>@ai-sdk/openai-compatible</code>）· pnpm workspaces · TypeScript 全链</p>
 
 ```bash
-pnpm test        # unit and integration tests (no remote model calls)
+pnpm test        # 单元与集成测试（不调用远程模型）
 pnpm typecheck
 pnpm build
 ```
 
-## Docs
+## 文档
 
-The docs in this repo are written for agents first — and read fine by humans:
+这个仓库的文档是写给 agent 读的一等公民，人读也够用：
 
-| Doc | Owns |
+| 文档 | 管什么 |
 |---|---|
-| [CONTEXT.md](./CONTEXT.md) | Domain glossary (read it first) |
-| [docs/schema.md](./docs/schema.md) | Data model, the single source of truth |
-| [Contract governance](./docs/agents/contract-governance.md) | Ownership of executable contracts, domain models, and per-ticket decisions |
-| [docs/adr/](./docs/adr/) | Irreversible decisions (orchestration, storage, skill files) |
-| [docs/wiki/](./docs/wiki/) | Per-ticket engineering context: design intent, code landing, and reasons for change |
-| [Ticket completion checklist](./docs/agents/ticket-completion-checklist.md) | Mandatory review, documentation, direct-push or PR/merge, and GitHub verification gate for every ticket |
-| [docs/research/](./docs/research/) | Selection research (stack, LLM provider strategy) |
-| [docs/handoff.md](./docs/handoff.md) | Session handoff snapshot (where we are, what's next) |
+| [CONTEXT.md](./CONTEXT.md) | 领域词汇表（先读它） |
+| [docs/schema.md](./docs/schema.md) | 数据模型的唯一来源 |
+| [契约管理](./docs/agents/contract-governance.md) | 可执行契约、领域模型与每票决定的归属 |
+| [docs/adr/](./docs/adr/) | 不可逆决策（编排、存储、skill 文件） |
+| [docs/wiki/](./docs/wiki/) | 每张票的工程上下文：设计目的、代码落点与变化原因 |
+| [Ticket 完成审核清单](./docs/agents/ticket-completion-checklist.md) | 每票必须执行的 review、文档、直推或 PR/merge 与 GitHub 核验闸门 |
+| [docs/research/](./docs/research/) | 选型调研（技术栈、LLM provider 策略） |
+| [docs/handoff.md](./docs/handoff.md) | 会话接力快照（当前进展与下一步） |
 
-## Development process
+## 开发流程
 
-Every ticket runs the same loop: grill and align scope → establish its Wiki context → plan → implement with TDD → run local gates → update knowledge → run three self-calibration passes → run Standards/Spec review → deliver by direct push or PR/merge → verify remotely. The [Ticket completion checklist](./docs/agents/ticket-completion-checklist.md) is the mandatory, single source of truth for that gate; the [Wiki contract](./docs/wiki/README.md) defines the per-ticket evidence format.
+每张 ticket 走同一个 loop：每票 grill 并对齐范围 → 建立 Wiki 上下文 → 给出计划 → TDD 实现 → 本地门禁 → 回写知识 → 三轮自校准 → Standards/Spec 双轴 review → 直推或 PR/merge → 远端回读。[Ticket 完成审核清单](./docs/agents/ticket-completion-checklist.md) 是这套闸门必须执行的唯一来源；逐票证据格式见 [Wiki 契约](./docs/wiki/README.md)。
 
-## Roadmap
+## 路线图
 
-| Ticket | What | Status |
+| 票 | 内容 | 状态 |
 |---|---|---|
-| [#2](https://github.com/12bitsD/agent4novel/issues/2) | Scaffold + storage + pipeline skeleton + bookcase | ✅ |
-| [#3](https://github.com/12bitsD/agent4novel/issues/3) | Unified entry + workspace idea state (manual chain) | ✅ |
-| [#10](https://github.com/12bitsD/agent4novel/issues/10) | Preprocess RealStep + interview + outline/setting shapes | ✅ |
-| [#11](https://github.com/12bitsD/agent4novel/issues/11) | Preprocess rework: caption + creative direction packs + compare view | ✅ |
-| [#4](https://github.com/12bitsD/agent4novel/issues/4) | Outline: arcs + segments (two-level, chapter-free) | ✅ |
-| [#14](https://github.com/12bitsD/agent4novel/issues/14) | Agent CLI + LLM telemetry + project driving skill | ✅ |
-| [#16](https://github.com/12bitsD/agent4novel/issues/16) | Configurable ModelRuntime + LongCat provider | ✅ |
-| [#13](https://github.com/12bitsD/agent4novel/issues/13) | Full setting after outline approval; edit locally and approve once ([engineering context](./docs/wiki/013-setting-generation-review.md)) | ✅ implemented |
-| [#5](https://github.com/12bitsD/agent4novel/issues/5) | First-chapter Beat: edit, regenerate, approve ([context](./docs/wiki/005-beat-generation-review.md)) | ✅ Closed |
-| [#25](https://github.com/12bitsD/agent4novel/issues/25) | Safe CLI help and strict arguments ([context](./docs/wiki/025-cli-command-safety.md)) | Implemented |
-| [#22](https://github.com/12bitsD/agent4novel/issues/22) | First-chapter prose: autosave, rewrite, approve, edit after approval ([context](./docs/wiki/022-prose-generation-review.md)) | Implemented; delivery status in #22 |
-| [#9](https://github.com/12bitsD/agent4novel/issues/9) | SQLite after artifact design/consolidation | Planned |
-| [#6](https://github.com/12bitsD/agent4novel/issues/6) | Continue writing + work detail + router | |
-| [#7](https://github.com/12bitsD/agent4novel/issues/7) | Agent configuration (style / genre / payoffs) | Planned; part of MVP |
-| [#8](https://github.com/12bitsD/agent4novel/issues/8) | Bad-example collection | Planned; part of MVP |
-| [#28](https://github.com/12bitsD/agent4novel/issues/28) | Setting search/read and bounded Agent tool execution | Future extension; does not block #22 |
-| [#29](https://github.com/12bitsD/agent4novel/issues/29) | Work Wiki, evolving profiles, joint prose/profile approval | Future extension; does not block #22 |
+| [#2](https://github.com/12bitsD/agent4novel/issues/2) | 脚手架 + 存储 + pipeline 骨架 + 书架 | ✅ |
+| [#3](https://github.com/12bitsD/agent4novel/issues/3) | 统一入口 + 创作界面 idea 状态（人工链路） | ✅ |
+| [#10](https://github.com/12bitsD/agent4novel/issues/10) | 预处理 RealStep + interview + outline/setting 形态定案 | ✅ |
+| [#11](https://github.com/12bitsD/agent4novel/issues/11) | 预处理重构：提炼稿 + 创意稿方向包 + 比较视图 | ✅ |
+| [#4](https://github.com/12bitsD/agent4novel/issues/4) | 大纲生成：弧线 + 剧情点(两层,与章节解耦) | ✅ |
+| [#14](https://github.com/12bitsD/agent4novel/issues/14) | Agent CLI + LLM 遥测 + 项目驱动 skill | ✅ |
+| [#16](https://github.com/12bitsD/agent4novel/issues/16) | 可配置 ModelRuntime + LongCat provider | ✅ |
+| [#13](https://github.com/12bitsD/agent4novel/issues/13) | 大纲通过后生成完整设定，本地编辑并一次通过（[工程上下文](./docs/wiki/013-setting-generation-review.md)） | ✅ 已实现 |
+| [#5](https://github.com/12bitsD/agent4novel/issues/5) | 第一章章纲：编辑、再生、通过（[上下文](./docs/wiki/005-beat-generation-review.md)） | ✅ 已关闭 |
+| [#25](https://github.com/12bitsD/agent4novel/issues/25) | CLI 帮助零副作用与严格参数校验（[上下文](./docs/wiki/025-cli-command-safety.md)） | 已实现 |
+| [#22](https://github.com/12bitsD/agent4novel/issues/22) | 第一章正文：自动保存、重写、通过及通过后编辑（[上下文](./docs/wiki/022-prose-generation-review.md)） | ✅ 已关闭 |
+| [#6](https://github.com/12bitsD/agent4novel/issues/6) | 后续章续写与按章浏览（[上下文](./docs/wiki/006-chapter-continuation.md)） | 已接入；交付状态见 #6 |
+| [#19](https://github.com/12bitsD/agent4novel/issues/19) | 统一 schema 与公开契约，收敛验证边界 | #6 之后，开工前对齐 |
+| [#9](https://github.com/12bitsD/agent4novel/issues/9) | 产物设计与治理后接入 SQLite | 计划中 |
+| [#7](https://github.com/12bitsD/agent4novel/issues/7) | Agent 配置；新增 Docker / CI 方向 | #9 之后，具体范围待对齐 |
+| [#8](https://github.com/12bitsD/agent4novel/issues/8) | 坏例收集 | 计划中，属于 MVP |
+| [#28](https://github.com/12bitsD/agent4novel/issues/28) | 设定搜索／读取与有界 Agent 工具执行 | 后续扩展，不阻塞 #6 |
+| [#29](https://github.com/12bitsD/agent4novel/issues/29) | 作品 Wiki、档案演进与正文／档案联合通过 | 后续扩展，不阻塞 #6 |
 
-[Contract consolidation #19](https://github.com/12bitsD/agent4novel/issues/19) follows Beat and prose design: #5 → #22 → #19 → #9 → #6. This is scheduling, not a new dependency edge. [Post-approval setting changes #17](https://github.com/12bitsD/agent4novel/issues/17) and [conflict clarification #18](https://github.com/12bitsD/agent4novel/issues/18) remain separate follow-up work; the [#13 design](./docs/wiki/013-setting-generation-review.md) records the scope. These are planned capabilities, not current UI or storage behavior.
+#5/#22 已交付，当前按作者最新顺序推进 **#6 → [#19](https://github.com/12bitsD/agent4novel/issues/19) → #9 → #7**；#8 仍属于 MVP，插入排期另行对齐。每票单独对齐、逐个完成；排期顺序不新增依赖边。[通过后的设定修改 #17](https://github.com/12bitsD/agent4novel/issues/17)、[冲突澄清 #18](https://github.com/12bitsD/agent4novel/issues/18) 分别留给后续优化；边界见 [#13 设计](./docs/wiki/013-setting-generation-review.md)。这些是计划中的能力，不代表当前界面或存储已支持。
 
-Work Wiki means the novel's setting and character records. #29 will define joint approval and later asynchronous updates after approved prose edits; #22 performs neither. Each future ticket requires its own scope alignment before implementation.
+作品 Wiki 指本书的设定与人物档案。#29 接入时再实现联合通过，并对齐通过后正文修改的异步更新；当前逐章流程均不执行。后续每票单独对齐范围后再实现。
 
 ---
 
 <p align="center">
   <sub><a href="./LICENSE">MIT License</a></sub><br>
-  <sub>If this project speaks to you, a star or an issue is always welcome.</sub>
+  <sub>如果这个项目对你有意思，欢迎 star，或来 issue 聊聊。</sub>
 </p>

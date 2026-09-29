@@ -5,10 +5,10 @@ import { observeBeat } from './beat-command.js'
 import { assignBeatIds } from './beat-content.js'
 import type { ArtifactPrecondition, WorkStore } from './store/work-store.js'
 
-export function prepareBeatReview(store: WorkStore, workId: string, request: Pick<BeatRegenerateRequest, 'expectedArtifactId' | 'expectedHeadVersion'>) {
+export function prepareBeatReview(store: WorkStore, workId: string, request: Pick<BeatRegenerateRequest, 'chapter' | 'expectedArtifactId' | 'expectedHeadVersion'>) {
   const work = store.getWork(workId)
   if (!work) throw new KnownError('work-not-found', 'work not found')
-  const target = work.artifacts.find(a => a.kind === 'beat' && a.chapter === 1)
+  const target = work.artifacts.find(a => a.kind === 'beat' && a.chapter === request.chapter)
   if (!target) throw new KnownError('artifact-not-found', 'beat not found')
   if (target.id !== request.expectedArtifactId || target.version !== request.expectedHeadVersion) throw new KnownError('version-conflict', 'beat head changed')
   if (target.humanStatus !== 'pending') throw new KnownError('artifact-already-approved', 'beat already approved')
@@ -32,8 +32,8 @@ export function approveBeat(store: WorkStore, workId: string, request: BeatAppro
     execution.stage = 'input'
     const content = assignBeatIds(beatApproveRequestSchema.parse(request).content, baseline.content)
     execution.stage = 'commit'
-    return store.finalizeArtifact({ workId, kind: 'beat', chapter: 1,
+    return store.finalizeArtifact({ workId, kind: 'beat', chapter: request.chapter,
       expectedArtifactId: baseline.id, expectedHeadVersion: baseline.version, content, preconditions,
     })
-  })
+  }, request.chapter)
 }

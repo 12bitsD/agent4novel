@@ -53,6 +53,7 @@ export async function callLlm<T>(args: {
   config: AgentConfig
   workId: string
   stepId: string
+  chapter?: number
   attemptId: string
   /** 默认 8000;长产物步骤(如 outline)实测会撞顶截断(#14 排查),可上调 */
   maxOutputTokens?: number
@@ -63,6 +64,7 @@ export async function callLlm<T>(args: {
   const started = Date.now()
   const base = {
     stepId: args.stepId,
+    ...(args.chapter !== undefined ? { chapter: args.chapter } : {}),
     attemptId: args.attemptId,
     model: /^(deepseek:[a-zA-Z0-9_.-]{1,96}|longcat:LongCat-2\.0)$/.test(model) ? model : 'unrecognized-model',
     ...(currentRequest() ? { requestId: currentRequest()!.requestId } : {}),

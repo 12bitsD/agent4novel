@@ -1,3 +1,4 @@
+import { chapterLabel } from '../chapter-view.js'
 import type { BeatReviewAction, BeatReviewState } from '../beat-review.js'
 import { canLoadServerBeat } from '../beat-review.js'
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
@@ -37,7 +38,7 @@ export default function BeatReview({ state, onAction, allowCommands, onApprove, 
   }
   return <section ref={root} className="setting-review" aria-label="章纲关卡">
     <header className="setting-review-header">
-      <div><p className="setting-eyebrow">第一章 · 写作计划</p><h2>{approved ? '章纲已通过' : '先看清这一章，再开始写作'}</h2>
+      <div><p className="setting-eyebrow">{chapterLabel(state.baseline.chapter)} · 写作计划</p><h2>{approved ? '章纲已通过' : '先看清这一章，再开始写作'}</h2>
         <p className="setting-muted">{approved ? '后续正文使用这份章纲。' : '修改仅保存在当前页面；点击通过后，一次定稿。'}</p></div>
       {!approved && <div className="setting-actions">
         <button type="button" style={btnSecondary} onClick={() => onAction({ type: 'mode', mode: editing ? 'preview' : 'edit' })}>{editing ? '预览章纲' : '编辑章纲'}</button>

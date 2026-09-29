@@ -31,9 +31,12 @@ describe('step experiment contracts', () => {
     ]) expect(stepExperimentRequestSchema.safeParse(invalid).success).toBe(false)
   })
 
-  it('requires chapter one for Beat and forbids chapters on other nodes', () => {
-    expect(stepExperimentRequestSchema.safeParse({ stepId: 'beat', input: { seed: '', chapter: 1 } }).success).toBe(true)
-    for (const [stepId, chapter] of [['beat', undefined], ['beat', 2], ['caption', 1]]) {
+  it('requires a positive safe chapter address for chapter Steps and forbids it on other nodes', () => {
+    // Step-specific upstream content is checked by the isolated worker's production schema.
+    for (const stepId of ['beat', 'prose']) for (const chapter of [1, 2, 3]) {
+      expect(stepExperimentRequestSchema.safeParse({ stepId, input: { seed: '', chapter } }).success).toBe(true)
+    }
+    for (const [stepId, chapter] of [['beat', undefined], ['beat', 0], ['beat', 1.5], ['prose', -1], ['prose', Number.MAX_SAFE_INTEGER + 1], ['caption', 1]]) {
       expect(stepExperimentRequestSchema.safeParse({ stepId, input: { seed: '', chapter } }).success).toBe(false)
     }
   })
@@ -43,7 +46,7 @@ describe('step experiment contracts', () => {
     expect(stepExperimentRequestSchema.safeParse(prose).success).toBe(true)
     for (const invalid of [
       { ...prose, stepId: 'beat' }, { ...prose, stepId: 'caption' },
-      { ...prose, input: { ...prose.input, chapter: 2 } },
+      { ...prose, input: { ...prose.input, chapter: 0 } },
       { ...prose, input: { ...prose.input, regeneration: { content: { title: 'not prose' }, instructions: '' } } },
     ]) expect(stepExperimentRequestSchema.safeParse(invalid).success).toBe(false)
   })

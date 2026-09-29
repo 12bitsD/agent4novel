@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { captionContentSchema, creativeContentSchema, outlineContentSchema, settingArtifactSchema, beatArtifactSchema, proseArtifactSchema } from '@agent4novel/contracts'
 import type { CaptionContent, CreativeContent, OutlineContent, WorkView } from '@agent4novel/contracts'
-import { advance, getWork } from '../api.js'
+import { advance, getWork, startChapter, type StartChapterRequest } from '../api.js'
+import { chapterActions, chapterLabel } from '../chapter-view.js'
+import ReferenceMaterials from './ReferenceMaterials.js'
 import { btnPrimary, btnSecondary, cardStyle } from '../ui.js'
 import CreativePoster from './CreativePoster.js'
 import OutlineReview from './OutlineReview.js'
@@ -17,14 +19,33 @@ import { initProseReview, isProseDirty, reduceProseReview, type ProseReviewState
 import { postProseCommand } from '../prose-api.js'
 
 // Workspace 只渲染 server 读模型(workflowState/allowedActions 来自 GET /works/:id 同快照),
-// 不在前端重建状态机。生成/重试 = 同一个 advance(幂等,从失败步骤恢复)。
-export default function Workspace(props: { workId: string; onBack: () => void }) {
-  return <WorkSession key={props.workId} {...props} />
+// 不在前端重建状态机。当前章生成/重试走 advance，开始下一章走独立条件请求。
+type WorkspaceProps = { workId: string; onBack: () => void; initialChapter?: number; onChapterChange?: (chapter: number) => void }
+export default function Workspace(props: WorkspaceProps) {
+  return <WorkNavigation key={props.workId} {...props} />
 }
-function WorkSession({ workId, onBack }: { workId: string; onBack: () => void }) {
+function WorkNavigation(props: WorkspaceProps) {
+  const [selectedChapter, setSelectedChapter] = useState(props.initialChapter)
+  const locationCallback = useRef(props.onChapterChange)
+  locationCallback.current = props.onChapterChange
+  const syncChapter = useCallback((chapter: number) => locationCallback.current?.(chapter), [])
+  const selectChapter = useCallback((chapter: number) => { setSelectedChapter(chapter); syncChapter(chapter) }, [syncChapter])
+  return <WorkSession key={`${props.workId}:${selectedChapter ?? 'current'}`} workId={props.workId} onBack={props.onBack}
+    requestedChapter={selectedChapter} onSelectChapter={selectChapter} onResolvedChapter={syncChapter} />
+}
+function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onResolvedChapter }: {
+  workId: string; onBack: () => void; requestedChapter?: number; onSelectChapter: (chapter: number) => void; onResolvedChapter: (chapter: number) => void
+}) {
+  const chapterRef = useRef<number | null>(null)
+  const [switchingTo, setSwitchingTo] = useState<number | null>(null)
+  const [starting, setStarting] = useState(false)
+  const [startUncertain, setStartUncertain] = useState(false)
+  const frozenStart = useRef<StartChapterRequest | null>(null)
   const [work, setWork] = useState<WorkView | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [generating, setGenerating] = useState(false)
+  const [generationUncertain, setGenerationUncertain] = useState(false)
+  const uncertainGeneration = useRef<{ kind: string; chapter?: number } | null>(null)
   const [generationStep, setGenerationStep] = useState<string | null>(null)
   const [setting, setSettingState] = useState<SettingReviewState | null>(null)
   const [beat, setBeatState] = useState<BeatReviewState | null>(null)
@@ -47,20 +68,33 @@ function WorkSession({ workId, onBack }: { workId: string; onBack: () => void })
     setSettingState(next)
   }, [])
   const acceptWork = useCallback((view: WorkView, observe = true) => {
+    if (chapterRef.current === null) {
+      const exists = requestedChapter === undefined || requestedChapter === view.currentChapter || view.chapters.some(item => item.chapter === requestedChapter)
+      chapterRef.current = exists ? requestedChapter ?? view.currentChapter : view.currentChapter
+      if (!exists) setError(`${chapterLabel(requestedChapter!)}尚不存在，已打开当前章节。`)
+      onResolvedChapter(chapterRef.current)
+    }
+    const chapter = chapterRef.current
     const currentBeat = beatRef.current
-    const oldHead = currentBeat?.observedWork?.artifacts.find(a => a.kind === 'beat' && a.chapter === 1) ?? currentBeat?.baseline
-    const newHead = view.artifacts.find(a => a.kind === 'beat' && a.chapter === 1)
+    const oldHead = currentBeat?.observedWork?.artifacts.find(a => a.kind === 'beat' && a.chapter === chapter) ?? currentBeat?.baseline
+    const newHead = view.artifacts.find(a => a.kind === 'beat' && a.chapter === chapter)
     if (oldHead && !newHead) return false
     if (oldHead && newHead && (newHead.version < oldHead.version || (newHead.id === oldHead.id && newHead.version === oldHead.version
       && oldHead.humanStatus === 'approved' && newHead.humanStatus === 'pending'))) return false
     const currentProse = proseRef.current
-    const observedProse = currentProse?.observedWork?.artifacts.find(a => a.kind === 'prose' && a.chapter === 1)
+    const observedProse = currentProse?.observedWork?.artifacts.find(a => a.kind === 'prose' && a.chapter === chapter)
     const oldProse = observedProse && currentProse && observedProse.version > currentProse.baseline.version ? observedProse : currentProse?.baseline
-    const newProse = view.artifacts.find(a => a.kind === 'prose' && a.chapter === 1)
+    const newProse = view.artifacts.find(a => a.kind === 'prose' && a.chapter === chapter)
     if (oldProse && (!newProse || newProse.version < oldProse.version || (newProse.id === oldProse.id && newProse.version === oldProse.version
       && oldProse.humanStatus === 'approved' && newProse.humanStatus === 'pending'))) return false
     workRef.current = view
     setWork(view)
+    const pendingGeneration = uncertainGeneration.current
+    if (pendingGeneration && view.artifacts.some(artifact => artifact.kind === pendingGeneration.kind && artifact.chapter === pendingGeneration.chapter)) {
+      uncertainGeneration.current = null
+      setGenerationUncertain(false)
+      setError(null)
+    }
     const current = settingRef.current
     const candidate = settingArtifactSchema.safeParse(view.artifacts.find((artifact) => artifact.kind === 'setting')).data
     if (!current && candidate?.workId === view.id) setSetting(initSettingReview(candidate))
@@ -72,7 +106,7 @@ function WorkSession({ workId, onBack }: { workId: string; onBack: () => void })
     if (!currentProse && proseCandidate?.workId === view.id) setProse({ ...initProseReview(proseCandidate), observedWork: view })
     else if (currentProse && observe) setProse(reduceProseReview(currentProse, { type: 'observe', work: view }))
     return true
-  }, [setSetting, setBeat, setProse])
+  }, [setSetting, setBeat, setProse, requestedChapter, onResolvedChapter])
 
   const refresh = useCallback(async () => {
     const sequence = ++readSequence.current
@@ -81,7 +115,8 @@ function WorkSession({ workId, onBack }: { workId: string; onBack: () => void })
       if (!mounted.current || sequence !== readSequence.current || view.id !== workId) return null
       return acceptWork(view) ? view : null
     } catch {
-      if (mounted.current && sequence === readSequence.current) setError('读取作品失败，请重试。')
+      if (mounted.current && sequence === readSequence.current) setError(uncertainGeneration.current
+        ? '生成结果尚未确认，读取作品失败，请重试核对。' : '读取作品失败，请重试。')
       return null
     }
   }, [workId, acceptWork])
@@ -92,7 +127,16 @@ function WorkSession({ workId, onBack }: { workId: string; onBack: () => void })
     return () => { mounted.current = false; readSequence.current++; commandSequence.current++ }
   }, [refresh])
   const dirty = (setting !== null && (isSettingDirty(setting) || setting.hasUnknownWrite || ['submitting', 'reconciling'].includes(setting.phase)))
-    || (beat !== null && isBeatDirty(beat)) || (prose !== null && isProseDirty(prose)) || generating
+    || (beat !== null && isBeatDirty(beat)) || (prose !== null && isProseDirty(prose)) || generating || generationUncertain || starting || startUncertain
+  const navigationLocked = generating || generationUncertain || starting || startUncertain
+    || !!prose && (prose.hasUnknownWrite || ['saving', 'submitting', 'regenerating', 'reconciling'].includes(prose.phase))
+    || !!beat && (beat.hasUnknownWrite || ['submitting', 'regenerating', 'reconciling'].includes(beat.phase))
+    || !!setting && (setting.hasUnknownWrite || ['submitting', 'reconciling'].includes(setting.phase))
+  const chooseChapter = (chapter: number) => {
+    if (navigationLocked || chapter === chapterRef.current) return
+    if (dirty) setSwitchingTo(chapter)
+    else onSelectChapter(chapter)
+  }
   useEffect(() => {
     if (!dirty) return
     const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
@@ -101,7 +145,13 @@ function WorkSession({ workId, onBack }: { workId: string; onBack: () => void })
   }, [dirty])
 
   const generate = useCallback(async (stepId = workRef.current?.nextStepId ?? null) => {
-    if (generationBusy.current) return
+    if (generationBusy.current || uncertainGeneration.current || !stepId) return
+    const target = { kind: stepId, ...(stepId === 'beat' || stepId === 'prose' ? { chapter: workRef.current?.currentChapter } : {}) }
+    const markUnknown = () => {
+      uncertainGeneration.current = target
+      setGenerationUncertain(true)
+      setError('生成结果尚未确认，请刷新作品核对。已发出的请求可能继续处理；确认前不会再次生成或切换章节。')
+    }
     generationBusy.current = true
     setGenerationStep(stepId)
     setError(null)
@@ -109,13 +159,17 @@ function WorkSession({ workId, onBack }: { workId: string; onBack: () => void })
     try {
       const outcome = await advance(workId)
       if (!mounted.current) return
-      if (outcome.kind === 'failed') {
+      if (outcome.kind === 'failed' && (outcome.beatCommand?.writeOutcome === 'unknown' || outcome.proseCommand?.writeOutcome === 'unknown')) {
+        markUnknown()
+      } else if (outcome.kind === 'failed') {
         setError(`生成失败(${outcome.code})${outcome.retryable ? ',可重试' : ''}${outcome.inputBudget ? `；完整输入 ${outcome.inputBudget.actualLength} / ${outcome.inputBudget.limit} 字符，未调用模型。请缩减输入或检查模型配置。` : ''}`)
       }
       await refresh()
-    } catch {
+    } catch (error) {
       if (mounted.current) {
-        setError('生成结果尚未确认，正在核对服务器。已发出的请求可能继续处理。')
+        const status = (error as { status?: number }).status
+        if (status !== undefined && status >= 400 && status < 500) setError('本次生成请求被拒绝，请核对作品后重试。')
+        else markUnknown()
         await refresh()
       }
     } finally {
@@ -151,7 +205,8 @@ function WorkSession({ workId, onBack }: { workId: string; onBack: () => void })
     if (approved?.phase !== 'approved') { await refresh(); return }
     const key = `${approved.baseline.id}:${approved.baseline.version}`
     const view = readback === undefined ? await refresh() : readback
-    if (view?.nextStepId === 'prose' && view.allowedActions.includes('generate') && continuedBeat.current !== key) {
+    if (view?.currentChapter === approved.baseline.chapter && view.nextStepId === 'prose'
+      && chapterActions(view, approved.baseline.chapter).includes('generate') && continuedBeat.current !== key) {
       continuedBeat.current = key
       await generate('prose')
     }
@@ -160,8 +215,7 @@ function WorkSession({ workId, onBack }: { workId: string; onBack: () => void })
   const runBeat = async (mode: 'approve-beat' | 'regenerate-beat' | 'confirm' | 'retry') => {
     const current = beatRef.current
     if (!current || ['submitting', 'regenerating', 'reconciling'].includes(current.phase)) return
-    if ((mode === 'approve-beat' || mode === 'regenerate-beat') && (workRef.current?.workflowState !== 'awaiting-beat-review'
-      || !workRef.current.allowedActions.includes(mode === 'approve-beat' ? 'approve' : 'regenerate'))) return
+    if ((mode === 'approve-beat' || mode === 'regenerate-beat') && !chapterActions(workRef.current, current.baseline.chapter).includes(mode === 'approve-beat' ? 'approve' : 'regenerate')) return
     const next = reduceBeatReview(current, mode === 'confirm' || mode === 'retry' ? { type: mode } : { type: 'start', operation: mode })
     setBeat(next)
     if (mode !== 'confirm' && (!next.submitted || !['submitting', 'regenerating'].includes(next.phase))) return
@@ -189,10 +243,9 @@ function WorkSession({ workId, onBack }: { workId: string; onBack: () => void })
   const proseAction = (action: ProseReviewAction) => { if (proseRef.current) setProse(reduceProseReview(proseRef.current, action)) }
   const runProse = async (mode: 'approve-prose' | 'regenerate-prose' | 'save-prose' | 'confirm' | 'retry') => {
     const current = proseRef.current
-    if (!current || ['saving', 'submitting', 'regenerating', 'reconciling'].includes(current.phase)) return
-    if (mode === 'save-prose' && !workRef.current?.allowedActions.includes('save-draft')) return
-    if ((mode === 'approve-prose' || mode === 'regenerate-prose') && (workRef.current?.workflowState !== 'awaiting-prose-review'
-      || !workRef.current.allowedActions.includes(mode === 'approve-prose' ? 'approve' : 'regenerate'))) return
+    if (!current || starting || startUncertain || ['saving', 'submitting', 'regenerating', 'reconciling'].includes(current.phase)) return
+    if (mode === 'save-prose' && !chapterActions(workRef.current, current.baseline.chapter).includes('save-draft')) return
+    if ((mode === 'approve-prose' || mode === 'regenerate-prose') && !chapterActions(workRef.current, current.baseline.chapter).includes(mode === 'approve-prose' ? 'approve' : 'regenerate')) return
     const next = reduceProseReview(current, mode === 'confirm' || mode === 'retry' ? { type: mode } : { type: 'start', operation: mode })
     setProse(next)
     if (mode !== 'confirm' && (!next.submitted || !['saving', 'submitting', 'regenerating'].includes(next.phase))) return
@@ -216,14 +269,61 @@ function WorkSession({ workId, onBack }: { workId: string; onBack: () => void })
     if (view?.id === workId) acceptWork(view, false)
   }
 
+  const beginNextChapter = async () => {
+    const current = proseRef.current
+    if (!current || generationBusy.current || starting || isProseDirty(current)) return
+    if (!frozenStart.current && !chapterActions(workRef.current, current.baseline.chapter).includes('start-next-chapter')) return
+    const request = frozenStart.current ?? { chapter: current.baseline.chapter + 1,
+      expectedPreviousProseId: current.baseline.id, expectedPreviousProseVersion: current.baseline.version }
+    frozenStart.current = request
+    generationBusy.current = true
+    setStarting(true)
+    setError(null)
+    try {
+      const outcome = await startChapter(workId, request)
+      if (!mounted.current) return
+      const unknown = outcome.kind === 'failed' && (startUncertain || outcome.beatCommand?.writeOutcome === 'unknown')
+      setStartUncertain(unknown)
+      if (!unknown) frozenStart.current = null
+      if (unknown) setError('开始下一章的结果尚未确认。可核对服务器，或重试同一份开始请求。')
+      else if (outcome.kind === 'failed') setError(`下一章生成失败（${outcome.code}）${outcome.retryable ? '，可重试。' : '，请核对作品后重试。'}`)
+      const view = await refresh()
+      if (mounted.current && view?.chapters.some(item => item.chapter === request.chapter)) onSelectChapter(request.chapter)
+    } catch (error) {
+      if (!mounted.current) return
+      const failure = error as { status?: number; code?: string }
+      // A new request rejected before execution is known not to have started a chapter.
+      // Rejection of a retry cannot settle an earlier request whose response was lost.
+      const rejected = !startUncertain && failure.status !== undefined && failure.status >= 400 && failure.status < 500
+      setStartUncertain(!rejected)
+      if (rejected) frozenStart.current = null
+      setError(rejected ? `未开始下一章（${failure.code ?? failure.status}），请核对作品后重试。`
+        : '开始下一章的结果尚未确认。可核对服务器，或重试同一份开始请求。')
+      const view = await refresh()
+      if (mounted.current && view?.chapters.some(item => item.chapter === request.chapter)) {
+        frozenStart.current = null
+        setStartUncertain(false)
+        onSelectChapter(request.chapter)
+      }
+    } finally {
+      generationBusy.current = false
+      if (mounted.current) setStarting(false)
+    }
+  }
+  const confirmStart = async () => {
+    const target = frozenStart.current?.chapter
+    const view = await refresh()
+    if (mounted.current && target && view?.chapters.some(item => item.chapter === target)) onSelectChapter(target)
+  }
+
   const autosaveRef = useRef(runProse)
   autosaveRef.current = runProse
   useEffect(() => {
     if (!prose || !['editing', 'approved'].includes(prose.phase) || prose.draft.text === prose.baseline.content.text
-      || !work?.allowedActions.includes('save-draft')) return
+      || starting || startUncertain || !chapterActions(work, prose.baseline.chapter).includes('save-draft')) return
     const timer = setTimeout(() => { void autosaveRef.current('save-prose') }, 600)
     return () => clearTimeout(timer)
-  }, [prose?.draft.text, prose?.baseline.id, prose?.baseline.version, prose?.phase, work?.allowedActions])
+  }, [prose?.draft.text, prose?.baseline.id, prose?.baseline.version, prose?.phase, work, starting, startUncertain])
 
   const creativeArtifact = work?.artifacts.find((a) => a.kind === 'creative')
   const captionArtifact = work?.artifacts.find((a) => a.kind === 'caption')
@@ -238,6 +338,10 @@ function WorkSession({ workId, onBack }: { workId: string; onBack: () => void })
     ? (outlineContentSchema.safeParse(outlineArtifact.content).data ?? null)
     : null
 
+  const chapter = chapterRef.current ?? requestedChapter ?? 1
+  const chapterSummary = work?.chapters.find(item => item.chapter === chapter)
+  const actions = chapterActions(work, chapter)
+  const isCurrentChapter = chapter === work?.currentChapter
   const state = generating ? 'generating' : (work?.workflowState ?? 'ready-to-generate')
   const showOutline =
     (work?.workflowState === 'awaiting-outline-review' || work?.workflowState === 'outline-approved') &&
@@ -245,8 +349,8 @@ function WorkSession({ workId, onBack }: { workId: string; onBack: () => void })
     outlineArtifact !== undefined
 
   const showSetting = setting !== null && (work?.workflowState === 'awaiting-setting-review' || work?.workflowState === 'setting-approved')
-  const showProse = prose !== null && (work?.workflowState === 'awaiting-prose-review' || work?.workflowState === 'prose-approved')
-  const showBeat = beat !== null && (work?.workflowState === 'awaiting-beat-review' || work?.workflowState === 'beat-approved')
+  const showProse = prose !== null && (!!chapterSummary || work?.workflowState === 'awaiting-prose-review' || work?.workflowState === 'prose-approved')
+  const showBeat = beat !== null && !showProse && (!!chapterSummary || work?.workflowState === 'awaiting-beat-review' || work?.workflowState === 'beat-approved')
   // 生成间隙保留已选定的创意稿；动作权限仍由服务器读模型决定。
   const showPoster = creative !== null && creativeArtifact !== undefined && (
     work?.workflowState === 'awaiting-selection' || (
@@ -255,7 +359,7 @@ function WorkSession({ workId, onBack }: { workId: string; onBack: () => void })
     )
   )
   const nextStep = generating ? generationStep : work?.nextStepId
-  const stepLabel = nextStep === 'prose' ? '第一章正文' : nextStep === 'beat' ? '第一章章纲' : nextStep === 'setting' ? '设定' : nextStep === 'outline' ? '大纲' : '创意稿'
+  const stepLabel = nextStep === 'prose' ? `${chapterLabel(chapter)}正文` : nextStep === 'beat' ? `${chapterLabel(chapter)}章纲` : nextStep === 'setting' ? '设定' : nextStep === 'outline' ? '大纲' : '创意稿'
 
   return (
     <main style={{ padding: 24, maxWidth: 860 }}>
@@ -266,8 +370,18 @@ function WorkSession({ workId, onBack }: { workId: string; onBack: () => void })
         ← 返回书架
       </button>
       {work && <h1>{work.title}</h1>}
+      {!!work?.chapters.length && <nav aria-label="章节目录" className="chapter-directory">
+        <h2>章节目录</h2><div className="setting-actions">{work.chapters.map(item => <button type="button" key={item.chapter}
+          data-chapter={item.chapter} aria-current={item.chapter === chapter ? 'page' : undefined}
+          disabled={navigationLocked} onClick={() => chooseChapter(item.chapter)} style={btnSecondary}>
+          {chapterLabel(item.chapter)} · {item.title} · {item.proseStatus === 'approved' ? '已通过' : item.proseStatus === 'pending' ? '正文待通过' : item.beatStatus === 'pending' ? '章纲待通过' : '待生成正文'}
+          {item.chapter === work.currentChapter ? '（当前章）' : ''}{item.needsContinuityReview ? ' · 待检查衔接' : ''}
+        </button>)}</div>
+        <p className="setting-muted">{isCurrentChapter ? '正在创作当前章。' : '正在阅读历史章节。'}{navigationLocked ? '请先完成当前操作或核对服务器结果，再切换章节。' : ''}</p>
+      </nav>}
+      {chapterSummary?.needsContinuityReview && <p className="setting-notice" role="status">前章正文已修改，请检查本章衔接。后续章节已保留，不会自动重写。</p>}
       {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
-      {error && <button type="button" style={btnSecondary} onClick={() => void refresh()}>刷新作品</button>}
+      {error && <button type="button" style={btnSecondary} onClick={() => void (startUncertain ? confirmStart() : refresh())}>刷新作品</button>}
 
       {work && !showPoster && !showOutline && !showSetting && !showBeat && !showProse && (
         <section style={{ ...cardStyle, marginBottom: 16, background: 'var(--bg-sunken)' }}>
@@ -276,8 +390,8 @@ function WorkSession({ workId, onBack }: { workId: string; onBack: () => void })
         </section>
       )}
 
-      {(state === 'ready-to-generate' || state === 'failed') && work?.allowedActions.includes('generate') && (
-        <button onClick={() => void generate()} disabled={generating} style={btnPrimary}>
+      {isCurrentChapter && (state === 'ready-to-generate' || state === 'failed') && work?.allowedActions.includes('generate') && (
+        <button onClick={() => void generate()} disabled={generating || generationUncertain} style={btnPrimary}>
           {state === 'failed' ? `重试生成${stepLabel}` : `生成${stepLabel}`}
         </button>
       )}
@@ -313,13 +427,30 @@ function WorkSession({ workId, onBack }: { workId: string; onBack: () => void })
         allowApprove={work?.workflowState === 'awaiting-setting-review' && work.allowedActions.includes('approve')}
         onApprove={() => void runSetting('submit')} onConfirm={() => void runSetting('confirm')} onRetry={() => void runSetting('retry')} />}
       {showBeat && beat && <BeatReview state={beat} onAction={beatAction}
-        allowCommands={work?.workflowState === 'awaiting-beat-review' && work.allowedActions.includes('approve') && work.allowedActions.includes('regenerate')}
+        allowCommands={actions.includes('approve') && actions.includes('regenerate')}
         onApprove={() => void runBeat('approve-beat')} onRegenerate={() => void runBeat('regenerate-beat')}
         onConfirm={() => void runBeat('confirm')} onRetry={() => void runBeat('retry')} />}
-      {showProse && prose && <ProseReview title={beat?.baseline.content.title ?? '第一章'} state={prose} onAction={proseAction}
-        allowCommands={work?.allowedActions.includes('save-draft') || (work?.workflowState === 'awaiting-prose-review' && work.allowedActions.includes('approve') && work.allowedActions.includes('regenerate'))}
+      {showProse && prose && <ProseReview title={beat?.baseline.content.title ?? chapterLabel(chapter)} state={prose} onAction={proseAction}
+        allowCommands={!starting && !startUncertain && (actions.includes('save-draft') || (actions.includes('approve') && actions.includes('regenerate')))}
         onApprove={() => void runProse('approve-prose')} onRegenerate={() => void runProse('regenerate-prose')}
         onConfirm={() => void runProse('confirm')} onRetry={() => void runProse('retry')} />}
+      {showProse && prose && (actions.includes('start-next-chapter') || startUncertain) && <section style={{ marginTop: 24 }}>
+        <button type="button" style={btnPrimary} disabled={starting || generating || isProseDirty(prose)} onClick={() => void beginNextChapter()}>
+          {starting ? '正在生成下一章章纲…' : startUncertain ? '重试开始下一章' : '开始下一章'}
+        </button>
+        <p className="setting-muted">先生成下一章章纲，把关后再生成正文。{isProseDirty(prose) ? '请先保存并确认本章修改。' : ''}</p>
+      </section>}
+      {work && <ReferenceMaterials key={chapter} work={work} chapter={chapter} hiddenKinds={[
+        ...(!showPoster && !showOutline && !showSetting && !showBeat && !showProse ? ['seed'] : []),
+        ...(showPoster ? ['creative', 'caption'] : []), ...(showOutline ? ['outline'] : []), ...(showSetting ? ['setting'] : []), ...(showBeat ? ['beat'] : []),
+      ]} />}
+      {switchingTo !== null && <ConfirmDialog title="切换章节？" description="切换会放弃当前章尚未保存的修改和意见。"
+        cancelLabel="继续编辑" confirmLabel="放弃修改并切换" onCancel={() => setSwitchingTo(null)} onConfirm={() => {
+          if (navigationLocked) { setSwitchingTo(null); return }
+          commandSequence.current++
+          readSequence.current++
+          onSelectChapter(switchingTo)
+        }} />}
       {prose && !showProse && prose.phase !== 'approved' && <p className="setting-notice">正文的本页修改与意见仍保留。完成前置关卡后可继续查看。</p>}
       {beat && !showBeat && beat.phase !== 'approved' && <p className="setting-notice">章纲的本页修改与意见仍保留。完成前置关卡后可继续查看。</p>}
       {setting && !showSetting && setting.phase !== 'approved' && <p className="setting-notice">设定的本页修改仍保留。完成前置关卡后可继续查看。</p>}

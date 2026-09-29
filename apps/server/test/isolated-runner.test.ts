@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest'
+import type { JsonValue } from '@agent4novel/contracts'
 const mocks = vi.hoisted(() => ({ generateObject: vi.fn(), runtime: { mode: 'live', defaultModelId: 'longcat:LongCat-2.0', requestTimeoutMs: 300000, generationSettings: () => ({ parameters: {}, options: {} }), languageModel: () => 'mock' } }))
 vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
 vi.mock('../src/steps/llm.js', () => ({ modelRuntime: mocks.runtime }))
@@ -57,7 +58,8 @@ it.each(['creative', 'outline', 'setting', 'beat'] as const)('preserves %s produ
     : stepId === 'setting' ? { ...f.setting, world: f.setting.world.map(({ itemId, ...v }) => v), characters: f.setting.characters.map(({ itemId, ...v }) => v), factions: [], relationships: [], extensions: [] }
     : { ...f.beat, writingPlan: f.beat.writingPlan.map(({ itemId, ...v }) => v) }
   mocks.generateObject.mockResolvedValue({ object: raw, usage: {}, finishReason: 'stop' })
-  const result = await runIsolatedStep({ stepId, input: { seed: '合成素材', upstream: { caption: f.caption, creative: f.creative, outline: f.outline, setting: f.setting }, ...(stepId === 'beat' ? { chapter: 1 as const } : {}) }, config: { directionCount: 1 }, systemPrompt: 'CUSTOM_SYSTEM' })
+  const upstream: Record<string, JsonValue> = stepId === 'beat' ? { outline: f.outline, setting: f.setting } : { caption: f.caption, creative: f.creative, outline: f.outline, setting: f.setting }
+  const result = await runIsolatedStep({ stepId, input: { seed: '合成素材', upstream, ...(stepId === 'beat' ? { chapter: 1 as const } : {}) }, config: { directionCount: 1 }, systemPrompt: 'CUSTOM_SYSTEM' })
   expect(result.kind).toBe('succeeded')
   const call = mocks.generateObject.mock.calls[0]![0]
   expect(call.system).toBe('CUSTOM_SYSTEM')

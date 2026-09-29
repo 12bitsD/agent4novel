@@ -22,6 +22,14 @@ export const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(jsonValueSchema), z.record(jsonValueSchema)]),
 )
 
+export const artifactInputSchema = z.object({
+  kind: z.enum(artifactKinds), chapter: z.number().int().positive().safe().optional(),
+  artifactId: z.string().min(1), version: z.number().int().positive().safe(),
+}).strict().superRefine((input, ctx) => {
+  if (perChapterKinds.includes(input.kind) !== (input.chapter !== undefined)) ctx.addIssue({ code: 'custom', path: ['chapter'], message: 'input chapter 与 kind 不匹配' })
+})
+export type ArtifactInput = z.infer<typeof artifactInputSchema>
+
 export const artifactEnvelopeSchema = z.object({
   id: z.string().min(1),
   workId: z.string().min(1),
@@ -31,6 +39,7 @@ export const artifactEnvelopeSchema = z.object({
   content: jsonValueSchema,
   humanStatus: z.enum(humanStatuses),
   createdAt: z.string().min(1),
+  inputs: z.array(artifactInputSchema).optional(),
 }).strict()
 
 export const artifactSchema = artifactEnvelopeSchema.superRefine((artifact, ctx) => {
@@ -74,7 +83,20 @@ export const workflowStates = [
 ] as const
 export type WorkflowState = (typeof workflowStates)[number]
 
+export const chapterSummarySchema = z.object({
+  chapter: z.number().int().positive().safe(), title: z.string(),
+  beatStatus: z.enum(humanStatuses).nullable(), proseStatus: z.enum(humanStatuses).nullable(),
+  allowedActions: z.array(z.string()), needsContinuityReview: z.boolean(),
+}).strict()
+export type ChapterSummary = z.infer<typeof chapterSummarySchema>
+export const startChapterRequestSchema = z.object({
+  chapter: z.number().int().min(2).safe(), expectedPreviousProseId: z.string().min(1).max(128),
+  expectedPreviousProseVersion: z.number().int().positive().safe(),
+}).strict()
+export type StartChapterRequest = z.infer<typeof startChapterRequestSchema>
+
 export const workViewEnvelopeSchema = workDetailSchema.extend({
+  currentChapter: z.number().int().positive().safe().default(1), chapters: z.array(chapterSummarySchema).default([]),
   workflowState: z.enum(workflowStates), allowedActions: z.array(z.string()), nextStepId: z.string().nullable(),
 })
 export type WorkView = z.infer<typeof workViewEnvelopeSchema>

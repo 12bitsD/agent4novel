@@ -12,7 +12,7 @@ export const stepExperimentRequestSchema = z.object({
   input: z.object({
     seed: z.string().max(seedCharBudget),
     upstream: z.record(jsonValueSchema).optional(),
-    chapter: z.literal(1).optional(),
+    chapter: z.number().int().positive().safe().optional(),
     regeneration: z.union([
       z.object({ content: beatEditDraftSchema, instructions: z.string().max(beatLimits.instructions) }).strict(),
       z.object({ content: proseEditDraftSchema, instructions: z.string().max(proseLimits.instructions) }).strict(),
@@ -22,7 +22,7 @@ export const stepExperimentRequestSchema = z.object({
   config: agentConfigSchema.pick({ model: true, directionCount: true, thinking: true, temperature: true, topP: true }).strict().optional(),
 }).strict().superRefine((request, ctx) => {
   const chapterStep = request.stepId === 'beat' || request.stepId === 'prose'
-  if (chapterStep ? request.input.chapter !== 1 : request.input.chapter !== undefined || request.input.regeneration !== undefined) {
+  if (chapterStep ? request.input.chapter === undefined : request.input.chapter !== undefined || request.input.regeneration !== undefined) {
     ctx.addIssue({ code: 'custom', path: ['input', 'chapter'], message: 'chapter and regeneration require a supported chapter step' })
   }
   if (chapterStep && request.input.regeneration) {

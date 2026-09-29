@@ -8,15 +8,25 @@ import { currentRequest, recordCommand } from './steps/telemetry.js'
 type Stage = NonNullable<BeatExecutionObservation['failureStage']>
 export type BeatExecution = { stage: Stage }
 export function beatFailureCode(cause: unknown, stage: Stage): string {
+  if (stage === 'response') return 'internal-error'
   return cause instanceof KnownError ? cause.code : cause instanceof z.ZodError
     ? (stage === 'output' || stage === 'model' ? 'llm-invalid-output' : 'invalid-content') : 'internal-error'
 }
 export class BeatCommandError extends Error {
   constructor(readonly cause: unknown, readonly command: BeatExecutionObservation) { super('beat command failed') }
 }
+export function beatResponseError(workId: string, committed: BeatExecutionObservation, cause: unknown): BeatCommandError {
+  const { resultHead: _resultHead, ...executed } = committed
+  const request = currentRequest()
+  const command: BeatExecutionObservation = { ...executed, writeOutcome: 'unknown', failureStage: 'response',
+    latencyMs: request ? Date.now() - request.startedAt : executed.latencyMs }
+  recordCommand(workId, command, 'internal-error')
+  return new BeatCommandError(cause, command)
+}
 export async function observeBeat<T extends Artifact>(
   workId: string, operation: BeatOperation, expectedHead: BeatExecutionObservation['expectedHead'],
   run: (execution: BeatExecution) => T | Promise<T>,
+  chapter = 1,
 ): Promise<{ artifact: T; command: BeatExecutionObservation }> {
   const request = currentRequest()
   const started = Date.now()
@@ -24,7 +34,7 @@ export async function observeBeat<T extends Artifact>(
   const execution: BeatExecution = { stage: 'precondition' }
   const base = () => ({
     kind: 'execution-result' as const, requestId: request?.requestId ?? randomUUID(), operation,
-    target: { workId, kind: 'beat' as const, chapter: 1 as const }, expectedHead,
+    target: { workId, kind: 'beat' as const, chapter }, expectedHead,
     executionMode: request?.executionMode ?? 'demo' as const, latencyMs: Date.now() - started,
     attemptIds: request?.telemetry.slice(cursor).filter(t => t.stepId === 'beat').map(t => t.attemptId) ?? [],
   })

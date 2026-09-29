@@ -13,7 +13,7 @@ const { createProseStep } = await import('../../src/steps/prose-step.js')
 const { modelRuntime } = await import('../../src/steps/llm.js')
 if (live && modelRuntime.mode !== 'live') throw new Error('Live Prose validation requires an existing configured provider')
 const store = new InMemoryStore()
-const pipeline = new Pipeline({ store, consumeGuards, resolveConfig: () => ({ directionCount: 1 }),
+const pipeline = new Pipeline({ store, consumeGuards, repeatChapters: process.argv.includes('--continuation'), resolveConfig: () => ({ directionCount: 1 }),
   steps: new Map([
     ['caption', fake.createFakeCaptionStep()], ['creative', fake.createFakeCreativeStep()],
     ['outline', fake.createFakeOutlineStep()], ['setting', fake.createFakeSettingStep()],

@@ -1,3 +1,4 @@
+import { chapterActions } from './chapter-view.js'
 import { beatApproveRequestSchema, beatRegenerateRequestSchema, beatArtifactSchema, recoverBeatSubmission, beatCommandErrorSchema } from '@agent4novel/contracts'
 import type { BeatArtifact, BeatEditDraft, BeatSubmission, ValidationIssue, WorkView, BeatRecovery } from '@agent4novel/contracts'
 
@@ -25,7 +26,7 @@ export function initBeatReview(baseline: BeatArtifact): BeatReviewState {
   }
 }
 export function toBeatSubmission(state: BeatReviewState, operation: BeatSubmission['operation']): BeatSubmission {
-  const request = { chapter: 1 as const, expectedArtifactId: state.baseline.id, expectedHeadVersion: state.baseline.version,
+  const request = { chapter: state.baseline.chapter, expectedArtifactId: state.baseline.id, expectedHeadVersion: state.baseline.version,
     content: { ...state.draft, writingPlan: state.draft.writingPlan.map(({ localKey: _key, ...item }) => item) },
   }
   return operation === 'approve-beat' ? { operation, request } : { operation, request: { ...request, instructions: state.instructions } }
@@ -49,15 +50,15 @@ export function reduceBeatReview(state: BeatReviewState, action: BeatReviewActio
   if (action.type === 'observe' || action.type === 'readback' || action.type === 'result') {
     let observedWork = state.observedWork
     if (action.type !== 'result' && action.work?.id === state.baseline.workId) {
-      const previous = observedWork?.artifacts.find(a => a.kind === 'beat' && a.chapter === 1)
-      const next = action.work.artifacts.find(a => a.kind === 'beat' && a.chapter === 1)
+      const previous = observedWork?.artifacts.find(a => a.kind === 'beat' && a.chapter === state.baseline.chapter)
+      const next = action.work.artifacts.find(a => a.kind === 'beat' && a.chapter === state.baseline.chapter)
       if (!previous || (next && (next.version > previous.version || (next.id === previous.id && next.version === previous.version
         && !(previous.humanStatus === 'approved' && next.humanStatus === 'pending'))))) observedWork = action.work
     }
-    const remote = beatArtifactSchema.safeParse(observedWork?.artifacts.find(a => a.kind === 'beat' && a.chapter === 1)).data
+    const remote = beatArtifactSchema.safeParse(observedWork?.artifacts.find(a => a.kind === 'beat' && a.chapter === state.baseline.chapter)).data
     const same = remote?.id === state.baseline.id && remote.version === state.baseline.version && remote.humanStatus === 'pending'
       && JSON.stringify(remote.content) === JSON.stringify(state.baseline.content)
-    const allowed = observedWork?.workflowState === 'awaiting-beat-review' && observedWork.allowedActions.includes('approve')
+    const allowed = chapterActions(observedWork, state.baseline.chapter).includes('approve')
     if (action.type === 'observe' && ['submitting', 'regenerating', 'reconciling'].includes(state.phase)) return { ...state, observedWork, remote }
     if (!state.submitted) {
       if (state.phase === 'approved') return { ...state, observedWork, remote }

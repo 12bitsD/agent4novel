@@ -1,3 +1,4 @@
+import { chapterActions, chapterLabel } from './chapter-view.js'
 import { proseApproveRequestSchema, proseRegenerateRequestSchema, proseSaveRequestSchema, proseArtifactSchema, recoverProseSubmission, proseCommandErrorSchema } from '@agent4novel/contracts'
 import type { ProseArtifact, ProseEditDraft, ProseSubmission, ValidationIssue, WorkView, ProseRecovery } from '@agent4novel/contracts'
 
@@ -22,7 +23,7 @@ export function initProseReview(baseline: ProseArtifact): ProseReviewState {
   }
 }
 export function toProseSubmission(state: ProseReviewState, operation: ProseSubmission['operation']): ProseSubmission {
-  const request = { chapter: 1 as const, expectedArtifactId: state.baseline.id, expectedHeadVersion: state.baseline.version,
+  const request = { chapter: state.baseline.chapter, expectedArtifactId: state.baseline.id, expectedHeadVersion: state.baseline.version,
     content: { ...state.draft },
   }
   return operation === 'approve-prose' ? { operation, request }
@@ -48,15 +49,15 @@ export function reduceProseReview(state: ProseReviewState, action: ProseReviewAc
   if (action.type === 'observe' || action.type === 'readback' || action.type === 'result') {
     let observedWork = state.observedWork
     if (action.type !== 'result' && action.work?.id === state.baseline.workId) {
-      const previous = observedWork?.artifacts.find(a => a.kind === 'prose' && a.chapter === 1)
-      const next = action.work.artifacts.find(a => a.kind === 'prose' && a.chapter === 1)
+      const previous = observedWork?.artifacts.find(a => a.kind === 'prose' && a.chapter === state.baseline.chapter)
+      const next = action.work.artifacts.find(a => a.kind === 'prose' && a.chapter === state.baseline.chapter)
       if (!previous || (next && (next.version > previous.version || (next.id === previous.id && next.version === previous.version
         && !(previous.humanStatus === 'approved' && next.humanStatus === 'pending'))))) observedWork = action.work
     }
-    const remote = proseArtifactSchema.safeParse(observedWork?.artifacts.find(a => a.kind === 'prose' && a.chapter === 1)).data
+    const remote = proseArtifactSchema.safeParse(observedWork?.artifacts.find(a => a.kind === 'prose' && a.chapter === state.baseline.chapter)).data
     const same = remote?.id === state.baseline.id && remote.version === state.baseline.version && remote.humanStatus === state.baseline.humanStatus
       && JSON.stringify(remote.content) === JSON.stringify(state.baseline.content)
-    const allowed = observedWork?.allowedActions.includes(state.baseline.humanStatus === 'approved' ? 'save-draft' : 'approve') === true
+    const allowed = chapterActions(observedWork, state.baseline.chapter).includes(state.baseline.humanStatus === 'approved' ? 'save-draft' : 'approve')
     if (action.type === 'observe' && ['saving', 'submitting', 'regenerating', 'reconciling'].includes(state.phase)) return { ...state, observedWork, remote }
     if (!state.submitted) {
       if (same && (allowed || state.phase === 'approved') && ['editing', 'approved'].includes(state.phase)) return { ...state, observedWork, remote }
@@ -72,7 +73,7 @@ export function reduceProseReview(state: ProseReviewState, action: ProseReviewAc
       const next = initProseReview(recovery.artifact)
       if (state.submitted.operation === 'save-prose') return { ...next, draft: state.draft, instructions: state.instructions, mode: state.mode,
         notice: state.draft.text === recovery.artifact.content.text ? '已保存。' : '还有新的修改待保存。' }
-      return { ...next, notice: recovery.artifact.humanStatus === 'approved' ? '第一章已完成。' : '整章正文已重写，请审阅后通过。' }
+      return { ...next, notice: recovery.artifact.humanStatus === 'approved' ? `${chapterLabel(state.baseline.chapter)}已完成。` : '整章正文已重写，请审阅后通过。' }
     }
     const failure = proseCommandErrorSchema.safeParse(response?.body)
     const budget = failure.success && failure.data.code === 'input-budget-exceeded' ? failure.data.inputBudget : undefined

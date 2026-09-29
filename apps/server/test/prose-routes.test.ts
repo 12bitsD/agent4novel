@@ -200,7 +200,7 @@ describe('first chapter Prose HTTP commands', () => {
     const cases = [
       { body: '{private-broken-payload', code: 'bad-json', status: 400 },
       { body: JSON.stringify({ ...head, content: { text: 'text' }, unexpected: 'private-extra' }), code: 'invalid-input', status: 400 },
-      { body: JSON.stringify({ ...head, chapter: 2, content: { text: 'text' } }), code: 'unsupported-chapter', status: 400 },
+      { body: JSON.stringify({ ...head, chapter: 0, content: { text: 'text' } }), code: 'unsupported-chapter', status: 400 },
       { body: JSON.stringify({ ...head, content: { text: '密'.repeat(400_000) } }), code: 'payload-too-large', status: 413 },
     ]
     for (const operation of ['approve', 'regenerate', 'save']) {

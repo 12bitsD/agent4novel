@@ -17,7 +17,7 @@ describe('first-chapter prose contracts', () => {
     expect(contracts.proseRegenerateRequestSchema).toBeDefined()
     expect(contracts.proseRegenerateRequestSchema.parse({ ...head, content: { text: '' }, instructions: '' })).toMatchObject({ content: { text: '' } })
     expect(contracts.proseApproveRequestSchema.safeParse({ ...head, content: { text: '' } }).success).toBe(false)
-    for (const invalid of [{ ...head, chapter: 2 }, { ...head, expectedHeadVersion: 0 }, { ...head, extra: true }]) {
+    for (const invalid of [{ ...head, chapter: 0 }, { ...head, expectedHeadVersion: 0 }, { ...head, extra: true }]) {
       expect(contracts.proseApproveRequestSchema.safeParse({ ...invalid, content: { text: '正文' } }).success).toBe(false)
     }
     expect(contracts.proseRegenerateRequestSchema.safeParse({ ...head, content: { text: '文' }, instructions: '意'.repeat(10001) }).success).toBe(false)

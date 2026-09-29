@@ -29,7 +29,7 @@
 
 #13 已收敛 Setting 的三种内容边界、通过协议、WorkView／Artifact envelope 和 advance 响应；Web 与 CLI 复用这批可执行定义。仓库仍有通用 `Artifact.content: JsonValue`、其他产物的路由内联请求 schema，以及缺少统一 kind→content 校验入口等落差；不是全仓契约治理已完成。
 
-后续治理票 [#19](https://github.com/12bitsD/agent4novel/issues/19) 负责盘点公开与私有 schema、统一产物内容校验入口、收敛重复 DTO 并补足关键边界验证。作者在 #5 对齐中决定先完成章纲与正文，再治理；当前顺序为 #5 → #22 → #19 → #9 → #6，取代先 #19/#9 再 #5 的旧排期，变化理由见 [Wiki 005](../wiki/005-beat-generation-review.md#上下文演进)。Hono RPC 类型传输迁移仍归 #15，待服务定型后再做。
+后续治理票 [#19](https://github.com/12bitsD/agent4novel/issues/19) 负责盘点公开与私有 schema、统一产物内容校验入口、收敛重复 DTO 并补足关键边界验证。作者在 #5 对齐中决定先完成章纲与正文，再治理；当时顺序为 #5 → #22 → #19 → #9 → #6，取代先 #19/#9 再 #5 的旧排期，变化理由见 [Wiki 005](../wiki/005-beat-generation-review.md#上下文演进)。2026-09-29 作者将续写前移，当前队列为 #6 → #19 → #9 → #7，见 [Wiki 006](../wiki/006-chapter-continuation.md#上下文演进)；#19 要覆盖已落地的多章请求、输入引用与恢复契约。Hono RPC 类型传输迁移仍归 #15，待服务定型后再做。
 
 2026-09-08，#5 票内契约已随章纲实现落到共享 schema 和 Wiki；这是本票必要边界，不是提前实施 #19 全仓治理。当前契约由代码与测试证明，历史方案快照保留作追溯。
 

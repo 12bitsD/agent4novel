@@ -16,7 +16,7 @@ import {
   proseApproveRequestSchema, proseRequestHeadSchema, proseLimits, proseCommandResponseSchema, proseCommandErrorSchema,
   proseRegenerateRequestSchema, proseSaveRequestSchema,
   diagnosticQuerySchema,
-  workViewSchema,
+  workViewSchema, startChapterRequestSchema,
 } from '@agent4novel/contracts'
 import type { ApiError, ArtifactKind, OutlineContent, OutlineDraft, WorkflowState, WorkView, LlmTelemetry } from '@agent4novel/contracts'
 import type { Pipeline } from '../pipeline/pipeline.js'
@@ -29,6 +29,7 @@ import { observeBeat, BeatCommandError, beatFailureCode } from '../beat-command.
 import { approveProse, saveProse } from '../prose-review.js'
 import { observeProse, ProseCommandError, proseFailureCode, proseResponseError } from '../prose-command.js'
 import { safeLog } from '../safe-log.js'
+import { chapterSummaries, currentChapterOf } from '../chapter-view.js'
 
 const workCreateSchema = z.object({
   seed: z.string().min(1),
@@ -121,6 +122,7 @@ function routeError(c: Context, err: unknown): Response {
       case 'work-not-found':
       case 'artifact-not-found':
         return c.json(body, 404)
+      case 'chapter-not-ready':
       case 'advance-in-progress':
       case 'version-conflict':
       case 'upstream-changed':
@@ -243,7 +245,7 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
       if (!parsed.success) await observeBeat(workId, operation === 'approve' ? 'approve-beat' : 'regenerate-beat', { artifactId: head.data.expectedArtifactId, version: head.data.expectedHeadVersion }, execution => {
         execution.stage = 'input'
         throw parsed.error
-      })
+      }, head.data.chapter)
       if (!parsed.success) throw new Error('unreachable')
       const result = operation === 'approve'
         ? await approveBeat(store, workId, beatApproveRequestSchema.parse(parsed.data))
@@ -300,7 +302,7 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
       }, execution => {
         execution.stage = 'input'
         throw parsed.error
-      })
+      }, head.data.chapter)
       if (!parsed.success) throw new Error('unreachable')
       const result = operation === 'approve'
         ? await approveProse(store, workId, proseApproveRequestSchema.parse(parsed.data))
@@ -378,6 +380,7 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
     const state = pipeline.getState(workId)
     const view: WorkView = {
       ...work,
+      currentChapter: currentChapterOf(work), chapters: chapterSummaries(work, pipeline.repeatChapters),
       ...workflowOf(state, pipeline.failureOf(workId), pipeline.completionKind),
       nextStepId: state.nextStepId,
     }
@@ -482,6 +485,9 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
         })
       return c.json({ ...outcome, telemetry })
     } catch (err) {
+      if (err instanceof BeatCommandError) return c.json(beatCommandErrorSchema.parse({
+        code: 'internal-error', message: 'internal-error', retryable: false, command: err.command, telemetry,
+      }), 500)
       if (err instanceof ProseCommandError) return c.json(proseCommandErrorSchema.parse({
         code: 'internal-error', message: 'internal-error', retryable: false, command: err.command, telemetry,
       }), 500)
@@ -489,6 +495,28 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
         safeLog({ event: 'pipeline.lock-conflict', requestId, workId })
       }
       return routeError(c, err)
+    }
+  })
+
+  app.post('/api/works/:id/chapters/start', bodyLimit({ maxSize: 4096, onError: c => c.json(errorBody('payload-too-large', 'chapter request exceeds body limit'), 413) }), async c => {
+    const body = await readJsonBody(c)
+    if (!body.ok) return body.response
+    const parsed = startChapterRequestSchema.safeParse(body.data)
+    if (!parsed.success) return c.json(errorBody('invalid-input', 'invalid chapter start request'), 400)
+    const requestId = crypto.randomUUID()
+    let telemetry: LlmTelemetry[] = []
+    try {
+      const outcome = await withRequest(requestId, meta?.demo ?? true, scope => {
+        telemetry = scope.telemetry
+        return pipeline.startChapter(c.req.param('id'), parsed.data)
+      })
+      safeLog({ event: 'pipeline.start-chapter', requestId, workId: c.req.param('id'), chapter: parsed.data.chapter, outcome: outcome.kind })
+      return c.json({ ...outcome, telemetry })
+    } catch (err) {
+      if (err instanceof BeatCommandError) return c.json(beatCommandErrorSchema.parse({
+        code: 'internal-error', message: 'internal-error', retryable: false, command: err.command, telemetry,
+      }), 500)
+      return err instanceof KnownError ? routeError(c, err) : c.json(errorBody('internal-error', 'chapter response unavailable'), 500)
     }
   })
 
