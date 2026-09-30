@@ -152,6 +152,7 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 
 | Wiki | Ticket | 上下文状态 | 主要范围 |
 |---|---:|---|---|
+| [001 MVP 工程验收](./001-mvp-acceptance.md) | [#1](https://github.com/12bitsD/agent4novel/issues/1) | current | 本机单用户闭环、各验证面与后续拓展入口 |
 | [002 脚手架、存储、workflow 与书架](./002-scaffold-storage-runner-bookcase.md) | [#2](https://github.com/12bitsD/agent4novel/issues/2) | mixed | monorepo、store、基础 pipeline、书架 |
 | [003 统一入口与 idea 工作区](./003-unified-entry-idea-workspace.md) | [#3](https://github.com/12bitsD/agent4novel/issues/3) | mixed | 创建作品、文件导入、早期编辑链路 |
 | [004 大纲弧线与剧情点](./004-outline-arcs-segments.md) | [#4](https://github.com/12bitsD/agent4novel/issues/4) | current | outline 契约、关卡、编辑界面 |

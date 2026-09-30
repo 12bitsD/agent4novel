@@ -119,7 +119,7 @@ The data directory also contains uploaded guidance and Skill version files. To b
 
 ## Current status
 
-**Chapter-by-chapter writing is available. The project is still in development.** Keep the following in mind when saving and using your works:
+**The local MVP includes chapter-by-chapter writing, author configuration, persistent storage, and manual bad-example collection.** Development continues, and generated content needs the author's review. Keep the following in mind when saving and using your works:
 
 - **Works are saved on your computer.** Once prose is shown as saved, it survives browser refreshes and server restarts when you use the same data directory. Unsaved prose and unsubmitted manual edits to settings and chapter plans remain in the current page. Refreshing the page or discarding edits to leave loses those edits.
 - **Interrupted generation needs a manual decision.** Restarting the server does not automatically call AI again. Open the work and check its saved content before continuing generation. Runtime diagnostic logs do not survive server restarts.
