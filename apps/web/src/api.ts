@@ -8,6 +8,8 @@ import {
   artifactSchema, pipelineStateSchema, appConfigSchema, httpErrorSchema, matchesStartChapterResponse,
 } from '@agent4novel/contracts'
 import { withDeadline } from './request-deadline.js'
+import { badExampleRequestSchema, badExampleSchema, badExamplePageSchema, badExampleQuerySchema, matchesBadExample,
+  type BadExampleRequest, type BadExampleQuery } from '@agent4novel/contracts'
 import { authorConfigViewSchema, authorConfigReceiptSchema, authorConfigSaveSchema, agentFileSchema, agentFileReadSchema, agentFileUploadSchema,
   managedAgentFileText, type AuthorConfigSave, type AgentFileUpload } from '@agent4novel/contracts'
 export type { AdvanceOutcomeDto, StartChapterRequest, AppConfig } from '@agent4novel/contracts'
@@ -65,6 +67,18 @@ async function configRequest(url: string, method = 'GET', body?: unknown): Promi
   }
 }
 const configBase = (workId: string) => `/api/works/${encodeURIComponent(workId)}`
+export async function markBadExample(workId: string, input: BadExampleRequest) {
+  const request = badExampleRequestSchema.parse(input)
+  return validate(badExampleSchema, await configRequest(`${configBase(workId)}/bad-examples`, 'POST', request), result => matchesBadExample(result, workId, request), true)
+}
+export async function getBadExample(workId: string, id: string) {
+  return validate(badExampleSchema, await configRequest(`${configBase(workId)}/bad-examples/${encodeURIComponent(id)}`), result => result.workId === workId && result.id === id)
+}
+export async function listBadExamples(workId: string, input: BadExampleQuery = {}) {
+  const query = badExampleQuerySchema.parse(input), params = new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]))
+  return validate(badExamplePageSchema, await configRequest(`${configBase(workId)}/bad-examples${params.size ? `?${params}` : ''}`), result => result.workId === workId && result.chapter === query.chapter && result.after === query.after)
+}
+export const textHash = (text: string) => fileHash(new TextEncoder().encode(text))
 export async function getAuthorConfig(workId: string) {
   return validate(authorConfigViewSchema, await configRequest(`${configBase(workId)}/agent-config`), result => result.workId === workId)
 }

@@ -38,6 +38,56 @@ async function mount(fetchMock: (url: string, init?: RequestInit) => Promise<Res
 }
 
 describe('按章续写与阅读', () => {
+  it('prevents creating a new bad-example note while the next chapter is starting', async () => {
+    const calls = vi.fn(async (url: string, _init?: RequestInit) => url.endsWith('/chapters/start')
+      ? new Promise<Response>(() => {}) : json(makeWork('approved')))
+    const ui = await mount(calls)
+    try {
+      await act(async () => button(ui.host, '开始下一章').click())
+      await act(async () => button(ui.host, '坏例收集').click())
+      expect(calls.mock.calls.filter(([url]) => url.endsWith('/chapters/start'))).toHaveLength(1)
+      expect(ui.host.querySelector<HTMLTextAreaElement>('textarea[aria-label="坏例备注（可选）"]')!.disabled).toBe(true)
+      expect(ui.host.textContent).toContain('正在生成下一章章纲')
+    } finally { await ui.dispose() }
+  })
+
+  it('protects an unsubmitted bad-example selection from implicit next-chapter navigation', async () => {
+    const calls = vi.fn(async (_url: string, _init?: RequestInit) => json(makeWork('approved')))
+    const ui = await mount(calls)
+    try {
+      await act(async () => button(ui.host, '编辑正文').click())
+      const input = ui.host.querySelector<HTMLTextAreaElement>('#prose-text')!
+      await act(async () => { input.setSelectionRange(0, 4); input.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })) })
+      expect(ui.host.textContent).toContain('选段来源')
+      expect(button(ui.host, '开始下一章').disabled).toBe(true)
+      await act(async () => button(ui.host, '开始下一章').click())
+      expect(calls.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+      expect(ui.host.textContent).toContain('选段来源')
+      await act(async () => button(ui.host, '清除选段').click())
+      expect(button(ui.host, '开始下一章').disabled).toBe(false)
+    } finally { await ui.dispose() }
+  })
+
+  it('protects a note-only bad-example draft until its note is cleared', async () => {
+    const calls = vi.fn(async (_url: string, _init?: RequestInit) => json(makeWork('approved')))
+    const ui = await mount(calls)
+    try {
+      await act(async () => button(ui.host, '坏例收集').click())
+      const input = ui.host.querySelector<HTMLTextAreaElement>('textarea[aria-label="坏例备注（可选）"]')!
+      const change = async (value: string) => act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(input, value)
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+      })
+      await change('尚未提交的备注')
+      expect(button(ui.host, '开始下一章').disabled).toBe(true)
+      await act(async () => button(ui.host, '开始下一章').click())
+      expect(calls.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+      expect(input.value).toBe('尚未提交的备注')
+      await change('')
+      expect(button(ui.host, '开始下一章').disabled).toBe(false)
+    } finally { await ui.dispose() }
+  })
+
   it('opens the current chapter by default and browses an older chapter without generating', async () => {
     const calls = vi.fn(async () => json(makeWork()))
     const ui = await mount(calls)

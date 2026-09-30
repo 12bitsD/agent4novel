@@ -46,6 +46,12 @@ Open a work, select “Agent 配置” (Agent configuration), set style, genre a
 
 Advanced controls provide work defaults and per-step overrides for models and generation parameters. Set the corresponding provider key as described below before using a live model; demo mode still uses samples. Upload writing guidance (Prompt) or a `SKILL.md` with `name` and `description`, select it, then save the configuration. Files provide writing instructions; tools, scripts and attachments are not executed. Uploaded files and saved configuration survive refreshes; unsaved configuration edits remain only in the current page.
 
+### Collect prose examples for improvement
+
+Select text in saved prose, optionally add a note, then click “标记为坏例” (mark as a bad example). Reading and editing views support selection. Save and reconcile pending prose operations first. Open “坏例收集” to review this chapter’s samples: each retains the original text and source version, even after later rewrites.
+
+If a mark has an unknown result, keep the page and use “核对标记结果” to check it, or “重试标记原请求” to explicitly retry the same request. The app does not automatically analyze, score or rewrite prose. Saved samples persist locally with the work and survive refreshes and restarts.
+
 ## Quick start
 
 > **Works are saved on your computer.** Once prose is shown as saved, it survives server restarts when you use the same data directory. Unsaved changes in the page do not survive.

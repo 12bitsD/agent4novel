@@ -13,6 +13,7 @@ import { modelRuntime } from '../steps/llm.js'
 import type { WorkStore } from '../store/work-store.js'
 import { AuthorConfigService } from '../config/author-config-service.js'
 import type { AuthorConfigRepository } from '../config/author-config-repository.js'
+import type { BadExampleRepository } from '../bad-examples/repository.js'
 
 export function createProductionApp(store: WorkStore, webRoot?: string, dataDir?: string) {
   // 无可用模型凭据 → fake 演示模式（不报错、不触网）。
@@ -53,7 +54,10 @@ export function createProductionApp(store: WorkStore, webRoot?: string, dataDir?
     consumeGuards,
   })
 
-  const app = createApp({ store, pipeline, meta: { demo }, webRoot, authorConfig })
+  const badRepository = store as WorkStore & Partial<BadExampleRepository>
+  const badExamples = typeof badRepository.markBadExample === 'function' && typeof badRepository.getBadExample === 'function'
+    && typeof badRepository.listBadExamples === 'function' ? badRepository as BadExampleRepository : undefined
+  const app = createApp({ store, pipeline, meta: { demo }, webRoot, authorConfig, badExamples })
 
   return { app, demo }
 }

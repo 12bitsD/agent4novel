@@ -62,14 +62,14 @@ describe('author configuration at the production boundary', () => {
       const before = f.store.getWork(f.work.id)
       f.store.close()
       const raw = new Database(join(f.dir, 'agent4novel.sqlite'))
-      raw.exec('DROP TABLE author_configs; DROP TABLE agent_files; PRAGMA user_version = 1'); raw.close()
+      raw.exec('DROP INDEX bad_example_work_chapter; DROP TABLE bad_examples; DROP TABLE author_configs; DROP TABLE agent_files; PRAGMA user_version = 1'); raw.close()
       const reopened = new SqliteStore(join(f.dir, 'agent4novel.sqlite'))
       try {
         expect(reopened.getWork(f.work.id)).toEqual(before)
         expect(reopened.getAuthorConfig(f.work.id)).toBeUndefined()
         reopened.saveAuthorConfig(f.work.id, { requestId: randomUUID(), expectedRevision: 0, document })
         const db = new Database(join(f.dir, 'agent4novel.sqlite'), { readonly: true })
-        try { expect(db.pragma('user_version', { simple: true })).toBe(2) } finally { db.close() }
+        try { expect(db.pragma('user_version', { simple: true })).toBe(3) } finally { db.close() }
       } finally { reopened.close() }
     } finally { f.store.close() }
   })
