@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@12.5.1",
   "scripts": {
     "dev": "pnpm --parallel -r --if-present run dev",
     "cli": "pnpm -s --filter @agent4novel/cli run -s cli --",

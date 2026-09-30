@@ -8,9 +8,9 @@ topics: ["model-runtime", "provider-config", "generation-parameters", "thinking"
 code_paths: ["apps/server/src/index.ts", "apps/server/src/steps/llm.ts", "apps/server/src/steps/llm-call.ts", "apps/server/src/config/local-env.ts", "apps/server/src/start.ts", "apps/server/src/step-lab-main.ts", "apps/cli/src/local-step.ts", "packages/contracts/src/step.ts", "apps/cli/src/client.ts", ".env.example"]
 symbols: ["ModelRuntime", "SupportedModelId", "ModelConfigError", "createModelRuntime", "modelRuntime", "generationSettings", "generationParametersSchema", "callLlm", "run-step", "DEFAULT_CLI_TIMEOUT_MS", "DEFAULT_ADVANCE_TIMEOUT_MS", "A4N_LLM_TIMEOUT_MS", "A4N_CLI_TIMEOUT_MS", "llm-timeout"]
 inherits: ["014"]
-changed_by: ["013", "005"]
+changed_by: ["013", "005", "033"]
 read_when: ["configure-model-provider", "configure-generation-parameters", "run-isolated-step", "add-model-provider", "debug-llm-runtime", "change-llm-timeout", "audit-credential-safety"]
-last_context_reviewed: "2026-09-13"
+last_context_reviewed: "2026-09-30"
 ---
 
 # 016 — 模型运行配置：统一多 Provider、凭据与超时
@@ -19,9 +19,9 @@ last_context_reviewed: "2026-09-13"
 
 - **读取时机**：配置或新增 provider、切换模型、调整 thinking/temperature/topP、运行独立节点、修改凭据/Base URL、排查结构化输出或 timeout 时读取。
 - **原始目的**：把散落且 DeepSeek-only 的运行时选择收敛到 ModelRuntime，使 Pipeline 与 RealStep 无需感知 provider。
-- **实际落地**：DeepSeek 与 LongCat 2.0 共用 registry；server 安全加载本地配置，统一校验 URL、模型、credential、单次 LLM timeout 和本地 Zod。generationSettings 统一生产与独立节点的生成参数；LongCat 默认 disabled/0.9/0.95，本轮接回验证状态见“测试与验证”。
+- **实际落地**：DeepSeek 与 LongCat 2.0 共用 registry；源码server入口安全加载`.env.local`，编译/容器入口只接收运行期环境；共同校验 URL、模型、credential、单次 LLM timeout 和本地 Zod。generationSettings 统一生产与独立节点的生成参数；LongCat 默认 disabled/0.9/0.95，既有接回验证状态见“测试与验证”。
 - **当前价值**：本文是 provider 配置、运行时行为、错误语义与验证状态的当前唯一 HOW。
-- **后续变化**：CLI／telemetry／smoke 仍由 [Wiki 014](./014-agent-cli-telemetry.md) 拥有；[Wiki 013](./013-setting-generation-review.md) 新增 Setting，显式禁用该步骤的 SDK 重试并记录新实测。[Wiki 005](./005-beat-generation-review.md) 增加 Beat 独立预算、零 SDK 重试和共享安全错误分类。本文 work ID 均为历史进程快照，不代表当前仍存活。
+- **后续变化**：CLI／telemetry／smoke 仍由 [Wiki 014](./014-agent-cli-telemetry.md) 拥有；[Wiki 013](./013-setting-generation-review.md) 新增 Setting，显式禁用该步骤的 SDK 重试并记录新实测。[Wiki 005](./005-beat-generation-review.md) 增加 Beat 独立预算、零 SDK 重试和共享安全错误分类。[Wiki 033](./033-local-docker-ci.md)持有本机容器启动与卷操作，模型HOW仍由本文维护。本文 work ID 均为历史进程快照，不代表当前仍存活。
 - **代码入口**：[ModelRuntime](../../apps/server/src/steps/llm.ts)、[LLM call](../../apps/server/src/steps/llm-call.ts)、[generation schema](../../packages/contracts/src/step.ts)、[local env loader](../../apps/server/src/config/local-env.ts)、[独立 worker](../../apps/server/src/step-lab-main.ts)、[CLI timeout](../../apps/cli/src/client.ts)。
 
 ## 设计目的
@@ -179,6 +179,14 @@ ModelRuntime 测试以合成 key 与 fake fetch 覆盖选择、缺 key、非法 
 - 不做持久化 store、后台 job、队列或异步 advance。
 
 ## 上下文演进
+
+### 2026-09-30 — 容器通过运行期环境继承模型配置
+
+- **触发证据**：#33接入同源生产服务，最终镜像不含`.env.local`和本地加载入口。
+- **原假设**：源码server入口安全加载配置文件是当前启动路径。
+- **决定**：源码保留原方式；Compose显式`--env-file .env.local`只传允许的模型字段，容器目录/host/内部端口由部署固定。
+- **影响**：本页provider、选择、超时与凭据校验继续单源；[Wiki033](./033-local-docker-ci.md#维护操作)持有容器操作HOW。
+- **上下文处理**：preserve模型研究、失败经验与人工决定，仅新增运行模式边界。
 
 ### 2026-09-13 — 统一生成参数并支持独立节点覆盖
 

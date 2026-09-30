@@ -4,7 +4,7 @@ import { isIP } from 'node:net'
 
 const repositoryRoot = fileURLToPath(new URL('../../../../', import.meta.url))
 
-export type ServerConfig = { dataDir: string; databasePath: string; host: string; port: number; seedDemo: boolean }
+export type ServerConfig = { dataDir: string; databasePath: string; host: string; port: number; seedDemo: boolean; serveWeb: boolean }
 
 export class ServerConfigError extends Error {
   readonly code = 'server-config-invalid'
@@ -25,5 +25,7 @@ export function parseServerConfig(env: NodeJS.ProcessEnv, root = repositoryRoot)
   }
   const seed = env.A4N_SEED_DEMO?.trim() || '0'
   if (seed !== '0' && seed !== '1') throw new ServerConfigError('A4N_SEED_DEMO must be 0 or 1')
-  return { dataDir, databasePath: join(dataDir, 'agent4novel.sqlite'), host, port, seedDemo: seed === '1' }
+  const web = env.A4N_SERVE_WEB?.trim() || '0'
+  if (web !== '0' && web !== '1') throw new ServerConfigError('A4N_SERVE_WEB must be 0 or 1')
+  return { dataDir, databasePath: join(dataDir, 'agent4novel.sqlite'), host, port, seedDemo: seed === '1', serveWeb: web === '1' }
 }

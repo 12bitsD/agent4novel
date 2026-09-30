@@ -12,7 +12,7 @@ import { createFakeCaptionStep, createFakeCreativeStep, createFakeOutlineStep, c
 import { modelRuntime } from '../steps/llm.js'
 import type { WorkStore } from '../store/work-store.js'
 
-export function createProductionApp(store: WorkStore) {
+export function createProductionApp(store: WorkStore, webRoot?: string) {
   // 无可用模型凭据 → fake 演示模式（不报错、不触网）。
   const demo = modelRuntime.mode === 'demo'
 
@@ -45,7 +45,7 @@ export function createProductionApp(store: WorkStore) {
     consumeGuards,
   })
 
-  const app = createApp({ store, pipeline, meta: { demo } })
+  const app = createApp({ store, pipeline, meta: { demo }, webRoot })
 
   return { app, demo }
 }

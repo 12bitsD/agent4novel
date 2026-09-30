@@ -4,6 +4,8 @@ agent4novel 的领域数据模型。代码英文 id ↔ 领域中文词（见 [C
 
 ## kind = 节点名
 
+公开运行健康接口 `GET /api/health` 使用strict `healthSchema`，仅返回 `{status:"ok"}`；不包含作品、配置或模型状态。`A4N_SERVE_WEB=1`显式启用编译后同源Web目录，默认0保留开发Vite方式；与存储实体/schema版本无关。部署配置与卷操作见 [Wiki033](./wiki/033-local-docker-ci.md)。
+
 产物按**流水线节点**归类（一个节点 = 一个产物，content 装整个 JSON）：
 
 | 节点（kind） | 产物内容 | 形状 |

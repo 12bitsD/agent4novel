@@ -166,3 +166,4 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [019 契约治理](./019-contract-governance.md) | [#19](https://github.com/12bitsD/agent4novel/issues/19) | current | 全 kind/status 内容校验、Store 与公开协议边界 |
 | [022 第一章正文](./022-prose-generation-review.md) | [#22](https://github.com/12bitsD/agent4novel/issues/22) | mixed | 首章生成／自动保存／整章重写／通过后编辑 |
 | [025 CLI 命令发现与参数校验](./025-cli-command-safety.md) | [#25](https://github.com/12bitsD/agent4novel/issues/25) | current | 帮助零副作用、严格参数与安全 usage |
+| [033 本机 Docker 与 CI](./033-local-docker-ci.md) | [#33](https://github.com/12bitsD/agent4novel/issues/33) | current | 同源生产服务、整个数据目录卷、容器恢复与无密钥 CI |
