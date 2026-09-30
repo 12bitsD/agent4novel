@@ -93,7 +93,7 @@ Web/CLI 在消费端解析公开响应并核对资源身份。错误体畸形、
 
 ## SQLite 持久化：#9
 
-生产使用 [`SqliteStore`](../apps/server/src/store/sqlite-store.ts) 实现 `WorkStore`；`InMemoryStore` 继续用于行为测试。SQLite v2 由 [`sqlite-schema.ts`](../apps/server/src/store/sqlite-schema.ts) 定义；继承 v1 的两张 `STRICT` 表持有作品与每个产物版本，不按 kind 拆表。v2 新增作者配置与版本文件元数据两表，文本不入数据库。
+生产使用 [`SqliteStore`](../apps/server/src/store/sqlite-store.ts) 实现 `WorkStore`；`InMemoryStore` 继续用于行为测试。SQLite v3 由 [`sqlite-schema.ts`](../apps/server/src/store/sqlite-schema.ts) 定义；继承 v1 的两张 `STRICT` 表持有作品与每个产物版本，不按 kind 拆表。v2 新增作者配置与版本文件元数据两表，文本不入数据库；v3再新增不可变坏例表。
 
 | 表 | 列与存储形态 |
 | --- | --- |
@@ -113,7 +113,7 @@ Web/CLI 在消费端解析公开响应并核对资源身份。错误体畸形、
 
 ### Schema 版本与恢复边界
 
-数据库版本使用 `PRAGMA user_version = 2`。初始化在取得写锁后重新读取版本和结构，只对真正无用户对象的 v0 空库建表；已有 v1 必须精确匹配已知表与索引定义，再事务迁移到 v2；v2 同样严格核对结构。未来版本、未知旧结构或不匹配结构使启动失败，不删库、不降级、不悄悄退回内存。当前未提供历史库修复、导入或旧内存实例迁移工具。
+数据库版本使用 `PRAGMA user_version = 3`。初始化在取得写锁后重新读取版本和结构，只对真正无用户对象的 v0 空库建表；已有 v1/v2 必须精确匹配已知表与索引定义，再事务迁移到 v3；v3 同样严格核对结构。未来版本、未知旧结构或不匹配结构使启动失败，不删库、不降级、不悄悄退回内存。当前未提供历史库修复、导入或旧内存实例迁移工具。
 
 连接启用外键、WAL、`synchronous = FULL` 和 5 秒 busy timeout。默认数据目录与备份/恢复操作见 [Wiki 009](./wiki/009-sqlite-persistence.md)。同一数据目录中的已提交作品、产物版本、通过状态和 inputs 可在服务重启后读取；未保存页面草稿、进程内遥测、正在运行的模型调用不在该持久化范围。
 
@@ -526,3 +526,13 @@ ChapterSummary = {
 生成时写入 `Artifact.inputs`，正文保存与定稿保留它。上游版本变化或前章衔接已过期时，章节摘要的 `needsContinuityReview` 提醒检查；既有章纲/正文和 humanStatus 均保留。提示不表示内容已经重新校对，不触发级联重写，也不自动清除人工关卡。
 
 可执行字段与验证见 [artifacts.ts](../packages/contracts/src/artifacts.ts)、[公共 API](../packages/contracts/src/public-api.ts) 及 [Pipeline](../apps/server/src/pipeline/pipeline.ts)。工程意图、TDD、运行验证和当前交付状态见 [Wiki 006](./wiki/006-chapter-continuation.md)。
+
+## 坏例快照：#8
+
+`BadExampleRequest = {requestId:UUID, chapter, sourceArtifactId, sourceVersion, sourceHash:SHA256, start, end, text, note?}`；chapter/version为正安全整数，start/end为UTF-16位置，end-start等于text.length。选段非空白、完整Unicode、最多10000字符；备注最多2000；HTTP/CLI请求最多196608字节。服务端在短事务中读取指定作品的历史Prose，核对章号/版本/完整正文hash/精确slice，再创建不可变记录；pending同版通过修改内容会使旧hash拒绝新请求。
+
+`BadExample = {id:requestId, workId, chapter, sourceArtifactId, sourceVersion, sourceHash, start, end, text, note, createdAt}`；note规范化为空串。SQLite v3 `bad_examples`保存record及规范化原请求，关联Work/章节并建索引，独立`BadExampleRepository`不扩大WorkStore。相同UUID且同内容返回原回执，先于当前源正文再验；改变内容或跨作品复用UUID为409，不同备注新UUID。后改/重写/通过不改样本，来源hash和快照为历史权威，不保证当前定位。
+
+`POST /api/works/:id/bad-examples`返回BadExample；`GET .../bad-examples/:sampleId`按ID回读；`GET .../bad-examples?chapter=N&after=cursor`返回`{workId,chapter?,after?,items:BadExample[],nextCursor?}`，固定每页50，游标为正安全整数，重复/未知查询字段拒绝。客户端复验work/chapter/游标及完整写回执，不匹配或网络/5xx为unknown，无自动POST重放，原请求可显式对账/重试。
+
+Web在已保存正文原生选段，保留来源文本供计算hash；正文dirty/unknown禁新标记。坏例未知期间锁定选段/备注和导航，GET未找到也不证明先前写入不会完成。显示本章样本及来源版本，分页回看；不调用LLM，不改变正文或关卡状态。

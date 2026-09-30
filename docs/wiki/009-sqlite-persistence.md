@@ -8,7 +8,7 @@ topics: ["sqlite", "persistence", "transactions", "restart-recovery"]
 code_paths: ["apps/server/src/store/**", "apps/server/src/start.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts"]
 symbols: ["WorkStore", "SqliteStore", "AppendOptions", "StoreContractError"]
 inherits: ["019", "006", "002"]
-changed_by: ["033", "007"]
+changed_by: ["033", "007", "008"]
 read_when: ["implement-storage-adapter", "recover-persisted-work", "change-database-schema"]
 last_context_reviewed: "2026-09-30"
 ---
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-09-30"
 - **原始目的**：[#9](https://github.com/12bitsD/agent4novel/issues/9) 将内存存储替换成 SQLite，作品重启不丢。
 - **实际落地**：生产装配使用SQLite；保存全部产物版本、状态和输入依据，正常退出及强制终止后的CLI多章恢复已验证；[PR36](https://github.com/12bitsD/agent4novel/pull/36)已合并、#9已关闭，终止状态见[完成评论](https://github.com/12bitsD/agent4novel/issues/9#issuecomment-5897744738)。
 - **当前价值**：继承 #19 共享验证和 #6 多章/CAS/输入引用；短事务提交，模型调用在事务外。
-- **后续变化**：[Wiki033](./033-local-docker-ci.md)已验证容器与整个数据目录卷；[Wiki007](./007-author-agent-config.md)将严格v1事务迁移v2，新增配置版本/文件元数据，文本仍在文件中。本票原v1设计和审核保留为历史，当前形状见schema。
+- **后续变化**：[Wiki033](./033-local-docker-ci.md)已验证容器与整个数据目录卷；[Wiki007](./007-author-agent-config.md)将严格v1事务迁移v2，新增配置版本/文件元数据，文本仍在文件中。[Wiki008](./008-bad-example-collection.md)再事务迁移v3并保存不可变坏例快照。本票原v1设计和审核保留为历史，当前形状见schema。
 - **代码入口**：WorkStore、SQLite适配器、生产装配、旧路由/流水线的复合写入。
 
 ## 设计目的
@@ -134,6 +134,14 @@ TDD证据：`store-options-red.log`→GREEN覆盖原子状态/保护种类；`st
 - **决定**：当前作者配置与受管文件见[Wiki007](./007-author-agent-config.md)，provider HOW仍由016持有，部署HOW仍由033持有。
 - **影响**：严格SQLitev1迁移v2，备份含prompts目录；保存只影响下次操作，不改旧产物。
 - **上下文处理**：preserve原始目的、历史失败和完成审核证据；replace顶部当前路由事实。
+
+### 2026-09-30 — 坏例来源快照扩展
+
+- **触发证据**：#8要保存原文选段，正文可同版通过或后续编辑，旧位置不能代表永久当前文本。
+- **原假设**：只保存作品/产物版本与作者配置，不提供采集接口。
+- **决定**：由[Wiki008](./008-bad-example-collection.md)新增独立坏例Repository、v3表、完整来源hash及不可变回执；正文与配置语义保留。
+- **影响**：v1/v2严格迁移v3，整个目录恢复同时验证坏例；正文阅读/编辑增加选段入口。
+- **上下文处理**：preserve原方案与完成审核区全部字节；replace顶部当前演进入口，不追改旧发布证据。
 
 ## 交接结论
 

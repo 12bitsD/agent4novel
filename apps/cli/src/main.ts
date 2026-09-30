@@ -6,6 +6,7 @@ import * as cmd from './commands.js'
 import { runLocalStep } from './local-step.js'
 import { helpFor, parseCommandLine } from './command-line.js'
 import { readBoundedText, readRequestJson } from './request-file.js'
+import { badExampleRequestSchema, badExampleQuerySchema, badExampleLimits } from '@agent4novel/contracts'
 
 // agent4novel CLI(#14):Agent 从命令行驱动全链路。stdout 只出 JSON;进度/错误走 stderr。
 // 用法:pnpm cli <command> [args] [--key value],server 地址 --url 或 A4N_BASE_URL(默认 http://localhost:8787)
@@ -37,6 +38,18 @@ async function main(): Promise<void> {
 
   let result: unknown
   switch (command) {
+    case 'mark-bad-example': {
+      const parsed = badExampleRequestSchema.safeParse(readRequestJson(flags.file, badExampleLimits.requestBytes, 'Bad example'))
+      if (!parsed.success) throw new CliError('Invalid bad-example request', 'invalid-input')
+      result = await client.markBadExample(pos[0], parsed.data); break
+    }
+    case 'bad-example': result = await client.getBadExample(pos[0], pos[1]); break
+    case 'bad-examples': {
+      const query = Object.fromEntries(['chapter', 'after'].filter(k => flags[k] !== undefined).map(k => [k, /^[1-9][0-9]*$/.test(flags[k]) ? Number(flags[k]) : NaN]))
+      const parsed = badExampleQuerySchema.safeParse(query)
+      if (!parsed.success) throw new CliError('Invalid bad-example query', 'usage')
+      result = await client.listBadExamples(pos[0], parsed.data); break
+    }
     case 'agent-config': result = await client.getAuthorConfig(pos[0]); break
     case 'get-agent-file': result = await client.getAgentFile(pos[0], pos[1]); break
     case 'save-agent-config': {

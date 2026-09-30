@@ -27,7 +27,7 @@ const schemaV1 = [
   { type: 'index', name: 'artifact_chapter_version', sql: 'CREATE UNIQUE INDEX artifact_chapter_version ON artifacts(work_id, kind, chapter, version) WHERE chapter IS NOT NULL' },
 ]
 
-const additions = [
+const additionsV2 = [
   { type: 'table', name: 'author_configs', sql: `CREATE TABLE author_configs (
     work_id TEXT NOT NULL REFERENCES works(id),
     revision INTEGER NOT NULL CHECK (revision BETWEEN 1 AND 9007199254740991),
@@ -43,6 +43,17 @@ const additions = [
   ) STRICT` },
 ]
 
+const additionsV3 = [
+  { type: 'table', name: 'bad_examples', sql: `CREATE TABLE bad_examples (
+    id TEXT PRIMARY KEY NOT NULL,
+    work_id TEXT NOT NULL REFERENCES works(id),
+    chapter INTEGER NOT NULL CHECK (chapter BETWEEN 1 AND 9007199254740991),
+    record TEXT NOT NULL CHECK (json_valid(record)),
+    request TEXT NOT NULL CHECK (json_valid(request))
+  ) STRICT` },
+  { type: 'index', name: 'bad_example_work_chapter', sql: 'CREATE INDEX bad_example_work_chapter ON bad_examples(work_id, chapter)' },
+]
+
 export class UnsupportedDatabaseError extends Error {
   constructor() { super('unsupported database schema'); this.name = 'UnsupportedDatabaseError' }
 }
@@ -56,18 +67,21 @@ export function initializeSqliteSchema(db: Database.Database): void {
     const version = db.pragma('user_version', { simple: true })
     const objects = db.prepare("SELECT type, name, sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY name").all() as { type: string; name: string; sql: string }[]
     if (version === 0 && objects.length === 0) {
-      for (const object of [...schemaV1, ...additions]) db.exec(object.sql)
-      db.pragma('user_version = 2')
+      for (const object of [...schemaV1, ...additionsV2, ...additionsV3]) db.exec(object.sql)
+      db.pragma('user_version = 3')
       return
     }
-    const expectedSchema = version === 1 ? schemaV1 : [...schemaV1, ...additions]
-    if ((version !== 1 && version !== 2) || objects.length !== expectedSchema.length || objects.some(object => {
+    const expectedSchema = version === 1 ? schemaV1 : version === 2 ? [...schemaV1, ...additionsV2] : [...schemaV1, ...additionsV2, ...additionsV3]
+    if (![1, 2, 3].includes(Number(version)) || objects.length !== expectedSchema.length || objects.some(object => {
       const expected = expectedSchema.find(entry => entry.name === object.name)
       return !expected || expected.type !== object.type || normalize(expected.sql) !== normalize(object.sql)
     })) throw new UnsupportedDatabaseError()
     if (version === 1) {
-      for (const object of additions) db.exec(object.sql)
-      db.pragma('user_version = 2')
+      for (const object of additionsV2) db.exec(object.sql)
+    }
+    if (version === 1 || version === 2) {
+      for (const object of additionsV3) db.exec(object.sql)
+      db.pragma('user_version = 3')
     }
   }).immediate()
 }

@@ -7,6 +7,8 @@ import { contractJson, responseUnavailable } from './contract-response.js'
 import { staticWeb } from './runtime/static-web.js'
 import { authorConfigRoutes } from './routes/author-config.js'
 import type { AuthorConfigService } from './config/author-config-service.js'
+import { badExampleRoutes } from './routes/bad-examples.js'
+import type { BadExampleRepository } from './bad-examples/repository.js'
 
 // demo = 无 LLM key 的演示模式
 export type AppMeta = AppConfig
@@ -17,6 +19,7 @@ export type AppDeps = {
   meta: AppMeta
   webRoot?: string
   authorConfig?: AuthorConfigService
+  badExamples?: BadExampleRepository
 }
 
 export function createApp(deps: AppDeps): Hono {
@@ -27,6 +30,7 @@ export function createApp(deps: AppDeps): Hono {
   app.get('/api/health', (c) => contractJson(c, healthSchema, { status: 'ok' }))
   app.route('/', worksRoutes(deps))
   if (deps.authorConfig) app.route('/', authorConfigRoutes(deps.authorConfig))
+  if (deps.badExamples) app.route('/', badExampleRoutes(deps.badExamples))
   if (deps.webRoot) app.use('*', staticWeb(deps.webRoot))
   return app
 }

@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { closeSync, openSync } from 'node:fs'
 import {
   artifactSchema, emptyAgentConfig, workCreateRequestSchema, workDetailSchema, workListResponseSchema, workSchema,
@@ -14,6 +14,9 @@ import { initializeSqliteSchema, UnsupportedDatabaseError } from './sqlite-schem
 import { StoreContractError, validateStoreValue } from './validation.js'
 import type { AppendOptions, ArtifactPrecondition, FinalizeArtifactInput, SaveArtifactInput, WorkStore } from './work-store.js'
 import type { AuthorConfigRepository } from '../config/author-config-repository.js'
+import { badExampleRequestSchema, badExampleSchema, badExampleQuerySchema, badExamplePageSchema, badExampleLimits, matchesBadExample,
+  type BadExample, type BadExampleRequest, type BadExampleQuery, type BadExamplePage } from '@agent4novel/contracts'
+import type { BadExampleRepository } from '../bad-examples/repository.js'
 
 type WorkRow = { id: string; title: string; seed: string; config: string; created_at: string }
 type ArtifactRow = { id: string; work_id: string; kind: string; chapter: number | null; version: number; content: string; human_status: string; created_at: string; inputs: string | null }
@@ -36,7 +39,15 @@ function artifactFromRow(row: ArtifactRow): Artifact {
   }, 'stored')
 }
 
-export class SqliteStore implements WorkStore, AuthorConfigRepository {
+type BadExampleRow = { id: string; work_id: string; chapter: number; record: string; request: string; cursor?: number }
+function badExampleFromRow(row: BadExampleRow): BadExample {
+  const record = validateStoreValue(badExampleSchema, parseJson(row.record), 'stored')
+  const request = validateStoreValue(badExampleRequestSchema, parseJson(row.request), 'stored')
+  if (record.id !== row.id || record.workId !== row.work_id || record.chapter !== row.chapter || !matchesBadExample(record, row.work_id, request)) throw new StoreContractError('invalid-stored-data')
+  return record
+}
+
+export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampleRepository {
   private readonly db: Database.Database
 
   constructor(path: string) {
@@ -272,6 +283,54 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository {
       if (this.listAgentFiles(file.workId).length >= authorConfigLimits.filesPerWork) throw new KnownError('config-invalid', 'file library limit exceeded')
       this.db.prepare('INSERT INTO agent_files (id, work_id, metadata) VALUES (?, ?, ?)').run(file.id, file.workId, JSON.stringify(file))
       return file
+    })
+  }
+
+  markBadExample(workId: string, input: BadExampleRequest): BadExample {
+    const parsed = badExampleRequestSchema.safeParse(input)
+    if (!parsed.success) throw new KnownError('bad-example-invalid', 'invalid bad-example selection')
+    const request = parsed.data
+    return this.write(() => {
+      this.requireWork(workId)
+      const prior = this.db.prepare('SELECT * FROM bad_examples WHERE id = ?').get(request.requestId) as BadExampleRow | undefined
+      if (prior) {
+        const record = badExampleFromRow(prior)
+        if (!matchesBadExample(record, workId, request)) throw new KnownError('version-conflict', 'request identity already used')
+        return record
+      }
+      const row = this.db.prepare('SELECT * FROM artifacts WHERE id = ? AND work_id = ?').get(request.sourceArtifactId, workId) as ArtifactRow | undefined
+      const artifact = row && artifactFromRow(row)
+      if (!artifact || artifact.kind !== 'prose' || artifact.chapter !== request.chapter || artifact.version !== request.sourceVersion) throw new KnownError('bad-example-invalid', 'selection source does not match')
+      const text = (artifact.content as { text: string }).text
+      if (request.end > text.length || text.slice(request.start, request.end) !== request.text
+        || createHash('sha256').update(text).digest('hex') !== request.sourceHash) throw new KnownError('bad-example-invalid', 'selection source content changed')
+      const { requestId, ...source } = request
+      const record = validateStoreValue(badExampleSchema, { id: requestId, workId, ...source, createdAt: new Date().toISOString() }, 'input')
+      this.db.prepare('INSERT INTO bad_examples (id, work_id, chapter, record, request) VALUES (?, ?, ?, ?, ?)')
+        .run(record.id, workId, record.chapter, JSON.stringify(record), JSON.stringify(request))
+      return record
+    })
+  }
+
+  getBadExample(workId: string, id: string): BadExample | undefined {
+    return this.read(() => {
+      this.requireWork(workId)
+      const row = this.db.prepare('SELECT * FROM bad_examples WHERE id = ? AND work_id = ?').get(id, workId) as BadExampleRow | undefined
+      return row && badExampleFromRow(row)
+    })
+  }
+
+  listBadExamples(workId: string, input: BadExampleQuery): BadExamplePage {
+    const query = badExampleQuerySchema.safeParse(input)
+    if (!query.success) throw new KnownError('bad-example-invalid', 'invalid bad-example query')
+    return this.read(() => {
+      this.requireWork(workId)
+      const { chapter, after } = query.data
+      const rows = this.db.prepare('SELECT *, rowid AS cursor FROM bad_examples WHERE work_id = ? AND (? IS NULL OR chapter = ?) AND rowid > ? ORDER BY rowid LIMIT ?')
+        .all(workId, chapter ?? null, chapter ?? null, after ?? 0, badExampleLimits.page + 1) as BadExampleRow[]
+      const page = rows.slice(0, badExampleLimits.page)
+      return validateStoreValue(badExamplePageSchema, { workId, ...query.data, items: page.map(badExampleFromRow),
+        ...(rows.length > badExampleLimits.page ? { nextCursor: page.at(-1)!.cursor } : {}) }, 'stored')
     })
   }
 }

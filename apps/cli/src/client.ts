@@ -4,6 +4,8 @@ import { appConfigSchema, matchesStartChapterResponse } from '@agent4novel/contr
 import { agentFileSchema, agentFileReadSchema, agentFileUploadSchema, authorConfigViewSchema, authorConfigReceiptSchema, authorConfigSaveSchema,
   managedAgentFileText, type AuthorConfigSave, type AgentFileUpload } from '@agent4novel/contracts'
 import { createHash } from 'node:crypto'
+import { badExampleRequestSchema, badExampleSchema, badExamplePageSchema, badExampleQuerySchema, matchesBadExample,
+  type BadExampleRequest, type BadExampleQuery } from '@agent4novel/contracts'
 import type {
   ArtifactKind,
   OutlineDraft,
@@ -135,6 +137,20 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
   }
 
   return {
+    markBadExample: async (workId: string, input: BadExampleRequest) => {
+      const parsed = badExampleRequestSchema.safeParse(input)
+      if (!parsed.success) throw new CliError('Invalid bad-example request', 'invalid-input')
+      return validate(badExampleSchema, await configWrite(() => call<unknown>('POST', `/api/works/${encodeURIComponent(workId)}/bad-examples`, parsed.data, 30_000)),
+        result => matchesBadExample(result, workId, parsed.data), true)
+    },
+    getBadExample: async (workId: string, id: string) => validate(badExampleSchema, await call<unknown>('GET', `/api/works/${encodeURIComponent(workId)}/bad-examples/${encodeURIComponent(id)}`), result => result.workId === workId && result.id === id),
+    listBadExamples: async (workId: string, input: BadExampleQuery = {}) => {
+      const parsed = badExampleQuerySchema.safeParse(input)
+      if (!parsed.success) throw new CliError('Invalid bad-example query', 'invalid-input')
+      const query = parsed.data, params = new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined).map(([k, v]): [string, string] => [k, String(v)]))
+      return validate(badExamplePageSchema, await call<unknown>('GET', `/api/works/${encodeURIComponent(workId)}/bad-examples${params.size ? `?${params}` : ''}`),
+        result => result.workId === workId && result.chapter === query.chapter && result.after === query.after)
+    },
     getAuthorConfig: async (workId: string) => validate(authorConfigViewSchema, await call<unknown>('GET', `/api/works/${encodeURIComponent(workId)}/agent-config`), view => view.workId === workId),
     saveAuthorConfig: async (workId: string, input: AuthorConfigSave) => {
       const parsed = authorConfigSaveSchema.safeParse(input)

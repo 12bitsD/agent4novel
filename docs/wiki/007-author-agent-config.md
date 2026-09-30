@@ -1,14 +1,14 @@
 ---
 wiki_id: "007"
 ticket: 7
-ticket_state: active
-context_state: current
+ticket_state: done
+context_state: mixed
 summary: "作品默认与节点覆盖、版本文件和一次操作配置快照。"
 topics: ["author-config", "prompt-files", "skills", "configuration-snapshot"]
 code_paths: ["apps/server/src/runtime/production-app.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/store/sqlite-store.ts", "apps/web/src/pages/Workspace.tsx", "apps/cli/src/main.ts"]
 symbols: ["AgentConfig", "Pipeline", "SqliteStore"]
 inherits: ["016", "009", "033"]
-changed_by: []
+changed_by: ["008"]
 read_when: ["configure-author-agent", "upload-skill", "freeze-generation-config"]
 last_context_reviewed: "2026-09-30"
 ---
@@ -19,14 +19,16 @@ last_context_reviewed: "2026-09-30"
 
 - **读取时机**：修改作品配置、Prompt/Skill上传和生成快照。
 - **原始目的**：[#7](https://github.com/12bitsD/agent4novel/issues/7)让作者的三维偏好与节点配置真正进入生成。
-- **实际落地**：六节点默认/覆盖、三维偏好、受管Prompt/Skill版本、SQLite配置CAS、HTTP/CLI/Web及操作快照已接线；fake、SDK本地mock、浏览器、一次真实Caption和整目录容器恢复已验证。最终交付状态看live issue/PR/CI。
+- **实际落地**：六节点默认/覆盖、三维偏好、受管Prompt/Skill版本、SQLite配置CAS、HTTP/CLI/Web及操作快照已接线；fake、SDK本地mock、浏览器、一次真实Caption和整目录容器恢复已验证。[PR38](https://github.com/12bitsD/agent4novel/pull/38)已合并，#7已关闭，对应源提交quality/container CI成功。
 - **当前价值**：继承[决定D12–D15](../research/mvp-delivery-options.md)及[三案研究](../research/author-config-options.md)。
-- **后续变化**：工具执行与作品Wiki仍留#28/#29；本票不回改已有内容。
+- **后续变化**：[Wiki008](./008-bad-example-collection.md)在SQLite v3保全配置/文件并增加坏例快照；本页配置职责继续有效。工具执行与作品Wiki仍留#28/#29；本票不回改已有内容。
 - **代码入口**：生产装配、Pipeline、SQLite、Workspace和CLI。
 
 ## 设计目的
 
 三维偏好、每步实际配置和Skill文件选择可见可验证；一次操作冻结配置，不混用运行期间的改动。
+
+作者配置已由[PR38](https://github.com/12bitsD/agent4novel/pull/38)合并关闭，终止状态核对live #7；[Wiki008](./008-bad-example-collection.md)只将存储迁移v3并扩展坏例，原配置v2方案及审核保留。
 
 ## 起始上下文
 
@@ -119,6 +121,14 @@ RED→GREEN：config-red→config-files-green（公开入口/文件）；snapsho
 - **决定**：先匹配不可变历史回执，再验证新写入；保留更早unknown；旧Work.config仅revision0，保存后唯一作者来源；三案比较见research。
 - **影响**：新增行为RED/GREEN，双轴对新tree重新裁决，配置生成安全验证仍保留。
 - **上下文处理**：preserve原失败报告/复现，replace当前代码与handoff事实，不继承失败候选的通过结论。
+
+### 2026-09-30 — 坏例来源快照扩展
+
+- **触发证据**：#8要保存原文选段，正文可同版通过或后续编辑，旧位置不能代表永久当前文本。
+- **原假设**：只保存作品/产物版本与作者配置，不提供采集接口。
+- **决定**：由[Wiki008](./008-bad-example-collection.md)新增独立坏例Repository、v3表、完整来源hash及不可变回执；正文与配置语义保留。
+- **影响**：v1/v2严格迁移v3，整个目录恢复同时验证坏例；正文阅读/编辑增加选段入口。
+- **上下文处理**：preserve原方案与完成审核区全部字节；replace顶部当前演进入口，不追改旧发布证据。
 
 ## 交接结论
 

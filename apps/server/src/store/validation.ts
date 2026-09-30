@@ -8,7 +8,7 @@ export class StoreContractError extends Error {
 }
 
 // The safe error deliberately excludes schema diagnostics and author content.
-export function validateStoreValue<T>(schema: z.ZodType<T>, value: unknown, source: 'input' | 'stored'): T {
+export function validateStoreValue<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, value: unknown, source: 'input' | 'stored'): T {
   const parsed = schema.safeParse(value)
   if (!parsed.success) throw new StoreContractError(source === 'stored' ? 'invalid-stored-data' : 'invalid-store-input')
   return parsed.data

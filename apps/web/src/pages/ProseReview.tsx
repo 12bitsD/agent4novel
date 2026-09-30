@@ -1,20 +1,37 @@
 import { chapterLabel } from '../chapter-view.js'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import BadExamplesPanel, { type SavedSelection, type BadExampleGuard } from './BadExamplesPanel.js'
 import { proseLimits } from '@agent4novel/contracts'
 import type { ProseReviewState, ProseReviewAction } from '../prose-review.js'
 import { canLoadServerProse } from '../prose-review.js'
 import { ConfirmDialog } from '../ConfirmDialog.js'
 import { btnPrimary, btnSecondary, cardStyle, fieldStyle } from '../ui.js'
 
-export default function ProseReview({ title, state, onAction, allowCommands, onApprove, onRegenerate, onConfirm, onRetry }: {
+export default function ProseReview({ title, state, onAction, allowCommands, onApprove, onRegenerate, onConfirm, onRetry, onBadExampleGuard }: {
   title: string; state: ProseReviewState; onAction: (action: ProseReviewAction) => void; allowCommands: boolean
   onApprove: () => void; onRegenerate: () => void; onConfirm: () => void; onRetry: () => void
+  onBadExampleGuard?: (guard: BadExampleGuard) => void
 }) {
   const [confirmation, setConfirmation] = useState<{ title: string; description: string; label: string; run: () => void } | null>(null)
   const approved = state.baseline.humanStatus === 'approved'
   const locked = !['editing', 'approved', 'saving'].includes(state.phase) || !allowCommands
   const editing = state.mode === 'edit'
   const busy = ['saving', 'submitting', 'regenerating', 'reconciling'].includes(state.phase)
+  const [selection, setSelection] = useState<SavedSelection | null>(null)
+  const preview = useRef<HTMLDivElement>(null)
+  const canMark = allowCommands && ['editing', 'approved'].includes(state.phase) && !state.hasUnknownWrite && state.draft.text === state.baseline.content.text
+  const select = (start: number, end: number, text: string) => {
+    if (!canMark || start >= end || !text.trim() || state.baseline.content.text.slice(start, end) !== text) return
+    setSelection({ chapter: state.baseline.chapter, sourceArtifactId: state.baseline.id, sourceVersion: state.baseline.version, sourceText: state.baseline.content.text, start, end, text })
+  }
+  const selectPreview = () => {
+    const picked = window.getSelection(), root = preview.current
+    if (!root || !picked?.rangeCount) return
+    const range = picked.getRangeAt(0)
+    if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return
+    const before = range.cloneRange(); before.selectNodeContents(root); before.setEnd(range.startContainer, range.startOffset)
+    const start = before.toString().length, text = range.toString(); select(start, start + text.length, text)
+  }
   return <section className="setting-review" aria-label="正文关卡">
     <header className="setting-review-header">
       <div><p className="setting-eyebrow">{chapterLabel(state.baseline.chapter)} · 正文</p><h2>{approved ? `${chapterLabel(state.baseline.chapter)}已完成` : title}</h2>
@@ -41,8 +58,10 @@ export default function ProseReview({ title, state, onAction, allowCommands, onA
     <section className="setting-section">
       {approved && <h3>{title}</h3>}
       {editing ? <label className="setting-field" htmlFor="prose-text"><span>正文</span><textarea id="prose-text" rows={24} style={fieldStyle} value={state.draft.text} disabled={locked}
-        aria-invalid={state.issues.length > 0 || undefined} onChange={e => onAction({ type: 'text', value: e.target.value })} /></label>
-        : <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.9 }}>{state.draft.text}</div>}
+        aria-invalid={state.issues.length > 0 || undefined} onChange={e => onAction({ type: 'text', value: e.target.value })}
+        onSelect={e => select(e.currentTarget.selectionStart, e.currentTarget.selectionEnd, e.currentTarget.value.slice(e.currentTarget.selectionStart, e.currentTarget.selectionEnd))}
+        onMouseUp={e => select(e.currentTarget.selectionStart, e.currentTarget.selectionEnd, e.currentTarget.value.slice(e.currentTarget.selectionStart, e.currentTarget.selectionEnd))} /></label>
+        : <div ref={preview} onMouseUp={selectPreview} onKeyUp={selectPreview} style={{ whiteSpace: 'pre-wrap', lineHeight: 1.9 }}>{state.draft.text}</div>}
       <p className="setting-muted">{Array.from(state.draft.text).length} 字符 · 写作参考 2000–4000 字</p>
     </section>
     {!approved && <section className="setting-section" style={cardStyle}>
@@ -52,6 +71,7 @@ export default function ProseReview({ title, state, onAction, allowCommands, onA
       {state.draft.text.length > proseLimits.text && <p role="alert">正文超过本次请求长度上限。</p>}
       <button type="button" style={btnSecondary} disabled={locked || busy} onClick={() => setConfirmation({ title: '整章重写正文？', description: '成功后替换当前整章文字；取消或失败会保留当前修改和意见。', label: '确认整章重写', run: onRegenerate })}>整章重写</button>
     </section>}
+    <BadExamplesPanel key={state.baseline.chapter} workId={state.baseline.workId} chapter={state.baseline.chapter} selection={selection} onClear={() => setSelection(null)} canMark={canMark} onGuard={onBadExampleGuard} />
     {confirmation && <ConfirmDialog title={confirmation.title} description={confirmation.description} cancelLabel="继续编辑" confirmLabel={confirmation.label}
       onCancel={() => setConfirmation(null)} onConfirm={() => { setConfirmation(null); confirmation.run() }} />}
   </section>

@@ -8,7 +8,7 @@ topics: ["docker", "production-build", "ci", "volume-recovery"]
 code_paths: ["Dockerfile", "compose.yaml", ".github/workflows/**", "apps/server/src/runtime/**", "apps/server/scripts/**", "scripts/**", "apps/cli/test/command-entry.test.ts", "package.json"]
 symbols: ["createApp", "parseServerConfig", "A4N_DATA_DIR", "A4N_SERVE_WEB"]
 inherits: ["009", "016", "014"]
-changed_by: ["007"]
+changed_by: ["007", "008"]
 read_when: ["run-local-container", "debug-production-build", "verify-ci", "restore-container-volume"]
 last_context_reviewed: "2026-09-30"
 ---
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-09-30"
 - **原始目的**：[#33](https://github.com/12bitsD/agent4novel/issues/33)把Docker/CI从#7拆出，交付本机单用户可运行产物。
 - **实际落地**：compiled server＋精简依赖、同源静态Web/健康接口、非root镜像和Compose已落地；本机Linux容器两章、旧章修改、重建与整个目录备份恢复通过。quality/container workflow已配置；[PR37](https://github.com/12bitsD/agent4novel/pull/37)已合并，#33已关闭，最终源提交两项[CI](https://github.com/12bitsD/agent4novel/actions/runs/36653441274)均成功。
 - **当前价值**：继承#9整个数据目录、v1迁移、短事务、显式seed与不自动续跑；部署范围由用户明确选择。
-- **后续变化**：[Wiki007](./007-author-agent-config.md)扩展恢复联验，验证作者配置与Prompt/Skill文件；#8坏例仍后续。公网/账号/镜像发布/自动部署不在本票。
+- **后续变化**：[Wiki007](./007-author-agent-config.md)扩展恢复联验，验证作者配置与Prompt/Skill文件；[Wiki008](./008-bad-example-collection.md)再覆盖不可变坏例及SQLite v3恢复。公网/账号/镜像发布/自动部署不在本票。
 - **代码入口**：Hono公开应用、生产装配、server构建、Docker/Compose、质量/容器CI及验收脚本。
 
 ## 设计目的
@@ -157,6 +157,14 @@ config RED4项真实缺行为（返回缺Web字段/开关未校验）后GREEN15�
 - **决定**：当前作者配置与受管文件见[Wiki007](./007-author-agent-config.md)，provider HOW仍由016持有，部署HOW仍由033持有。
 - **影响**：严格SQLitev1迁移v2，备份含prompts目录；保存只影响下次操作，不改旧产物。
 - **上下文处理**：preserve原始目的、历史失败和完成审核证据；replace顶部当前路由事实。
+
+### 2026-09-30 — 坏例纳入整个目录恢复联验
+
+- **触发证据**：#8引入SQLite v3坏例表，当前container smoke覆盖pending标记、随后改写/通过、同请求回执、重建及停止后整目录备份恢复。
+- **原假设**：恢复联验只需要作品、产物、关卡及作者配置文件。
+- **决定**：复用现有容器验收增加不可变坏例；不另建存储或备份机制。
+- **影响**：当前恢复范围见[Wiki008](./008-bad-example-collection.md)，部署和卷职责保持。
+- **上下文处理**：preserve本票原始意图及完成审核证据；replace当前恢复导航，扩展验证入口。
 
 ## 交接结论
 

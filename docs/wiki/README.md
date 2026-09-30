@@ -157,7 +157,8 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [004 大纲弧线与剧情点](./004-outline-arcs-segments.md) | [#4](https://github.com/12bitsD/agent4novel/issues/4) | current | outline 契约、关卡、编辑界面 |
 | [005 第一章章纲生成与通过](./005-beat-generation-review.md) | [#5](https://github.com/12bitsD/agent4novel/issues/5) | mixed | 章纲编辑／再生／通过已接线；Agent 可观测协议、验证与交付证据 |
 | [006 后续章续写与跨章创作](./006-chapter-continuation.md) | [#6](https://github.com/12bitsD/agent4novel/issues/6) | mixed | 显式下一章、上一章承接、章节目录与历史编辑隔离 |
-| [007 作者 Agent 配置](./007-author-agent-config.md) | [#7](https://github.com/12bitsD/agent4novel/issues/7) | current | 三维偏好、默认与节点覆盖、版本文件及生成快照 |
+| [007 作者 Agent 配置](./007-author-agent-config.md) | [#7](https://github.com/12bitsD/agent4novel/issues/7) | mixed | 三维偏好、默认与节点覆盖、版本文件及生成快照 |
+| [008 正文坏例收集](./008-bad-example-collection.md) | [#8](https://github.com/12bitsD/agent4novel/issues/8) | current | 已保存正文选段、备注、不可变来源快照与回看 |
 | [009 SQLite 持久化](./009-sqlite-persistence.md) | [#9](https://github.com/12bitsD/agent4novel/issues/9) | mixed | 作品与全部产物版本、事务条件写入、数据目录与重启恢复 |
 | [010 预处理 RealStep 与 interview](./010-preprocess-realstep-interview.md) | [#10](https://github.com/12bitsD/agent4novel/issues/10) | historical | 已被替代的 preprocess 方案及其遗留机制 |
 | [011 Caption 与 Creative 方向包](./011-caption-creative-directions.md) | [#11](https://github.com/12bitsD/agent4novel/issues/11) | mixed | 提炼稿、创意稿、选择关卡；R10 A SP 采用依据、对照迭代与逐版反思 |

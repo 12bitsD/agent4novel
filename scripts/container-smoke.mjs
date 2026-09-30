@@ -5,7 +5,7 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const folder = await mkdtemp(join(tmpdir(), 'a4n-container-'))
@@ -84,6 +84,10 @@ try {
   await submit('approve-beat', { chapter: 2, expectedArtifactId: beat.id, expectedHeadVersion: beat.version, content: beat.content })
   await cli(['advance', workId])
   const prose = await cli(['get', workId, '--kind', 'prose', '--chapter', '2'])
+  const fragment = prose.content.text.slice(0, 12)
+  const sampleRequest = { requestId: randomUUID(), chapter: 2, sourceArtifactId: prose.id, sourceVersion: prose.version,
+    sourceHash: createHash('sha256').update(prose.content.text).digest('hex'), start: 0, end: fragment.length, text: fragment, note: '容器合成坏例' }
+  const sample = await submit('mark-bad-example', sampleRequest)
   const saved = await submit('save-prose', { chapter: 2, expectedArtifactId: prose.id, expectedHeadVersion: prose.version,
     expectedHumanStatus: 'pending', content: { text: '  第二章容器正文。\n\n保留空白。\n' } })
   await submit('approve-prose', { chapter: 2, expectedArtifactId: saved.artifact.id, expectedHeadVersion: saved.artifact.version, content: saved.artifact.content })
@@ -93,6 +97,9 @@ try {
   const list = await cli(['list'])
   const rows = await history()
   const configBefore = await cli(['agent-config', workId])
+  const samplesBefore = await cli(['bad-examples', workId, '--chapter', '2'])
+  assert.deepEqual(samplesBefore.items, [sample])
+  assert.deepEqual(await submit('mark-bad-example', sampleRequest), sample)
   const promptBefore = await cli(['get-agent-file', workId, promptFile.id])
   const skillBefore = await cli(['get-agent-file', workId, skillFile.id])
   assert.equal(before.currentChapter, 2)
@@ -108,6 +115,8 @@ try {
   assert.deepEqual(await cli(['agent-config', workId]), configBefore)
   assert.deepEqual(await cli(['get-agent-file', workId, promptFile.id]), promptBefore)
   assert.deepEqual(await cli(['get-agent-file', workId, skillFile.id]), skillBefore)
+  assert.deepEqual(await cli(['bad-examples', workId, '--chapter', '2']), samplesBefore)
+  assert.deepEqual(await cli(['bad-example', workId, sample.id]), sample)
   const logs = await cli(['logs', workId])
   assert.deepEqual(logs.telemetry, [])
   assert.deepEqual(logs.commands, [])
@@ -125,7 +134,9 @@ try {
   assert.deepEqual(await cli(['agent-config', workId]), configBefore)
   assert.deepEqual(await cli(['get-agent-file', workId, promptFile.id]), promptBefore)
   assert.deepEqual(await cli(['get-agent-file', workId, skillFile.id]), skillBefore)
-  console.log('PASS: same-origin Web/API, no-key two-chapter CLI, non-root image, full history and gates after recreation and stopped-directory backup/restore')
+  assert.deepEqual(await cli(['bad-examples', workId, '--chapter', '2']), samplesBefore)
+  assert.deepEqual(await cli(['bad-example', workId, sample.id]), sample)
+  console.log('PASS: same-origin Web/API, no-key two-chapter CLI, author config/files, immutable bad-example snapshot, full history and gates after recreation and stopped-directory backup/restore')
 } finally {
   // Only this randomly named smoke project and its own synthetic volume are removed.
   try {

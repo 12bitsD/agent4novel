@@ -8,7 +8,7 @@ topics: ["prose", "human-review", "autosave", "conditional-write", "agent-observ
 code_paths: ["packages/contracts/src/prose.ts", "packages/contracts/src/prose-submission.ts", "apps/server/src/steps/prose-step.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts", "apps/web/src/pages/ProseReview.tsx", "apps/cli/src/commands.ts"]
 symbols: ["ProseContent", "ProseSubmission", "recoverProseSubmission", "regenerateProse", "save-prose", "awaiting-prose-review", "prose-approved"]
 inherits: ["005", "013", "014", "016", "025"]
-changed_by: ["006", "009"]
+changed_by: ["006", "009", "008"]
 read_when: ["implement-prose", "review-prose", "debug-prose-submission", "change-prose-autosave", "continue-chapter"]
 last_context_reviewed: "2026-09-30"
 ---
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-09-30"
 - **原始目的**：由作者最终通过的章纲和设定写出正文，让作者直接修改或重写后独立把关；WHAT/AC 看 [#22](https://github.com/12bitsD/agent4novel/issues/22)。
 - **实际落地**：已接通真实/fake Prose Step、六步生产链、HTTP/Web/CLI 保存与审阅；完成状态、刷新及书架重入均可读回。2026-09-29 回读 #22 已关闭；发布与终止核验结果见 [完成评论](https://github.com/12bitsD/agent4novel/issues/22#issuecomment-5875092744)，本页保留当次发布前审核证据；当前多章推进与浏览由 [Wiki 006](./006-chapter-continuation.md) 扩展。
 - **当前价值**：继承 #5 的按章身份、条件写入、冻结请求与保守恢复；正文自动保存到服务端、刷新恢复，approved 默认阅读且可显式进入编辑，保存保留 approved。旧页内草稿/只读假设的变化原因见“上下文演进”。本页技术方案、非目标及完成审核中的“只到第一章／无下一章”属于 #22 当时范围，当前章循环不受此历史限制。
-- **后续变化**：首章闭环已交付，完整 MVP 尚未完成；[Wiki 006](./006-chapter-continuation.md) 承接显式下一章、前章输入、跨章阅读与编辑隔离；[Wiki 009](./009-sqlite-persistence.md) 承接已保存正文的服务重启恢复，本页内存限制属于 #22 当时边界。设定检索 tools [#28](https://github.com/12bitsD/agent4novel/issues/28) 与作品 Wiki 异步更新 [#29](https://github.com/12bitsD/agent4novel/issues/29) 保持后置。当前进度及验证边界统一见 [交接快照](../handoff.md#当前里程碑与验证边界)。
+- **后续变化**：首章闭环已交付，完整 MVP 尚未完成；[Wiki 006](./006-chapter-continuation.md) 承接显式下一章、前章输入、跨章阅读与编辑隔离；[Wiki 009](./009-sqlite-persistence.md) 承接已保存正文的服务重启恢复，本页内存限制属于 #22 当时边界。设定检索 tools [#28](https://github.com/12bitsD/agent4novel/issues/28) 与作品 Wiki 异步更新 [#29](https://github.com/12bitsD/agent4novel/issues/29) 保持后置。[Wiki008](./008-bad-example-collection.md)为已保存pending/approved正文增加手工选段与不可变坏例，未保存/unknown先确认，不改变正文状态。当前进度及验证边界统一见 [交接快照](../handoff.md#当前里程碑与验证边界)。
 - **代码入口**：先看共享正文契约及提交恢复，随后对应 Step/Pipeline、HTTP、Web 和 CLI。当前形状最终维护于 [schema](../schema.md)。
 
 ## 设计目的
@@ -177,6 +177,14 @@ RED/GREEN 按切片保留：`prose-s1-content-*` / `prose-s1-recovery-*`、`pros
 - **决定**：本页状态改为 done，下一步指向 #19 的独立范围对齐；明确首章闭环已跑通、完整 MVP 尚未完成。本次真实模型证据仅覆盖 Prose，上游五步为 fake。
 - **影响**：更新本页当前入口、交接结论和项目进度导航；后续仍须完成持久化、续写、配置、坏例及最终联验。#28/#29 保持后置扩展，不因本次文档更新开工或关闭。
 - **上下文处理**：preserve 原始目的、Human 决定、失败边界和发布前审核证据；replace 已漂移的票面状态与下一步描述。整体进度留在 handoff，WHAT/AC 与远端交付记录继续链接 GitHub，不改变知识归属。
+
+### 2026-09-30 — 坏例来源快照扩展
+
+- **触发证据**：#8要保存原文选段，正文可同版通过或后续编辑，旧位置不能代表永久当前文本。
+- **原假设**：只保存作品/产物版本与作者配置，不提供采集接口。
+- **决定**：由[Wiki008](./008-bad-example-collection.md)新增独立坏例Repository、v3表、完整来源hash及不可变回执；正文与配置语义保留。
+- **影响**：v1/v2严格迁移v3，整个目录恢复同时验证坏例；正文阅读/编辑增加选段入口。
+- **上下文处理**：preserve原方案与完成审核区全部字节；replace顶部当前演进入口，不追改旧发布证据。
 
 ## 交接结论
 

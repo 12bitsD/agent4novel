@@ -57,6 +57,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
   const [leaving, setLeaving] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
   const [configGuard, setConfigGuard] = useState({ dirty: false, locked: false })
+  const [badExampleGuard, setBadExampleGuard] = useState({ dirty: false, locked: false })
   const settingRef = useRef<SettingReviewState | null>(null)
   const workRef = useRef<WorkView | null>(null)
   const mounted = useRef(false)
@@ -130,8 +131,8 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
     return () => { mounted.current = false; readSequence.current++; commandSequence.current++ }
   }, [refresh])
   const dirty = (setting !== null && (isSettingDirty(setting) || setting.hasUnknownWrite || ['submitting', 'reconciling'].includes(setting.phase)))
-    || (beat !== null && isBeatDirty(beat)) || (prose !== null && isProseDirty(prose)) || generating || generationUncertain || starting || startUncertain || configGuard.dirty
-  const navigationLocked = generating || generationUncertain || starting || startUncertain || configGuard.locked
+    || (beat !== null && isBeatDirty(beat)) || (prose !== null && isProseDirty(prose)) || generating || generationUncertain || starting || startUncertain || configGuard.dirty || badExampleGuard.dirty
+  const navigationLocked = generating || generationUncertain || starting || startUncertain || configGuard.locked || badExampleGuard.locked
     || !!prose && (prose.hasUnknownWrite || ['saving', 'submitting', 'regenerating', 'reconciling'].includes(prose.phase))
     || !!beat && (beat.hasUnknownWrite || ['submitting', 'regenerating', 'reconciling'].includes(beat.phase))
     || !!setting && (setting.hasUnknownWrite || ['submitting', 'reconciling'].includes(setting.phase))
@@ -274,7 +275,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
 
   const beginNextChapter = async () => {
     const current = proseRef.current
-    if (!current || generationBusy.current || starting || isProseDirty(current)) return
+    if (!current || generationBusy.current || starting || isProseDirty(current) || badExampleGuard.dirty) return
     if (!frozenStart.current && !chapterActions(workRef.current, current.baseline.chapter).includes('start-next-chapter')) return
     const request = frozenStart.current ?? { chapter: current.baseline.chapter + 1,
       expectedPreviousProseId: current.baseline.id, expectedPreviousProseVersion: current.baseline.version }
@@ -436,14 +437,15 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
         onApprove={() => void runBeat('approve-beat')} onRegenerate={() => void runBeat('regenerate-beat')}
         onConfirm={() => void runBeat('confirm')} onRetry={() => void runBeat('retry')} />}
       {showProse && prose && <ProseReview title={beat?.baseline.content.title ?? chapterLabel(chapter)} state={prose} onAction={proseAction}
-        allowCommands={!starting && !startUncertain && (actions.includes('save-draft') || (actions.includes('approve') && actions.includes('regenerate')))}
+        allowCommands={!starting && !startUncertain && !badExampleGuard.locked && (actions.includes('save-draft') || (actions.includes('approve') && actions.includes('regenerate')))}
+        onBadExampleGuard={setBadExampleGuard}
         onApprove={() => void runProse('approve-prose')} onRegenerate={() => void runProse('regenerate-prose')}
         onConfirm={() => void runProse('confirm')} onRetry={() => void runProse('retry')} />}
       {showProse && prose && (actions.includes('start-next-chapter') || startUncertain) && <section style={{ marginTop: 24 }}>
-        <button type="button" style={btnPrimary} disabled={starting || generating || isProseDirty(prose)} onClick={() => void beginNextChapter()}>
+        <button type="button" style={btnPrimary} disabled={starting || generating || isProseDirty(prose) || badExampleGuard.dirty} onClick={() => void beginNextChapter()}>
           {starting ? '正在生成下一章章纲…' : startUncertain ? '重试开始下一章' : '开始下一章'}
         </button>
-        <p className="setting-muted">先生成下一章章纲，把关后再生成正文。{isProseDirty(prose) ? '请先保存并确认本章修改。' : ''}</p>
+        <p className="setting-muted">先生成下一章章纲，把关后再生成正文。{isProseDirty(prose) ? '请先保存并确认本章修改。' : ''}{badExampleGuard.dirty ? '请先标记坏例或清除选段和备注。' : ''}</p>
       </section>}
       {work && <ReferenceMaterials key={chapter} work={work} chapter={chapter} hiddenKinds={[
         ...(!showPoster && !showOutline && !showSetting && !showBeat && !showProse ? ['seed'] : []),
@@ -461,6 +463,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
       {setting && !showSetting && setting.phase !== 'approved' && <p className="setting-notice">设定的本页修改仍保留。完成前置关卡后可继续查看。</p>}
       {leaving && <ConfirmDialog title="离开当前创作页面？" description="离开会放弃本页修改和意见；已发送的请求可能继续处理。"
         cancelLabel="继续编辑" confirmLabel="放弃修改并离开" onCancel={() => setLeaving(false)} onConfirm={() => {
+          if (navigationLocked) { setLeaving(false); return }
           commandSequence.current++
           readSequence.current++
           setLeaving(false)

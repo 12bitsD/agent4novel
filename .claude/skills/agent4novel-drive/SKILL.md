@@ -50,6 +50,19 @@ Beat和Prose都要求正安全整数chapter。Beat的upstream为`{outline, setti
 
 修改 thinking、temperature、topP、模型或等待时间前读 [Wiki 016](../../../docs/wiki/016-model-runtime-provider-config.md#生成参数与单节点覆盖)。`--thinking on|off`、`--temperature`、`--top-p` 逐字段覆盖配置文件，`--top-k` 明确不支持。固定输入对照 SP 时，保存返回的 content、telemetry.generation、promptHash 与 systemHash；成功 content 已过生产 schema，失败按 stderr JSON 与非零退出处理。文件限制、必需上游、timeout 和安全输出以 Wiki 014/016 为准。
 
+## 手工采集正文坏例
+
+先用get读取已保存Prose正文，生成显式请求文件`{requestId:<UUID>,chapter,sourceArtifactId,sourceVersion,sourceHash:<完整正文SHA256>,start,end,text,note?}`；start/end是UTF-16位置，选完整Unicode。CLI不自动替换来源或基线。正文pending/approved均可；先前正文写入未知时先对账，不使用未保存的本页文字。
+
+```bash
+./apps/cli/bin/a4n mark-bad-example <workId> --file sample.json
+./apps/cli/bin/a4n bad-examples <workId> --chapter 1
+./apps/cli/bin/a4n bad-examples <workId> --chapter 1 --after <nextCursor>
+./apps/cli/bin/a4n bad-example <workId> <requestId>
+```
+
+每页50、选段最多10000字符、备注2000、请求196608字节。原请求重试返回原样本；不要为未知结果自动换UUID，不同备注需新UUID。网络/5xx/畸形或不匹配回执为unknown，先按ID GET核对，404不证明先前请求不会完成。只有显式要求时重试同一文件，不自动POST。写等待30秒、读沿普通300秒，显式CLI超时仍优先。保存后正文变化不改原快照；样本随SQLite及整目录备份恢复，无LLM分析或自动改写。协议见[Wiki008](../../../docs/wiki/008-bad-example-collection.md)。
+
 ## CLI 命令
 
 先用 `./apps/cli/bin/a4n --help` 或 `<command> --help` / `-h` 查看语法、请求形状与副作用；帮助在任何 I/O 前返回。参数错误返回安全 `usage` JSON 并非零退出：修正命令后再执行，勿把未知参数当作已生效配置。`create` / `smoke` 的 `--seed` 与 `--seed-file` 恰好选一个。独立帮助 token 优先，字面值用 `--seed=--help`；严格语法边界见 [Wiki 025](../../../docs/wiki/025-cli-command-safety.md)。
