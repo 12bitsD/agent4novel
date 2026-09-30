@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { generateObject } from 'ai'
-import { seedCharBudget } from '@agent4novel/contracts'
+import { seedCharBudget, authorConfigLimits, agentConfigSchema } from '@agent4novel/contracts'
 import type { AgentConfig, GenerationParameters } from '@agent4novel/contracts'
 import type { z } from 'zod'
 import { KnownError } from '../errors.js'
@@ -18,6 +18,15 @@ export function loadSkill(stepId: string): string {
     skillCache.set(stepId, text)
   }
   return text
+}
+
+export function systemFor(stepId: string, config: AgentConfig, override?: string): string {
+  const base = override ?? loadSkill(stepId)
+  const system = config.systemPrompt ? `${base}\n\nAuthor writing guidance (output contracts still apply):\n${config.systemPrompt}` : base
+  // Managed author files have their own limit. The isolated experiment's
+  // explicit SP override retains its existing assembled-input budget.
+  if (config.configRevision !== undefined && system.length > authorConfigLimits.systemChars) throw new KnownError('config-invalid', 'assembled author system context exceeds budget')
+  return system
 }
 
 // 超长素材统一截断点(#3c 决策 17):caption/creative 共用;budget 单源在 contracts/limits.ts
@@ -62,6 +71,7 @@ export async function callLlm<T>(args: {
 }): Promise<T> {
   const model = args.config.model ?? modelRuntime.defaultModelId
   const started = Date.now()
+  const provenance = agentConfigSchema.pick({ configRevision: true, configFiles: true }).safeParse({ configRevision: args.config.configRevision, configFiles: args.config.configFiles })
   const base = {
     stepId: args.stepId,
     ...(args.chapter !== undefined ? { chapter: args.chapter } : {}),
@@ -71,6 +81,7 @@ export async function callLlm<T>(args: {
     promptChars: args.prompt.length,
     promptHash: hash12(args.prompt),
     systemHash: hash12(args.system),
+    ...(provenance.success ? provenance.data : {}),
   }
   let generation: GenerationParameters | undefined
   try {

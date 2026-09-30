@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。最后更新：2026-09-30。#5/#22/#6/#19/#9 已合并关闭，当前推进 #33 本机 Docker/CI；完整 MVP #1 尚未完成。剩余 #33 → #7 → #8 → 联验；#28/#29 后置。先读下方里程碑与验证边界，再进入对应 Wiki。
+> 用途：context compaction / 新会话接力。最后更新：2026-09-30。#5/#22/#6/#19/#9 已合并关闭，当前推进 #7 作者配置；完整 MVP #1 尚未完成。剩余 #7 → #8 → 联验；#28/#29 后置。先读下方里程碑与验证边界，再进入对应 Wiki。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -14,11 +14,11 @@
 
 ## 当前里程碑与验证边界
 
-**首章、续章、契约治理与持久化已交付，完整 MVP 未完成。** #6 提供显式下一章、章节目录、稳定章节链接与历史正文编辑；#19 收敛共享验证；#9 已提供跨进程恢复；#33 当前容器候选与实际门禁从 [Wiki 033](./wiki/033-local-docker-ci.md) 进入。
+**首章、续章、契约治理与持久化已交付，完整 MVP 未完成。** #6 提供显式下一章、章节目录、稳定章节链接与历史正文编辑；#19 收敛共享验证；#9 已提供跨进程恢复；#33本机Docker/CI已交付；#7作者配置候选与实际门禁从[Wiki007](./wiki/007-author-agent-config.md)进入。
 
-- **交付状态**：#22/PR #30、#6/[PR #32](https://github.com/12bitsD/agent4novel/pull/32)、#19/[PR #34](https://github.com/12bitsD/agent4novel/pull/34)、#9/[PR #36](https://github.com/12bitsD/agent4novel/pull/36) 已关闭/合并；#9终止记录见[完成评论](https://github.com/12bitsD/agent4novel/issues/9#issuecomment-5897744738)。#33的远端CI必须在发布后真实通过才合并关闭。
+- **交付状态**：#22/PR #30、#6/[PR #32](https://github.com/12bitsD/agent4novel/pull/32)、#19/[PR #34](https://github.com/12bitsD/agent4novel/pull/34)、#9/[PR #36](https://github.com/12bitsD/agent4novel/pull/36) 已关闭/合并；#9终止记录见[完成评论](https://github.com/12bitsD/agent4novel/issues/9#issuecomment-5897744738)。#33/[PR37](https://github.com/12bitsD/agent4novel/pull/37)已关闭/合并，最终源提交两job[CI成功](https://github.com/12bitsD/agent4novel/actions/runs/36653441274)。
 - **已验证基线**：#6 有 fake 多章、CLI/Web、独立真实 Beat2/Prose2 和本地门禁证据，见 [Wiki 006](./wiki/006-chapter-continuation.md)。真实节点使用合成上游，不是全书/全部节点真实模型验收，也不证明长篇质量。#19 的共享验证证据见其本票 Wiki；#9 的 SQLite、真实进程重启及关闭路径需看 Wiki 009 的实际结果，不沿用旧票测试。
-- **当前存储边界**：生产启动使用 SQLite，恢复已提交的作品、产物版本、状态和输入引用；未保存页面编辑不恢复，遥测仍在进程内，不自动恢复模型调用。旧内存进程不自动迁移或清空。#33同源Web/API、非root镜像、两章卷恢复已本地验证，远端CI待实际commit执行；作者侧 Agent 配置、坏例收集、长期历史记忆与 Wiki 检索仍未交付；已有运行配置与 CLI 参数不等于 #7 作者配置已交付。
+- **当前存储边界**：生产启动使用 SQLite，恢复已提交的作品、产物版本、状态和输入引用；未保存页面编辑不恢复，遥测仍在进程内，不自动恢复模型调用。旧内存进程不自动迁移或清空。#33同源Web/API、非root镜像、两章卷恢复及实际CI已验证。#7已接入默认/节点覆盖、Prompt/Skill版本和操作快照，当前交付状态核对本票issue；坏例收集、长期记忆与Wiki工具仍未交付。
 - **MVP 收尾条件**：按 [总票 #1](https://github.com/12bitsD/agent4novel/issues/1) 完成剩余需求后，联验两章双关卡、重启恢复、配置生效及坏例回看，并分别记录 fake、真实模型与 SQLite 重启证据。#1 当前保持 OPEN。
 
 ## 已完成
@@ -90,7 +90,7 @@
 
 - LongCat 的 Responses 协议尚未接入；当前只对接其文档明确支持的 OpenAI-compatible Chat Completions。
 - LongCat 文档未保证 JSON Schema structured output；当前走 `json_object` + 本地 zod 校验。历史三步证据见 Wiki 016，Setting 新样例见 Wiki 013；成功样例不是上游协议保证。
-- `Work.config.model` 已作为内部覆盖接缝接入 Pipeline，但目前没有公开 UI/API；全局启动配置见 [wiki 016](./wiki/016-model-runtime-provider-config.md)。
+- #7已提供作者配置UI/API；旧Work.config只作revision0兼容来源，保存后以作者document为唯一编辑来源。全局凭据/启动配置仍见 [Wiki016](./wiki/016-model-runtime-provider-config.md)，文件/版本/操作快照见[Wiki007](./wiki/007-author-agent-config.md)。
 - run-step 不持久化实验账本、不自动跑上游，也不校验所供content是否来自作品最新版；成功只证明通过生产schema，raw模型输出和reasoning不对外返回。Beat/Prose后续章需显式提供恰好前一章的内容；CLI配置不会写回作品。
 - #6 提供各章当前版本浏览，不提供任意历史版本回看；章纲版本比较仍归 #20。渐进展示/分段提炼等独立优化留 #12。
 - #5 专属版本比较归 #20，正文后回流与章节重生归 #21；本期只允许通过前整份章纲再生。上条 #6/#12 是旧的通用优化分工，不覆盖这次已确认拆分。
@@ -103,17 +103,17 @@ CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化
 
 #22 已合入 main；其原 source、固定点和候选审核记录均属于已交付历史，入口为 [Wiki 022](./wiki/022-prose-generation-review.md)。新票从当前 main 核对基线，不能把旧票授权或审核结论当成新票完成证据。
 
-**当前 #33 → #7 → #8 → MVP 联验**。范围已按三方案研究收敛并写回对应 issue，普通工程细节不再逐项请求 Human；新增重大冲突仍需升级。
+**当前 #7 → #8 → MVP 联验**。范围已按三方案研究收敛并写回对应 issue，普通工程细节不再逐项请求 Human；新增重大冲突仍需升级。
 
 | 交付批次 | 可验收结果 | 后续衔接 |
 |---|---|---|
-| #33 本机 Docker/CI（当前） | 单容器同源服务、数据目录卷恢复、远端 fake CI | 不做公网部署/镜像发布/自动部署 |
-| #7 Agent 配置 | 作品默认＋每步覆盖，生成冻结配置和文件版本 | Prompt/Skill 文件沿 ADR0002，工具执行归 #28 |
+| #33 本机 Docker/CI（已交付） | 单容器同源服务、数据目录卷恢复、远端 fake CI | 不做公网部署/镜像发布/自动部署 |
+| #7 Agent 配置（当前） | 作品默认＋每步覆盖，生成冻结配置和文件版本 | Prompt/Skill 文件沿 ADR0002，工具执行归 #28 |
 | #8 坏例 | 已保存正文选段、备注、原文快照和来源版本、列表回看 | 自动分析及持续重定位后置 |
 | #1 MVP 联验 | 两章双关卡、历史修改、服务/容器重启、配置生效、坏例回看 | 各票和实际贯通证据均完成才能关闭 |
 | #28/#29 扩展 | 设定查询工具循环、作品 Wiki 档案演进 | 当前均未实现，保持后置 |
 
-WHAT/AC 和依赖以 [父票 #1](https://github.com/12bitsD/agent4novel/issues/1) 及子票为准；[研究与决定清单](./research/mvp-delivery-options.md) 保存取舍。#33 的 SQLite 恢复 AC 原生依赖 #9；不为纯排期增加其他硬依赖。不迁移或清空旧内存实例；切换且内有重要作品时先保全。配置/坏例仍未实现，SQLite 与容器的验收范围分别以 Wiki 009/033 为准，不能把方案已确定当作能力已验证。
+WHAT/AC 和依赖以 [父票 #1](https://github.com/12bitsD/agent4novel/issues/1) 及子票为准；[研究与决定清单](./research/mvp-delivery-options.md) 保存取舍。#33 的 SQLite 恢复 AC 原生依赖 #9；不为纯排期增加其他硬依赖。不迁移或清空旧内存实例；切换且内有重要作品时先保全。配置候选的实现和验收见Wiki007，坏例仍待#8；SQLite、容器、配置分别以本票Wiki与远端状态为准。
 
 继续继承条件写入、快照隔离、冻结提交与回读对账，不能照搬Outline保存／通过流程。#29中的WorkWiki指本书设定库，初始Setting与Wiki应呈现一套正式事实；正文与新增／更新档案一同通过、失败不保存一半、重试不重复历史，均是该扩展接入时的目标。通过后正文编辑的异步Wiki更新也是#29待对齐项，#22不预建任务。#17独立设定修改、#18冲突澄清、#20章纲比较、#21章节重生继续后置；#12/#15既有边界不变。
 

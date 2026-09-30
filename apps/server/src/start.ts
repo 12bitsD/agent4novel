@@ -15,7 +15,7 @@ async function start(): Promise<void> {
   const { openPersistentStore } = await import('./runtime/storage.js')
   const store = openPersistentStore(config)
   try {
-    const { app, demo } = createProductionApp(store, webRoot)
+    const { app, demo } = createProductionApp(store, webRoot, config.dataDir)
     const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {
       const host = config.host.includes(':') ? `[${config.host}]` : config.host
       console.log(`agent4novel server listening on http://${host}:${info.port}`)

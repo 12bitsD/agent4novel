@@ -1,14 +1,14 @@
 ---
 wiki_id: "033"
 ticket: 33
-ticket_state: active
+ticket_state: done
 context_state: current
 summary: "本机同源Web/API生产镜像、整个SQLite数据目录卷与无密钥GitHub CI。"
 topics: ["docker", "production-build", "ci", "volume-recovery"]
 code_paths: ["Dockerfile", "compose.yaml", ".github/workflows/**", "apps/server/src/runtime/**", "apps/server/scripts/**", "scripts/**", "apps/cli/test/command-entry.test.ts", "package.json"]
 symbols: ["createApp", "parseServerConfig", "A4N_DATA_DIR", "A4N_SERVE_WEB"]
 inherits: ["009", "016", "014"]
-changed_by: []
+changed_by: ["007"]
 read_when: ["run-local-container", "debug-production-build", "verify-ci", "restore-container-volume"]
 last_context_reviewed: "2026-09-30"
 ---
@@ -19,9 +19,9 @@ last_context_reviewed: "2026-09-30"
 
 - **读取时机**：构建/运行本机容器、CI或恢复数据卷。
 - **原始目的**：[#33](https://github.com/12bitsD/agent4novel/issues/33)把Docker/CI从#7拆出，交付本机单用户可运行产物。
-- **实际落地**：compiled server＋精简依赖、同源静态Web/健康接口、非root镜像和Compose已落地；本机Linux容器两章、旧章修改、重建与整个目录备份恢复通过。quality/container workflow已配置；远端实际commit的CI在C7发布后核对，当前不宣称已通过。
+- **实际落地**：compiled server＋精简依赖、同源静态Web/健康接口、非root镜像和Compose已落地；本机Linux容器两章、旧章修改、重建与整个目录备份恢复通过。quality/container workflow已配置；[PR37](https://github.com/12bitsD/agent4novel/pull/37)已合并，#33已关闭，最终源提交两项[CI](https://github.com/12bitsD/agent4novel/actions/runs/36653441274)均成功。
 - **当前价值**：继承#9整个数据目录、v1迁移、短事务、显式seed与不自动续跑；部署范围由用户明确选择。
-- **后续变化**：#7配置与文件版本、#8坏例仍后续；公网/账号/镜像发布/自动部署不在本票。
+- **后续变化**：[Wiki007](./007-author-agent-config.md)扩展恢复联验，验证作者配置与Prompt/Skill文件；#8坏例仍后续。公网/账号/镜像发布/自动部署不在本票。
 - **代码入口**：Hono公开应用、生产装配、server构建、Docker/Compose、质量/容器CI及验收脚本。
 
 ## 设计目的
@@ -150,6 +150,14 @@ config RED4项真实缺行为（返回缺Web字段/开关未校验）后GREEN15�
 - **影响**：本地完整741与2CPU/4GiB上限、断外网Linux完整741通过；新实质候选重新走双轴/有限attestation，仍须新commit真实CI。根pnpm test执行策略变化，生成/保存/关卡不变。
 - **上下文处理**：preserve第一次研究/修复及两次原始失败，replace当前候选证据和“拆分足够”假设；研究保留被新证据推翻的理由。
 
+### 2026-09-30 — 作者配置接入版本文件
+
+- **触发证据**：#7 的生产配置、文件校验、操作快照和整目录恢复测试。
+- **原假设**：原票交付时只有旧Work.config/数据库和运行期配置。
+- **决定**：当前作者配置与受管文件见[Wiki007](./007-author-agent-config.md)，provider HOW仍由016持有，部署HOW仍由033持有。
+- **影响**：严格SQLitev1迁移v2，备份含prompts目录；保存只影响下次操作，不改旧产物。
+- **上下文处理**：preserve原始目的、历史失败和完成审核证据；replace顶部当前路由事实。
+
 ## 交接结论
 
-本地容器与编译发布物已验证；远端对应commit的CI和最终交付状态由issue/PR/job回读，当前不提前宣称已完成。#7继承同一整个数据目录与编译发布物资源定位；完整MVP仍要配置、坏例和父票联验。
+本地容器、编译发布物与最终源提交远端CI均已验证，PR37合并且#33关闭；终止状态由issue/PR/job回读。#7继承同一整个数据目录与编译发布物资源定位；完整MVP仍要配置、坏例和父票联验。

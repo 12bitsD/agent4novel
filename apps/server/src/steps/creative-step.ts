@@ -3,7 +3,7 @@ import { KnownError } from '../errors.js'
 import type { AgentConfig, CaptionContent } from '@agent4novel/contracts'
 import type { ArtifactStep } from '../pipeline/pipeline.js'
 import { creativeLlmOutputSchema, creativeStepInputSchema, creativeStepOutputSchema } from './creative-io.js'
-import { callLlm, loadSkill, truncateSeed } from './llm-call.js'
+import { callLlm, systemFor, truncateSeed } from './llm-call.js'
 
 export const DEFAULT_DIRECTION_COUNT = 2
 
@@ -30,7 +30,7 @@ export function createCreativeStep(options: { systemPrompt?: string } = {}): Art
       )
       const raw = await callLlm({
         schema: creativeLlmOutputSchema,
-        system: options.systemPrompt ?? loadSkill('creative'),
+        system: systemFor('creative', config, options.systemPrompt),
         prompt: buildPrompt({ seed: input.seed, caption }, count),
         config,
         workId: input.workId,

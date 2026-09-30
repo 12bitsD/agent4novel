@@ -2,7 +2,7 @@ import { creativeContentSchema } from '@agent4novel/contracts'
 import type { AgentConfig, CreativeContent } from '@agent4novel/contracts'
 import type { ArtifactStep } from '../pipeline/pipeline.js'
 import { outlineLlmOutputSchema, outlineStepInputSchema, outlineStepOutputSchema } from './outline-io.js'
-import { callLlm, loadSkill, truncateSeed } from './llm-call.js'
+import { callLlm, systemFor, truncateSeed } from './llm-call.js'
 
 // 文案协议以 skills/outline/SKILL.md「输入(user prompt)格式」节为准(ADR-0002),此处只做数据插值
 function buildPrompt(input: { seed: string; creative: CreativeContent }): string {
@@ -27,7 +27,7 @@ export function createOutlineStep(options: { systemPrompt?: string } = {}): Arti
       )
       const raw = await callLlm({
         schema: outlineLlmOutputSchema,
-        system: options.systemPrompt ?? loadSkill('outline'),
+        system: systemFor('outline', config, options.systemPrompt),
         prompt: buildPrompt({ seed: input.seed, creative }),
         config,
         workId: input.workId,

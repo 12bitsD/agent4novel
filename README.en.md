@@ -40,6 +40,12 @@ Each chapter goes through both planning and prose. Approving the prose marks tha
 
 Approved settings and chapter plans cannot currently be changed. After you edit approved prose in an earlier chapter, existing later chapters are flagged for a continuity check: the author needs to check whether the plot still connects. Their text and approval status are preserved; the app does not rewrite them automatically.
 
+### Adjust writing preferences
+
+Open a work, select “Agent 配置” (Agent configuration), set style, genre and payoff preferences, then save. Style applies to prose; genre applies to creative directions and later content; payoff applies to creative directions, outlines, chapter plans and prose. Saved changes affect the next generation. Existing content and approval status stay in place, and an operation in progress keeps its starting configuration.
+
+Advanced controls provide work defaults and per-step overrides for models and generation parameters. Set the corresponding provider key as described below before using a live model; demo mode still uses samples. Upload writing guidance (Prompt) or a `SKILL.md` with `name` and `description`, select it, then save the configuration. Files provide writing instructions; tools, scripts and attachments are not executed. Uploaded files and saved configuration survive refreshes; unsaved configuration edits remain only in the current page.
+
 ## Quick start
 
 > **Works are saved on your computer.** Once prose is shown as saved, it survives server restarts when you use the same data directory. Unsaved changes in the page do not survive.
@@ -103,7 +109,7 @@ Docker uses a separate data volume. Continue using the same Compose project name
 
 For source runs, the default data file is `.data/agent4novel.sqlite` under the project directory. To use another location, set `A4N_DATA_DIR` in `.env.local` to an absolute directory path. Relative paths are resolved from the project root. Switching to an empty directory shows an empty bookcase; works in the original directory remain there.
 
-To back up, stop all servers using that data directory, then copy the entire directory to a new backup location. To restore, stop the server, keep a backup of the current directory, and restore the entire directory from your chosen backup. Do not copy only the database file while the server is running. See [work storage and recovery](./docs/wiki/009-sqlite-persistence.md) for details and the limits of preserving data from older in-memory versions.
+The data directory also contains uploaded guidance and Skill version files. To back up, stop all servers using that data directory, then copy the entire directory to a new backup location. To restore, stop the server, keep a backup of the current directory, and restore the entire directory from your chosen backup. Do not copy only the database file while the server is running. See [work storage and recovery](./docs/wiki/009-sqlite-persistence.md) for details and the limits of preserving data from older in-memory versions.
 
 ## Current status
 

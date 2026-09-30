@@ -12,6 +12,11 @@ type CommandDefinition = {
 }
 
 const commands: Record<string, CommandDefinition> = {
+  'agent-config': { positionals: [1, 1], flags: [], syntax: 'agent-config <workId>', input: '作品配置、文件和六节点实际配置。', example: 'a4n agent-config work-id', effects: '只读；不返回凭据，不生成。' },
+  'save-agent-config': { positionals: [1, 1], flags: ['file'], required: ['file'], syntax: 'save-agent-config <workId> --file <f>', input: '严格UTF-8 JSON: {requestId:<UUID>,expectedRevision:0,document:{preferences:{style?,genre?,payoff?},defaults:{model?,systemPromptRef?,skills?,tools:[],thinking?,temperature?,topP?,directionCount?},steps:{caption?,creative?,outline?,setting?,beat?,prose?}}。省略继承；数组替换，null清Prompt。', example: 'a4n save-agent-config work-id --file config.json', effects: '只影响未来操作；不调用模型。保留冻结请求，不替换版本、不自动重发；unknown可明确重试原文件。' },
+  'upload-skill': { positionals: [1, 1], flags: ['file', 'request-id'], required: ['file', 'request-id'], syntax: 'upload-skill <workId> --file <SKILL.md> --request-id <UUID>', input: '32KiB以内严格UTF-8 SKILL.md，name/description frontmatter和正文必需；request-id原样保留。', example: 'a4n upload-skill work-id --file SKILL.md --request-id 00000000-0000-4000-8000-000000000001', effects: '保存不可变版本文件，返回id；选入配置才作用于未来生成。不执行脚本或工具；不自动重放。' },
+  'upload-prompt': { positionals: [1, 1], flags: ['file', 'request-id'], required: ['file', 'request-id'], syntax: 'upload-prompt <workId> --file <f> --request-id <UUID>', input: '有界UTF-8作者写作指导；服务包装为SKILL.md，文件总长≤32KiB。', example: 'a4n upload-prompt work-id --file prompt.md --request-id 00000000-0000-4000-8000-000000000002', effects: '保存版本文件，选入systemPromptRef后生效，不替换内置任务契约；不自动重放。' },
+  'get-agent-file': { positionals: [2, 2], flags: [], syntax: 'get-agent-file <workId> <fileId>', input: '同作品的受管文件id。', example: 'a4n get-agent-file work-id 00000000-0000-4000-8000-000000000001', effects: '显式只读文件全文和hash；没有模型调用。' },
   list: { positionals: [0, 0], flags: [],
     syntax: 'list',
     input: '无需作品 ID。',

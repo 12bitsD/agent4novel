@@ -5,12 +5,15 @@ import {
   artifactSchema, emptyAgentConfig, workCreateRequestSchema, workDetailSchema, workListResponseSchema, workSchema,
   type Artifact, type ArtifactKind, type HumanStatus, type JsonValue,
   type Work, type WorkCreateRequest, type WorkDetail, type WorkSummary,
+  authorConfigReceiptSchema, authorConfigSaveSchema, agentFileSchema, authorConfigLimits,
+  type AuthorConfigReceipt, type AuthorConfigSave, type AgentFile,
 } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
 import { assertBucketAddress, assertDirectStatusAllowed } from './invariants.js'
 import { initializeSqliteSchema, UnsupportedDatabaseError } from './sqlite-schema.js'
 import { StoreContractError, validateStoreValue } from './validation.js'
 import type { AppendOptions, ArtifactPrecondition, FinalizeArtifactInput, SaveArtifactInput, WorkStore } from './work-store.js'
+import type { AuthorConfigRepository } from '../config/author-config-repository.js'
 
 type WorkRow = { id: string; title: string; seed: string; config: string; created_at: string }
 type ArtifactRow = { id: string; work_id: string; kind: string; chapter: number | null; version: number; content: string; human_status: string; created_at: string; inputs: string | null }
@@ -33,7 +36,7 @@ function artifactFromRow(row: ArtifactRow): Artifact {
   }, 'stored')
 }
 
-export class SqliteStore implements WorkStore {
+export class SqliteStore implements WorkStore, AuthorConfigRepository {
   private readonly db: Database.Database
 
   constructor(path: string) {
@@ -208,5 +211,67 @@ export class SqliteStore implements WorkStore {
 
   headVersion(workId: string, kind: ArtifactKind, opts?: { chapter?: number }): number | undefined {
     return this.read(() => this.head(workId, kind, opts?.chapter)?.version)
+  }
+
+  getAuthorConfig(workId: string): AuthorConfigReceipt | undefined {
+    return this.read(() => {
+      this.requireWork(workId)
+      const row = this.db.prepare('SELECT * FROM author_configs WHERE work_id = ? ORDER BY revision DESC LIMIT 1').get(workId) as { revision: number; request_id: string; document: string } | undefined
+      return row && validateStoreValue(authorConfigReceiptSchema, { workId, revision: row.revision, requestId: row.request_id, document: parseJson(row.document) }, 'stored')
+    })
+  }
+
+  saveAuthorConfig(workId: string, input: AuthorConfigSave): AuthorConfigReceipt {
+    const request = validateStoreValue(authorConfigSaveSchema, input, 'input')
+    return this.write(() => {
+      this.requireWork(workId)
+      const prior = this.db.prepare('SELECT * FROM author_configs WHERE work_id = ? AND request_id = ?').get(workId, request.requestId) as { revision: number; expected_revision: number; document: string } | undefined
+      if (prior) {
+        const receipt = validateStoreValue(authorConfigReceiptSchema, { workId, revision: prior.revision, requestId: request.requestId, document: parseJson(prior.document) }, 'stored')
+        if (prior.expected_revision !== request.expectedRevision || JSON.stringify(receipt.document) !== JSON.stringify(request.document)) throw new KnownError('version-conflict', 'request identity already used')
+        return receipt
+      }
+      const current = this.getAuthorConfig(workId)?.revision ?? 0
+      if (current !== request.expectedRevision) throw new KnownError('version-conflict', 'configuration revision changed')
+      const receipt = validateStoreValue(authorConfigReceiptSchema, { workId, revision: current + 1, requestId: request.requestId, document: request.document }, 'input')
+      this.db.prepare('INSERT INTO author_configs (work_id, revision, request_id, expected_revision, document) VALUES (?, ?, ?, ?, ?)').run(workId, receipt.revision, request.requestId, request.expectedRevision, JSON.stringify(receipt.document))
+      return receipt
+    })
+  }
+
+  getAuthorConfigReceipt(workId: string, requestId: string): AuthorConfigReceipt | undefined {
+    return this.read(() => {
+      this.requireWork(workId)
+      const row = this.db.prepare('SELECT * FROM author_configs WHERE work_id = ? AND request_id = ?').get(workId, requestId) as { revision: number; document: string } | undefined
+      return row && validateStoreValue(authorConfigReceiptSchema, { workId, requestId, revision: row.revision, document: parseJson(row.document) }, 'stored')
+    })
+  }
+
+  listAgentFiles(workId: string): AgentFile[] {
+    return this.read(() => {
+      this.requireWork(workId)
+      const rows = this.db.prepare('SELECT * FROM agent_files WHERE work_id = ? ORDER BY rowid').all(workId) as { id: string; work_id: string; metadata: string }[]
+      return rows.map(row => {
+        const file = validateStoreValue(agentFileSchema, parseJson(row.metadata), 'stored')
+        if (file.id !== row.id || file.workId !== row.work_id) throw new StoreContractError('invalid-stored-data')
+        return file
+      })
+    })
+  }
+
+  putAgentFile(input: AgentFile): AgentFile {
+    const file = validateStoreValue(agentFileSchema, input, 'input')
+    return this.write(() => {
+      this.requireWork(file.workId)
+      const existing = this.db.prepare('SELECT * FROM agent_files WHERE id = ?').get(file.id) as { metadata: string } | undefined
+      if (existing) {
+        const prior = validateStoreValue(agentFileSchema, parseJson(existing.metadata), 'stored')
+        if (prior.workId !== file.workId || prior.sha256 !== file.sha256 || prior.kind !== file.kind) throw new KnownError('version-conflict', 'file request identity already used')
+        return prior
+      }
+      if (this.listAgentFiles(file.workId).length >= authorConfigLimits.filesPerWork) throw new KnownError('config-invalid', 'file library limit exceeded')
+      this.db.prepare('INSERT INTO agent_files (id, work_id, metadata) VALUES (?, ?, ?)').run(file.id, file.workId, JSON.stringify(file))
+      return file
+    })
   }
 }

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { generationParametersSchema } from './step.js'
+import { generationParametersSchema, agentConfigSchema } from './step.js'
 
 // LLM 遥测(#14):一次 callLlm 调用的观测记录，公开运行时边界与类型同源。
 export const llmTelemetrySchema = z.object({
@@ -10,5 +10,7 @@ export const llmTelemetrySchema = z.object({
   finishReason: z.string().optional(), error: z.string().optional(),
   generation: generationParametersSchema.optional(),
   promptChars: z.number().nonnegative(), promptHash: z.string(), systemHash: z.string(),
+  configRevision: agentConfigSchema.shape.configRevision,
+  configFiles: agentConfigSchema.shape.configFiles,
 }).strict()
 export type LlmTelemetry = z.infer<typeof llmTelemetrySchema>

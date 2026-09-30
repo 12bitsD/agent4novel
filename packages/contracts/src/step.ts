@@ -16,6 +16,9 @@ export const agentConfigSchema = z.object({
   tools: z.array(z.string()).optional(),
   // creative 步骤直出方向个数(#3c):默认 2,严格 1~3
   directionCount: z.number().int().min(1).max(3).optional(),
+  // Server-resolved provenance; author configuration API never accepts these fields.
+  configRevision: z.number().int().min(0).safe().optional(),
+  configFiles: z.array(z.object({ id: z.string().uuid(), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict()).max(5).optional(),
 }).strict()
 
 export type AgentConfig = z.infer<typeof agentConfigSchema>
