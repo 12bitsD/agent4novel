@@ -7,9 +7,11 @@ description: 用命令行驱动 agent4novel 创作链路、独立运行节点和
 
 本项目的创作链路用 CLI(`./apps/cli/bin/a4n`)驱动,**不要手搓 curl**。只有 `select`／`save-outline` 自动回填 `expectedHeadVersion`；Setting、Beat、Prose和start-chapter的专用写命令使用请求文件中的显式基线，不替换成最新head。正常结果的stdout是纯JSON，进度与错误走stderr。HTTP/传输错误会exit≠0，但`advance`/`start-chapter`即使HTTP200也可能返回`kind: "failed"`，必须同时检查JSON outcome。
 
-模型与 provider 配置的唯一 HOW 是 [`docs/wiki/016-model-runtime-provider-config.md`](../../../docs/wiki/016-model-runtime-provider-config.md)；持久化、数据目录和备份恢复的 HOW 是 [Wiki 009](../../../docs/wiki/009-sqlite-persistence.md)。本 skill 只保留运行时操作,不要在其他入口复制配置规则。
+模型与 provider 配置的唯一 HOW 是 [`docs/wiki/016-model-runtime-provider-config.md`](../../../docs/wiki/016-model-runtime-provider-config.md)；源码持久化与恢复见 [Wiki 009](../../../docs/wiki/009-sqlite-persistence.md)，本机容器、卷恢复与CI见 [Wiki 033](../../../docs/wiki/033-local-docker-ci.md)。本 skill 只保留运行时操作,不要在其他入口复制配置规则。
 
 ## 启动服务
+
+本机容器用 `docker compose up --build -d --wait`，Web/API同源默认8787，宿主只绑定127.0.0.1；真实模型显式用 `docker compose --env-file .env.local up --build -d --wait`。保留同一Compose项目名和整个数据卷；它与源码`.data`是两个书架。不要打印含真实key的Compose展开配置/inspect。CLI仍在安装了工作区依赖的宿主执行，通过`--url`连接服务；容器中没有开发CLI/tsx。源码运行继续以下步骤。
 
 ```bash
 test -f .env.local || cp .env.example .env.local   # 首次初始化；不要覆盖已有本地 key

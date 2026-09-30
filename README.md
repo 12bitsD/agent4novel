@@ -46,14 +46,28 @@
 
 > **作品会保存在本机。** 页面显示正文「已保存」后，使用同一数据目录重启服务即可恢复；尚未保存的页面修改不会恢复。
 
-### 1. 启动演示模式
+### 用 Docker 启动（推荐）
 
-以下命令适用于 macOS 和 Linux 终端。安装 Git（下载源码）、Node.js 22.13.0 或更高版本（运行程序）和 pnpm（安装项目依赖）后执行：
+安装 Git 和可运行 Compose 的 Docker（例如 Docker Desktop），然后执行：
 
 ```bash
 git clone https://github.com/12bitsD/agent4novel.git
 cd agent4novel
-pnpm install
+docker compose up --build -d --wait
+```
+
+在浏览器打开 **[localhost:8787](http://localhost:8787)**，即可使用演示模式。Web 和 API 由同一服务提供，只开放本机访问。`docker compose ps` 查看健康状态；启动失败时用 `docker compose logs app` 检查。端口被占用时，用 `A4N_HTTP_PORT=8790 docker compose up --build -d --wait`，然后打开对应端口。
+
+作品保存在 Docker 的数据卷中，容器重建后仍保留。它与下方源码运行的 `.data` 目录是两个独立书架。停止用 `docker compose stop`；备份、恢复和更新步骤见 [容器操作说明](./docs/wiki/033-local-docker-ci.md#维护操作)。
+
+### 从源码启动演示模式
+
+以下命令适用于 macOS 和 Linux 终端。安装 Git、Node.js 22.13.0 或更高版本和 pnpm 12.5.1 后执行；构建与 CI 使用 Node.js 24.19.0：
+
+```bash
+git clone https://github.com/12bitsD/agent4novel.git
+cd agent4novel
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
@@ -63,11 +77,11 @@ pnpm dev
 
 首次启动的书架为空，可直接创建作品。若要预放示例作品，在首次启动前用 `A4N_SEED_DEMO=1 pnpm dev` 启动；只有空书架会填入示例，重复启动不会重复添加。
 
-### 2. 配置模型服务
+### 配置模型服务
 
 目前支持 **DeepSeek** 和 **LongCat**，需要从所选服务获取 API key。
 
-先确认正文显示「已保存」，再在运行 `pnpm dev` 的终端按 `Ctrl+C` 停止服务。如已有 `.env.local`，直接编辑该文件。首次配置时，在 `agent4novel` 目录运行以下命令，创建配置文件，并设置为仅当前系统用户可读写：
+先确认正文显示「已保存」，再停止服务：Docker 运行时用 `docker compose stop`，源码运行时在终端按 `Ctrl+C`。如已有 `.env.local`，直接编辑该文件。首次配置时，在 `agent4novel` 目录运行以下命令，创建配置文件，并设置为仅当前系统用户可读写：
 
 ```bash
 cp .env.example .env.local
@@ -81,13 +95,15 @@ chmod 600 .env.local
 | DeepSeek | `deepseek:deepseek-chat` | `DEEPSEEK_API_KEY` |
 | LongCat | `longcat:LongCat-2.0` | `LONGCAT_API_KEY` |
 
-保存文件，再运行 `pnpm dev`。
+保存文件，Docker 运行时用 `docker compose --env-file .env.local up --build -d --wait`；源码运行时用 `pnpm dev`。密钥只在运行时传入容器，不进入镜像。Docker 模式的数据目录固定在数据卷内，`.env.local` 中的 `A4N_DATA_DIR`、`A4N_HOST`、`A4N_PORT` 仅用于源码运行；Docker 宿主端口用 `A4N_HTTP_PORT`。
 
 使用真实模型时，你的输入和生成所需的故事内容会发送给所选模型服务。`.env.local` 不会被 Git 默认加入版本记录；密钥应保留在该文件中。更多配置选项见 [模型配置说明](./docs/wiki/016-model-runtime-provider-config.md#配置契约)。
 
-### 3. 保存与备份作品
+### 保存与备份作品
 
-默认数据文件是项目目录下的 `.data/agent4novel.sqlite`。需要更换位置时，在 `.env.local` 中设置 `A4N_DATA_DIR`，填入数据目录的绝对路径；相对路径从项目根目录计算。切换到另一个空目录会显示空书架，原目录中的作品仍保留。
+Docker 使用独立的数据卷，恢复时要继续使用同一 Compose 项目名称；不要删除作品的数据卷。详细命令见 [容器备份与恢复](./docs/wiki/033-local-docker-ci.md#维护操作)。
+
+源码运行时，默认数据文件是项目目录下的 `.data/agent4novel.sqlite`。需要更换位置时，在 `.env.local` 中设置 `A4N_DATA_DIR`，填入数据目录的绝对路径；相对路径从项目根目录计算。切换到另一个空目录会显示空书架，原目录中的作品仍保留。
 
 备份时，先停止使用该数据目录的所有服务，再把整个数据目录复制到一个新的备份位置。恢复时也先停止服务，保留当前目录的备份，再从你选定的备份恢复整个目录。不要只复制仍在运行中的数据库文件。详细步骤和旧版内存数据的保全边界见 [作品存储与恢复](./docs/wiki/009-sqlite-persistence.md)。
 
@@ -115,7 +131,7 @@ chmod 600 .env.local
 <summary>Agent 工程文档入口</summary>
 
 - **开发规则**：[AGENTS.md](./AGENTS.md) 与 [完成检查清单](./docs/agents/ticket-completion-checklist.md)。
-- **运行与排障**：[运行指引](./.claude/skills/agent4novel-drive/SKILL.md)、[模型配置](./docs/wiki/016-model-runtime-provider-config.md)、[作品存储与恢复](./docs/wiki/009-sqlite-persistence.md)、[命令行用法](./docs/wiki/014-agent-cli-telemetry.md)。
+- **运行与排障**：[运行指引](./.claude/skills/agent4novel-drive/SKILL.md)、[模型配置](./docs/wiki/016-model-runtime-provider-config.md)、[作品存储与恢复](./docs/wiki/009-sqlite-persistence.md)、[本机容器与 CI](./docs/wiki/033-local-docker-ci.md)、[命令行用法](./docs/wiki/014-agent-cli-telemetry.md)。
 - **设计与实现**：[工程 Wiki](./docs/wiki/README.md)、[架构决策](./docs/adr/)、[调研依据](./docs/research/)。
 - **术语与数据定义**：[领域词汇表](./CONTEXT.md)、[数据模型](./docs/schema.md)。
 - **任务交接**：[交接记录](./docs/handoff.md)。

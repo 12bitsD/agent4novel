@@ -1,14 +1,14 @@
 ---
 wiki_id: "009"
 ticket: 9
-ticket_state: active
+ticket_state: done
 context_state: current
 summary: "WorkStore接入SQLite，保留全部版本、事务条件写入与真实进程重启恢复。"
 topics: ["sqlite", "persistence", "transactions", "restart-recovery"]
 code_paths: ["apps/server/src/store/**", "apps/server/src/start.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts"]
 symbols: ["WorkStore", "SqliteStore", "AppendOptions", "StoreContractError"]
 inherits: ["019", "006", "002"]
-changed_by: []
+changed_by: ["033"]
 read_when: ["implement-storage-adapter", "recover-persisted-work", "change-database-schema"]
 last_context_reviewed: "2026-09-30"
 ---
@@ -19,7 +19,7 @@ last_context_reviewed: "2026-09-30"
 
 - **读取时机**：更改磁盘存储、迁移或重启恢复。
 - **原始目的**：[#9](https://github.com/12bitsD/agent4novel/issues/9) 将内存存储替换成 SQLite，作品重启不丢。
-- **实际落地**：生产装配使用SQLite；保存全部产物版本、状态和输入依据，正常退出及强制终止后的CLI多章恢复已验证。独立审核与发布尚待完成。
+- **实际落地**：生产装配使用SQLite；保存全部产物版本、状态和输入依据，正常退出及强制终止后的CLI多章恢复已验证；[PR36](https://github.com/12bitsD/agent4novel/pull/36)已合并、#9已关闭，终止状态见[完成评论](https://github.com/12bitsD/agent4novel/issues/9#issuecomment-5897744738)。
 - **当前价值**：继承 #19 共享验证和 #6 多章/CAS/输入引用；短事务提交，模型调用在事务外。
 - **后续变化**：#33 验证容器与数据卷，#7 接入配置及文件引用。
 - **代码入口**：WorkStore、SQLite适配器、生产装配、旧路由/流水线的复合写入。
@@ -103,6 +103,14 @@ TDD证据：`store-options-red.log`→GREEN覆盖原子状态/保护种类；`st
 
 ## 上下文演进
 
+### 2026-09-30 — 容器继承整个数据目录
+
+- **触发证据**：#9交付后用户选择本机Docker+CI，#33接入生产发布物和命名卷。
+- **原假设**：源码运行是唯一已验证的生产装配。
+- **决定**：#33沿同一SqliteStore/v1策略提供独立容器书架；源码备份仍沿本页，卷操作转[Wiki033](./033-local-docker-ci.md#维护操作)。
+- **影响**：数据目录与模型操作不自动恢复的规则继续有效；Linux镜像与CI证据由新票独立取得。
+- **上下文处理**：preserve旧完成审核区字节与存储设计理由，补充新的运行方式入口。
+
 ### 2026-09-30 — 修复未知库对象识别
 
 - **触发证据**：最终自校准发现SQL `LIKE 'sqlite_%'` 中下划线会匹配任意字符，用户表 `sqliteXsentinel` 被误当内部表。
@@ -121,4 +129,4 @@ TDD证据：`store-options-red.log`→GREEN覆盖原子状态/保护种类；`st
 
 ## 交接结论
 
-持久化与真实进程重启已落地，最终审核及远端交付状态以issue为准。后续#33继承整个数据目录与v1策略，验证容器重建/卷恢复；不要用macOS原生模块或本地测试代替Linux容器与GitHub CI，也不要提前宣称MVP完成。
+持久化与真实进程重启已交付，终止记录见#9完成评论。#33继承整个数据目录与v1策略，容器/CI证据从其Wiki进入；#7继续配置与文件引用。不要用macOS原生模块或本地测试代替Linux容器与GitHub CI，也不要提前宣称MVP完成。

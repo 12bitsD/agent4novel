@@ -5,6 +5,7 @@ import { beatCommandObservationSchema, beatInputBudgetSchema, beatCommandErrorSc
 import { proseCommandObservationSchema, proseInputBudgetSchema, proseCommandErrorSchema } from './prose-command.js'
 export const appConfigSchema = z.object({ demo: z.boolean() }).strict()
 export type AppConfig = z.infer<typeof appConfigSchema>
+export const healthSchema = z.object({ status: z.literal('ok') }).strict()
 
 export const workViewSchema = workViewEnvelopeSchema.superRefine(validateWorkArtifacts)
 

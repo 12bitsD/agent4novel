@@ -44,14 +44,28 @@ Approved settings and chapter plans cannot currently be changed. After you edit 
 
 > **Works are saved on your computer.** Once prose is shown as saved, it survives server restarts when you use the same data directory. Unsaved changes in the page do not survive.
 
-### 1. Start demo mode
+### Start with Docker (recommended)
 
-These commands are for macOS and Linux terminals. Install Git (to download the source), Node.js 22.13.0 or later (to run the program), and pnpm (to install dependencies), then run:
+Install Git and Docker with Compose support (for example, Docker Desktop), then run:
 
 ```bash
 git clone https://github.com/12bitsD/agent4novel.git
 cd agent4novel
-pnpm install
+docker compose up --build -d --wait
+```
+
+Open **[localhost:8787](http://localhost:8787)** to use demo mode. One service provides Web and API, accessible only from your computer. Use `docker compose ps` to check health and `docker compose logs app` to diagnose startup failures. If the port is occupied, run `A4N_HTTP_PORT=8790 docker compose up --build -d --wait` and open that port.
+
+Works live in a Docker data volume and survive container recreation. This bookshelf is separate from the `.data` directory used by source runs below. Stop with `docker compose stop`; see [container operations](./docs/wiki/033-local-docker-ci.md#维护操作) for backup, restore and upgrade commands.
+
+### Start demo mode from source
+
+These commands are for macOS and Linux terminals. Install Git, Node.js 22.13.0 or later, and pnpm 12.5.1. Builds and CI use Node.js 24.19.0:
+
+```bash
+git clone https://github.com/12bitsD/agent4novel.git
+cd agent4novel
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
@@ -61,11 +75,11 @@ With no model selected and no DeepSeek or LongCat API key (a secret for calling 
 
 The bookcase is empty on first startup, and you can create a work immediately. To add sample works, use `A4N_SEED_DEMO=1 pnpm dev` for the first startup. Samples are added only to an empty bookcase; restarting does not add duplicates.
 
-### 2. Configure a model service
+### Configure a model service
 
 **DeepSeek** and **LongCat** are currently supported. Obtain an API key from your chosen service.
 
-Check that your prose is shown as saved, then press `Ctrl+C` in the terminal running `pnpm dev` to stop the server. If `.env.local` already exists, edit it directly. For the first setup, run these commands from the `agent4novel` directory to create a configuration file that only your operating-system user can read and write:
+Check that your prose is shown as saved, then stop the service: use `docker compose stop` for Docker, or press `Ctrl+C` in the terminal running from source. If `.env.local` already exists, edit it directly. For the first setup, run these commands from the `agent4novel` directory to create a configuration file that only your operating-system user can read and write:
 
 ```bash
 cp .env.example .env.local
@@ -79,13 +93,15 @@ In `.env.local`, choose a model service, fill in its model name and API key, and
 | DeepSeek | `deepseek:deepseek-chat` | `DEEPSEEK_API_KEY` |
 | LongCat | `longcat:LongCat-2.0` | `LONGCAT_API_KEY` |
 
-Save the file and run `pnpm dev` again.
+Save the file. For Docker, run `docker compose --env-file .env.local up --build -d --wait`; for source runs, use `pnpm dev`. Keys are passed at runtime and are not part of the image. Docker keeps its data directory in the volume; `.env.local` fields `A4N_DATA_DIR`, `A4N_HOST` and `A4N_PORT` apply only to source runs. Use `A4N_HTTP_PORT` for Docker's host port.
 
 When you use a real model, your input and the story content needed for generation are sent to the chosen model service. Git does not add `.env.local` to version history by default; keep the key in that file. See [model configuration](./docs/wiki/016-model-runtime-provider-config.md#配置契约) for further options.
 
-### 3. Keep and back up your works
+### Keep and back up your works
 
-The default data file is `.data/agent4novel.sqlite` under the project directory. To use another location, set `A4N_DATA_DIR` in `.env.local` to an absolute directory path. Relative paths are resolved from the project root. Switching to an empty directory shows an empty bookcase; works in the original directory remain there.
+Docker uses a separate data volume. Continue using the same Compose project name when recovering works, and keep that volume. See [container backup and restore](./docs/wiki/033-local-docker-ci.md#维护操作) for commands.
+
+For source runs, the default data file is `.data/agent4novel.sqlite` under the project directory. To use another location, set `A4N_DATA_DIR` in `.env.local` to an absolute directory path. Relative paths are resolved from the project root. Switching to an empty directory shows an empty bookcase; works in the original directory remain there.
 
 To back up, stop all servers using that data directory, then copy the entire directory to a new backup location. To restore, stop the server, keep a backup of the current directory, and restore the entire directory from your chosen backup. Do not copy only the database file while the server is running. See [work storage and recovery](./docs/wiki/009-sqlite-persistence.md) for details and the limits of preserving data from older in-memory versions.
 
@@ -113,7 +129,7 @@ To back up, stop all servers using that data directory, then copy the entire dir
 <summary>Engineering documentation for agents</summary>
 
 - **Development rules:** [AGENTS.md](./AGENTS.md) and the [completion checklist](./docs/agents/ticket-completion-checklist.md).
-- **Operation and troubleshooting:** [runtime instructions](./.claude/skills/agent4novel-drive/SKILL.md), [model configuration](./docs/wiki/016-model-runtime-provider-config.md), [work storage and recovery](./docs/wiki/009-sqlite-persistence.md), and [command-line usage](./docs/wiki/014-agent-cli-telemetry.md).
+- **Operation and troubleshooting:** [runtime instructions](./.claude/skills/agent4novel-drive/SKILL.md), [model configuration](./docs/wiki/016-model-runtime-provider-config.md), [work storage and recovery](./docs/wiki/009-sqlite-persistence.md), [local containers and CI](./docs/wiki/033-local-docker-ci.md), and [command-line usage](./docs/wiki/014-agent-cli-telemetry.md).
 - **Design and implementation:** [Engineering Wiki](./docs/wiki/README.md), [architecture decisions](./docs/adr/), and [research](./docs/research/).
 - **Terms and data definitions:** [domain glossary](./CONTEXT.md) and [data model](./docs/schema.md).
 - **Task handoff:** [handoff record](./docs/handoff.md).

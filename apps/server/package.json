@@ -3,8 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "files": ["dist"],
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "build": "node scripts/build.mjs",
+    "start": "A4N_SERVE_WEB=1 node dist/start.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -20,6 +23,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "9.6.0",
     "@types/node": "^22.0.0",
+    "esbuild": "0.28.2",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0",

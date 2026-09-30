@@ -3,10 +3,11 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@12.5.1",
   "scripts": {
     "dev": "pnpm --parallel -r --if-present run dev",
     "cli": "pnpm -s --filter @agent4novel/cli run -s cli --",
-    "test": "pnpm -r --if-present run test",
+    "test": "pnpm -r --workspace-concurrency=1 --if-present run test",
     "typecheck": "pnpm -r --if-present run typecheck",
     "build": "pnpm -r --if-present run build"
   }

@@ -1,0 +1,19 @@
+services:
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:${A4N_HTTP_PORT:-8787}:8787"
+    environment:
+      A4N_MODEL: ${A4N_MODEL:-}
+      LONGCAT_API_KEY: ${LONGCAT_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      LONGCAT_BASE_URL: ${LONGCAT_BASE_URL:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-}
+      A4N_LLM_TIMEOUT_MS: ${A4N_LLM_TIMEOUT_MS:-120000}
+      A4N_SEED_DEMO: ${A4N_SEED_DEMO:-0}
+    volumes:
+      - data:/data
+    restart: unless-stopped
+    stop_grace_period: 10s
+volumes:
+  data:
