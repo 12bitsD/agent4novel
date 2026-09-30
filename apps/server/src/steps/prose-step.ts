@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { proseContentSchema, proseLimits } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
 import type { ArtifactStep } from '../pipeline/pipeline.js'
-import { callLlm, loadSkill } from './llm-call.js'
+import { callLlm, systemFor } from './llm-call.js'
 import { proseStepInputSchema, proseStepOutputSchema } from './prose-io.js'
 
 export function createProseStep(options: { systemPrompt?: string } = {}): ArtifactStep {
@@ -10,7 +10,7 @@ export function createProseStep(options: { systemPrompt?: string } = {}): Artifa
     id: 'prose', inputSchema: proseStepInputSchema, outputSchema: proseStepOutputSchema,
     async run(input, config) {
       const { chapter, upstream, regeneration } = proseStepInputSchema.parse(input)
-      const system = options.systemPrompt ?? loadSkill('prose')
+      const system = systemFor('prose', config, options.systemPrompt)
       const prompt = [
         `模式：${regeneration ? 'regenerate' : 'initial'}；当前章号：${chapter}`,
         `完整已通过章纲：\n${JSON.stringify(upstream.beat)}`,

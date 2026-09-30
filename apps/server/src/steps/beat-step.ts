@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { beatDraftSchema, beatLimits } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
 import { assignBeatIds } from '../beat-content.js'
-import { callLlm, loadSkill } from './llm-call.js'
+import { callLlm, systemFor } from './llm-call.js'
 import { beatStepInputSchema, beatStepOutputSchema } from './beat-io.js'
 
 export function createBeatStep(options: { systemPrompt?: string } = {}): ArtifactStep {
@@ -12,7 +12,7 @@ export function createBeatStep(options: { systemPrompt?: string } = {}): Artifac
     async run(input, config) {
       const { chapter, upstream, regeneration } = beatStepInputSchema.parse(input)
       const mode = regeneration ? 'regenerate' : 'initial'
-      const system = options.systemPrompt ?? loadSkill('beat')
+      const system = systemFor('beat', config, options.systemPrompt)
       const prompt = [
         `模式：${mode}；当前章号：${chapter}`,
         `完整已通过大纲：\n${JSON.stringify(upstream.outline)}`,

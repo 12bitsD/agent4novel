@@ -2,13 +2,13 @@
 wiki_id: "009"
 ticket: 9
 ticket_state: done
-context_state: current
+context_state: mixed
 summary: "WorkStore接入SQLite，保留全部版本、事务条件写入与真实进程重启恢复。"
 topics: ["sqlite", "persistence", "transactions", "restart-recovery"]
 code_paths: ["apps/server/src/store/**", "apps/server/src/start.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts"]
 symbols: ["WorkStore", "SqliteStore", "AppendOptions", "StoreContractError"]
 inherits: ["019", "006", "002"]
-changed_by: ["033"]
+changed_by: ["033", "007"]
 read_when: ["implement-storage-adapter", "recover-persisted-work", "change-database-schema"]
 last_context_reviewed: "2026-09-30"
 ---
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-09-30"
 - **原始目的**：[#9](https://github.com/12bitsD/agent4novel/issues/9) 将内存存储替换成 SQLite，作品重启不丢。
 - **实际落地**：生产装配使用SQLite；保存全部产物版本、状态和输入依据，正常退出及强制终止后的CLI多章恢复已验证；[PR36](https://github.com/12bitsD/agent4novel/pull/36)已合并、#9已关闭，终止状态见[完成评论](https://github.com/12bitsD/agent4novel/issues/9#issuecomment-5897744738)。
 - **当前价值**：继承 #19 共享验证和 #6 多章/CAS/输入引用；短事务提交，模型调用在事务外。
-- **后续变化**：#33 验证容器与数据卷，#7 接入配置及文件引用。
+- **后续变化**：[Wiki033](./033-local-docker-ci.md)已验证容器与整个数据目录卷；[Wiki007](./007-author-agent-config.md)将严格v1事务迁移v2，新增配置版本/文件元数据，文本仍在文件中。本票原v1设计和审核保留为历史，当前形状见schema。
 - **代码入口**：WorkStore、SQLite适配器、生产装配、旧路由/流水线的复合写入。
 
 ## 设计目的
@@ -126,6 +126,14 @@ TDD证据：`store-options-red.log`→GREEN覆盖原子状态/保护种类；`st
 - **决定**：最小扩展已有Store选项，将最终状态和实际前置条件放入一次事务。
 - **影响**：两适配器与生产调用方同时更新，保留原始版本/关卡语义，增加跨连接和进程证据。
 - **上下文处理**：preserve #19/#6内容与并发规则；新增SQL实现及其差异，不重写旧审核证据。
+
+### 2026-09-30 — 作者配置接入版本文件
+
+- **触发证据**：#7 的生产配置、文件校验、操作快照和整目录恢复测试。
+- **原假设**：原票交付时只有旧Work.config/数据库和运行期配置。
+- **决定**：当前作者配置与受管文件见[Wiki007](./007-author-agent-config.md)，provider HOW仍由016持有，部署HOW仍由033持有。
+- **影响**：严格SQLitev1迁移v2，备份含prompts目录；保存只影响下次操作，不改旧产物。
+- **上下文处理**：preserve原始目的、历史失败和完成审核证据；replace顶部当前路由事实。
 
 ## 交接结论
 

@@ -2,13 +2,13 @@
 wiki_id: "016"
 ticket: 16
 ticket_state: done
-context_state: current
+context_state: mixed
 summary: "ModelRuntime 统一模型、凭据、结构化输出和超时；LongCat 默认关闭 thinking，并支持有界生成参数覆盖。"
 topics: ["model-runtime", "provider-config", "generation-parameters", "thinking", "credentials", "base-url-security", "structured-output", "llm-timeouts"]
 code_paths: ["apps/server/src/index.ts", "apps/server/src/steps/llm.ts", "apps/server/src/steps/llm-call.ts", "apps/server/src/config/local-env.ts", "apps/server/src/start.ts", "apps/server/src/step-lab-main.ts", "apps/cli/src/local-step.ts", "packages/contracts/src/step.ts", "apps/cli/src/client.ts", ".env.example"]
 symbols: ["ModelRuntime", "SupportedModelId", "ModelConfigError", "createModelRuntime", "modelRuntime", "generationSettings", "generationParametersSchema", "callLlm", "run-step", "DEFAULT_CLI_TIMEOUT_MS", "DEFAULT_ADVANCE_TIMEOUT_MS", "A4N_LLM_TIMEOUT_MS", "A4N_CLI_TIMEOUT_MS", "llm-timeout"]
 inherits: ["014"]
-changed_by: ["013", "005", "033"]
+changed_by: ["013", "005", "033", "007"]
 read_when: ["configure-model-provider", "configure-generation-parameters", "run-isolated-step", "add-model-provider", "debug-llm-runtime", "change-llm-timeout", "audit-credential-safety"]
 last_context_reviewed: "2026-09-30"
 ---
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-09-30"
 - **原始目的**：把散落且 DeepSeek-only 的运行时选择收敛到 ModelRuntime，使 Pipeline 与 RealStep 无需感知 provider。
 - **实际落地**：DeepSeek 与 LongCat 2.0 共用 registry；源码server入口安全加载`.env.local`，编译/容器入口只接收运行期环境；共同校验 URL、模型、credential、单次 LLM timeout 和本地 Zod。generationSettings 统一生产与独立节点的生成参数；LongCat 默认 disabled/0.9/0.95，既有接回验证状态见“测试与验证”。
 - **当前价值**：本文是 provider 配置、运行时行为、错误语义与验证状态的当前唯一 HOW。
-- **后续变化**：CLI／telemetry／smoke 仍由 [Wiki 014](./014-agent-cli-telemetry.md) 拥有；[Wiki 013](./013-setting-generation-review.md) 新增 Setting，显式禁用该步骤的 SDK 重试并记录新实测。[Wiki 005](./005-beat-generation-review.md) 增加 Beat 独立预算、零 SDK 重试和共享安全错误分类。[Wiki 033](./033-local-docker-ci.md)持有本机容器启动与卷操作，模型HOW仍由本文维护。本文 work ID 均为历史进程快照，不代表当前仍存活。
+- **后续变化**：CLI／telemetry／smoke 仍由 [Wiki 014](./014-agent-cli-telemetry.md) 拥有；[Wiki 013](./013-setting-generation-review.md) 新增 Setting，显式禁用该步骤的 SDK 重试并记录新实测。[Wiki 005](./005-beat-generation-review.md) 增加 Beat 独立预算、零 SDK 重试和共享安全错误分类。[Wiki 033](./033-local-docker-ci.md)持有本机容器启动与卷操作，模型HOW仍由本文维护。[Wiki007](./007-author-agent-config.md)持有作品可编辑配置、文件与操作快照，旧Work.config仅兼容来源；本文work ID均为历史进程快照，不代表当前仍存活。
 - **代码入口**：[ModelRuntime](../../apps/server/src/steps/llm.ts)、[LLM call](../../apps/server/src/steps/llm-call.ts)、[generation schema](../../packages/contracts/src/step.ts)、[local env loader](../../apps/server/src/config/local-env.ts)、[独立 worker](../../apps/server/src/step-lab-main.ts)、[CLI timeout](../../apps/cli/src/client.ts)。
 
 ## 设计目的
@@ -68,7 +68,7 @@ shell/CI 与 server 入口加载的 .env.local 进入 ModelRuntime，再由 regi
 3. 只有 LongCat key 时选 longcat:LongCat-2.0。
 4. 两个 key 都没有时进入 demo，所有已注册步骤使用 FakeStep，不触发远程调用。
 
-Work.config.model 可覆盖启动默认值。当前没有公开 UI/API 修改它；无效 ID 或缺少相应 key 会在 Step 边界返回不可重试的 llm-unavailable，不会自动改用另一家 provider。
+旧Work.config.model仅在作者revision0作为兼容覆盖；保存作者配置后只使用author document及启动默认。当前作品通过[作者配置](./007-author-agent-config.md)公开UI/API保存作品默认及节点覆盖；live模式保存前核对所选模型和对应key，无效配置安全400且不调用模型；操作使用开始时快照，不自动改用另一家provider。
 
 切换已注册 provider 只改变模型 ID。新增 provider 必须选择正确 adapter、注册 provider、扩展 SupportedModelId 与 credential 校验，并补 transport 测试。
 
@@ -99,7 +99,7 @@ run-step 的参数按“显式 flag → config-file 对应字段 → 所选模�
 
 当前接口明确拒绝 `--top-k`，config-file 中的 topK、top_k 和其他未知字段也会失败；不会悄悄忽略或将其转换为 topP。参数通过 generateObject options 传给 adapter，telemetry.generation 只保留实际解析出的公开值，不包含 reasoning 内容。未在配置/模型解析前开始调用的失败不保证带 generation 或 telemetry。
 
-作品仍只通过内部 AgentConfig 覆盖这些参数；本轮未增加作品配置 UI/API。run-step 可用 config-file 选择模型和参数，但不保存 Work.config。它要求真实模型配置，缺 key 时失败，不切到 demo 或其他 provider；模型选择仍需符合本页 credential 与 Base URL 边界。
+原#16只通过内部AgentConfig覆盖；#7已扩展为独立作者配置revision、UI/API及操作快照，参数有效性仍由ModelRuntime保证。run-step 可用 config-file 选择模型和参数，但不保存 Work.config。它要求真实模型配置，缺 key 时失败，不切到 demo 或其他 provider；模型选择仍需符合本页 credential 与 Base URL 边界。
 
 独立 worker 先加载 `.env.local`，再用 config-file 的 `model`（如有）覆盖自身 A4N_MODEL，最后初始化 ModelRuntime。因此请求模型优先于 shell/文件中的启动默认；没有请求模型时沿用“默认选择与作品覆盖”中的启动顺序。校验和 credential 要求针对本次选中的模型：即使旧启动默认缺 key，只要请求模型有效且有 key，也可运行；请求模型缺 key 时返回 llm-config-invalid。覆盖只作用于这一 worker，不修改父进程、文件或常驻 server；常驻 server 仍拒绝缺少对应 key 的显式 A4N_MODEL。
 
@@ -170,11 +170,11 @@ ModelRuntime 测试以合成 key 与 fake fetch 覆盖选择、缺 key、非法 
 | 非 LongCat 显式 thinking | 通过 CLI 参数形状校验后，运行时返回 llm-unavailable，retryable=false |
 | provider timeout / 非法输出 | llm-timeout / llm-invalid-output，retryable=true |
 | 网络/provider 其他错误 | llm-unavailable，通常可重试并保留 attemptId |
-| CLI 先到上限 / server 重启 | network-error / 内存作品与 telemetry 丢失 |
+| CLI 先到上限 / server 重启 | network-error / 已提交SQLite作品与文件恢复；telemetry窗口及运行中调用不恢复 |
 
 明确不做：
 
-- 不做 Responses API、动态 provider DSL、自动发现、failover 或每作品模型 UI/API。
+- #16原票不做Responses API、动态provider DSL、自动发现、failover；每作品模型UI/API后来由#7扩展。
 - 不把 key 写入作品、SQLite、浏览器、产物或可查询 telemetry。
 - 不做持久化 store、后台 job、队列或异步 advance。
 
@@ -243,6 +243,14 @@ ModelRuntime 测试以合成 key 与 fake fetch 覆盖选择、缺 key、非法 
 - **决定**：保留独立 protocol smoke 的数值证据和 CLI smoke 的故障结论，明确禁止推断历史 work ID 或完整 telemetry 当前仍可访问。
 - **影响**：需要样例状态或第二份完整可复验证据时，必须在当前 server 进程重新创建并保存脱敏结果。
 - **上下文处理**：compact；保留有证据支持的指标与故障结论，删除易误导的现场状态和可复验性承诺。
+
+### 2026-09-30 — 作者配置接入版本文件
+
+- **触发证据**：#7 的生产配置、文件校验、操作快照和整目录恢复测试。
+- **原假设**：原票交付时只有旧Work.config/数据库和运行期配置。
+- **决定**：当前作者配置与受管文件见[Wiki007](./007-author-agent-config.md)，provider HOW仍由016持有，部署HOW仍由033持有。
+- **影响**：严格SQLitev1迁移v2，备份含prompts目录；保存只影响下次操作，不改旧产物。
+- **上下文处理**：preserve原始目的、历史失败和完成审核证据；replace顶部当前路由事实。
 
 ## 交接结论
 

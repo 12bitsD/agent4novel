@@ -8,6 +8,8 @@ import {
   artifactSchema, pipelineStateSchema, appConfigSchema, httpErrorSchema, matchesStartChapterResponse,
 } from '@agent4novel/contracts'
 import { withDeadline } from './request-deadline.js'
+import { authorConfigViewSchema, authorConfigReceiptSchema, authorConfigSaveSchema, agentFileSchema, agentFileReadSchema, agentFileUploadSchema,
+  managedAgentFileText, type AuthorConfigSave, type AgentFileUpload } from '@agent4novel/contracts'
 export type { AdvanceOutcomeDto, StartChapterRequest, AppConfig } from '@agent4novel/contracts'
 
 function invalidResponse(write: boolean): Error {
@@ -50,6 +52,43 @@ function post(url: string, body?: unknown): Promise<unknown> {
 
 export async function getConfig() {
   return validate(appConfigSchema, await request('/api/config'))
+}
+async function configRequest(url: string, method = 'GET', body?: unknown): Promise<unknown> {
+  try {
+    return await withDeadline(method === 'GET' ? 10_000 : 30_000, signal => request(url, {
+      method, signal, ...(body !== undefined ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}),
+    }))
+  } catch (error) {
+    const status = (error as { status?: number })?.status
+    if (method !== 'GET' && (status === undefined || status >= 500)) throw Object.assign(new Error('配置写入结果尚未确认，请保留原请求并核对'), { writeOutcome: 'unknown' })
+    throw error
+  }
+}
+const configBase = (workId: string) => `/api/works/${encodeURIComponent(workId)}`
+export async function getAuthorConfig(workId: string) {
+  return validate(authorConfigViewSchema, await configRequest(`${configBase(workId)}/agent-config`), result => result.workId === workId)
+}
+export async function saveAuthorConfig(workId: string, input: AuthorConfigSave) {
+  const request = authorConfigSaveSchema.parse(input)
+  return validate(authorConfigReceiptSchema, await configRequest(`${configBase(workId)}/agent-config`, 'PUT', request), result => result.workId === workId
+    && result.requestId === request.requestId && result.revision === request.expectedRevision + 1 && JSON.stringify(result.document) === JSON.stringify(request.document), true)
+}
+export async function uploadAgentFile(workId: string, input: AgentFileUpload) {
+  const request = agentFileUploadSchema.parse(input)
+  const bytes = new TextEncoder().encode(managedAgentFileText(input.kind, input.text))
+  const hash = await fileHash(bytes)
+  return validate(agentFileSchema, await configRequest(`${configBase(workId)}/agent-files`, 'POST', request), result => result.workId === workId
+    && result.id === request.requestId && result.kind === request.kind && result.sha256 === hash && result.byteLength === bytes.length, true)
+}
+async function fileHash(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes as BufferSource)
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')
+}
+export async function getAgentFile(workId: string, id: string) {
+  const result = validate(agentFileReadSchema, await configRequest(`${configBase(workId)}/agent-files/${encodeURIComponent(id)}`), result => result.file.workId === workId && result.file.id === id)
+  const bytes = new TextEncoder().encode(result.text)
+  if (result.file.byteLength !== bytes.length || result.file.sha256 !== await fileHash(bytes)) throw invalidResponse(false)
+  return result
 }
 export async function listWorks(): Promise<WorkSummary[]> {
   return validate(workListResponseSchema, await request('/api/works'))

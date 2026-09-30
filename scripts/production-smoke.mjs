@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { createHash, randomUUID } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
@@ -10,6 +11,7 @@ import { join } from 'node:path'
 const root = fileURLToPath(new URL('../', import.meta.url))
 const folder = await mkdtemp(join(tmpdir(), 'a4n-compiled-'))
 let requests = 0
+const systems = []
 const caption = { inputStage: '脑洞', summary: '合成提炼稿。', elements: [{ kind: '人物', content: '主角' }], gaps: [] }
 const creative = { directions: [1, 2].map(i => ({ title: `合成方向${i}`, hook: '钩子', tags: [], synopsis: '合成概要', characters: [], setting: [], payoffs: [], outline: [] })) }
 const provider = createServer(async (req, res) => {
@@ -19,6 +21,12 @@ const provider = createServer(async (req, res) => {
     for await (const chunk of req) body += chunk
     const request = JSON.parse(body)
     assert.ok(request.messages.some(message => message.role === 'system' && message.content.length > 20))
+    const system = request.messages.find(message => message.role === 'system').content
+    assert.ok(system.includes('AUTHOR_GUIDANCE_SENTINEL'))
+    assert.equal(request.model, 'LongCat-2.0')
+    assert.equal(request.temperature, 0.25)
+    assert.equal(request.top_p, 0.8)
+    systems.push(system)
     requests += 1
     assert.ok(requests <= 2)
     res.writeHead(200, { 'content-type': 'application/json' })
@@ -65,13 +73,25 @@ try {
     })
   })
   const work = await cli(['create', '--seed', '编译运行合成素材'])
+  const promptPath = join(folder, 'author-prompt.md'), configPath = join(folder, 'author-config.json')
+  await writeFile(promptPath, 'AUTHOR_GUIDANCE_SENTINEL: concise writing.')
+  const prompt = await cli(['upload-prompt', work.id, '--file', promptPath, '--request-id', randomUUID()])
+  await writeFile(configPath, JSON.stringify({ requestId: randomUUID(), expectedRevision: 0,
+    document: { preferences: { genre: 'mock-genre' }, defaults: { model: 'longcat:LongCat-2.0', systemPromptRef: prompt.id, temperature: 0.25, topP: 0.8 }, steps: {} } }))
+  await cli(['save-agent-config', work.id, '--file', configPath])
+  assert.equal((await cli(['agent-config', work.id])).revision, 1)
   const outcome = await cli(['advance', work.id])
   assert.equal(outcome.kind, 'advanced', JSON.stringify(outcome))
   assert.equal(outcome.stepId, 'creative')
   assert.equal(requests, 2)
   assert.deepEqual(outcome.telemetry.map(entry => entry.ok), [true, true])
+  assert.deepEqual(outcome.telemetry.map(entry => entry.configRevision), [1, 1])
+  assert.deepEqual(outcome.telemetry.map(entry => entry.configFiles), [[{ id: prompt.id, sha256: prompt.sha256 }], [{ id: prompt.id, sha256: prompt.sha256 }]])
+  assert.deepEqual(outcome.telemetry.map(entry => entry.systemHash), systems.map(system => createHash('sha256').update(system).digest('hex').slice(0, 12)))
+  assert.ok(!systems[0].includes('mock-genre') && systems[1].includes('mock-genre'))
   assert.ok(!output.includes('synthetic-local-test') && !stderr.includes('synthetic-local-test'))
-  console.log('PASS: compiled server from foreign cwd, same-origin Web, file-based SKILL loading and real SDK schema via local mock transport')
+  assert.ok(!output.includes('AUTHOR_GUIDANCE_SENTINEL') && !stderr.includes('AUTHOR_GUIDANCE_SENTINEL'))
+  console.log('PASS: compiled server, same-origin Web, author revision/file hashes, actual system/model/sampling and real SDK schema via local mock transport')
 } finally {
   if (child && child.exitCode === null && child.signalCode === null) {
     await new Promise(resolve => {

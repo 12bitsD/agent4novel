@@ -17,6 +17,7 @@ import { postBeatCommand } from '../beat-api.js'
 import ProseReview from './ProseReview.js'
 import { initProseReview, isProseDirty, reduceProseReview, type ProseReviewState, type ProseReviewAction } from '../prose-review.js'
 import { postProseCommand } from '../prose-api.js'
+import AuthorConfigPanel from './AuthorConfigPanel.js'
 
 // Workspace 只渲染 server 读模型(workflowState/allowedActions 来自 GET /works/:id 同快照),
 // 不在前端重建状态机。当前章生成/重试走 advance，开始下一章走独立条件请求。
@@ -54,6 +55,8 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
   const proseRef = useRef<ProseReviewState | null>(null)
   const setProse = useCallback((next: ProseReviewState) => { proseRef.current = next; setProseState(next) }, [])
   const [leaving, setLeaving] = useState(false)
+  const [configOpen, setConfigOpen] = useState(false)
+  const [configGuard, setConfigGuard] = useState({ dirty: false, locked: false })
   const settingRef = useRef<SettingReviewState | null>(null)
   const workRef = useRef<WorkView | null>(null)
   const mounted = useRef(false)
@@ -127,8 +130,8 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
     return () => { mounted.current = false; readSequence.current++; commandSequence.current++ }
   }, [refresh])
   const dirty = (setting !== null && (isSettingDirty(setting) || setting.hasUnknownWrite || ['submitting', 'reconciling'].includes(setting.phase)))
-    || (beat !== null && isBeatDirty(beat)) || (prose !== null && isProseDirty(prose)) || generating || generationUncertain || starting || startUncertain
-  const navigationLocked = generating || generationUncertain || starting || startUncertain
+    || (beat !== null && isBeatDirty(beat)) || (prose !== null && isProseDirty(prose)) || generating || generationUncertain || starting || startUncertain || configGuard.dirty
+  const navigationLocked = generating || generationUncertain || starting || startUncertain || configGuard.locked
     || !!prose && (prose.hasUnknownWrite || ['saving', 'submitting', 'regenerating', 'reconciling'].includes(prose.phase))
     || !!beat && (beat.hasUnknownWrite || ['submitting', 'regenerating', 'reconciling'].includes(beat.phase))
     || !!setting && (setting.hasUnknownWrite || ['submitting', 'reconciling'].includes(setting.phase))
@@ -370,6 +373,8 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
         ← 返回书架
       </button>
       {work && <h1>{work.title}</h1>}
+      {work && <button type="button" style={{ ...btnSecondary, marginBottom: 16 }} onClick={() => setConfigOpen(true)}>Agent 配置</button>}
+      {configOpen && <AuthorConfigPanel workId={workId} onGuard={setConfigGuard} />}
       {!!work?.chapters.length && <nav aria-label="章节目录" className="chapter-directory">
         <h2>章节目录</h2><div className="setting-actions">{work.chapters.map(item => <button type="button" key={item.chapter}
           data-chapter={item.chapter} aria-current={item.chapter === chapter ? 'page' : undefined}

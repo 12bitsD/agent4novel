@@ -1,6 +1,9 @@
 import { advanceOutcomeDtoSchema, httpErrorSchema, artifactSchema, workSchema, workListResponseSchema, pipelineStateSchema, settingApproveResponseSchema, workViewSchema, diagnosticResponseSchema, diagnosticQuerySchema } from '@agent4novel/contracts'
 import type { BeatSubmission, ProseSubmission, DiagnosticQuery, StartChapterRequest, WorkCreateRequest, SelectCreativeRequest, OutlineDraftRequest, ApproveRequest } from '@agent4novel/contracts'
 import { appConfigSchema, matchesStartChapterResponse } from '@agent4novel/contracts'
+import { agentFileSchema, agentFileReadSchema, agentFileUploadSchema, authorConfigViewSchema, authorConfigReceiptSchema, authorConfigSaveSchema,
+  managedAgentFileText, type AuthorConfigSave, type AgentFileUpload } from '@agent4novel/contracts'
+import { createHash } from 'node:crypto'
 import type {
   ArtifactKind,
   OutlineDraft,
@@ -121,8 +124,35 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
       clearTimeout(timer)
     }
   }
+  async function configWrite<T>(run: () => Promise<T>): Promise<T> {
+    try { return await run() }
+    catch (error) {
+      if (error instanceof CliError && (error.status === undefined || error.status >= 500)) {
+        throw new CliError(error.message, error.code, undefined, error.retryable, error.attemptId, error.issues, { ...error.details, writeOutcome: 'unknown' })
+      }
+      throw error
+    }
+  }
 
   return {
+    getAuthorConfig: async (workId: string) => validate(authorConfigViewSchema, await call<unknown>('GET', `/api/works/${encodeURIComponent(workId)}/agent-config`), view => view.workId === workId),
+    saveAuthorConfig: async (workId: string, input: AuthorConfigSave) => {
+      const parsed = authorConfigSaveSchema.safeParse(input)
+      if (!parsed.success) throw new CliError('Invalid author configuration request', 'invalid-input')
+      const request = parsed.data
+      return validate(authorConfigReceiptSchema, await configWrite(() => call<unknown>('PUT', `/api/works/${encodeURIComponent(workId)}/agent-config`, request, 30_000)),
+        result => result.workId === workId && result.requestId === request.requestId && result.revision === request.expectedRevision + 1 && JSON.stringify(result.document) === JSON.stringify(request.document), true)
+    },
+    uploadAgentFile: async (workId: string, input: AgentFileUpload) => {
+      const parsed = agentFileUploadSchema.safeParse(input)
+      if (!parsed.success) throw new CliError('Invalid agent file request', 'invalid-input')
+      const text = managedAgentFileText(input.kind, input.text)
+      return validate(agentFileSchema, await configWrite(() => call<unknown>('POST', `/api/works/${encodeURIComponent(workId)}/agent-files`, parsed.data, 30_000)),
+        result => result.workId === workId && result.id === input.requestId && result.kind === input.kind && result.byteLength === Buffer.byteLength(text)
+          && result.sha256 === createHash('sha256').update(text).digest('hex'), true)
+    },
+    getAgentFile: async (workId: string, fileId: string) => validate(agentFileReadSchema, await call<unknown>('GET', `/api/works/${encodeURIComponent(workId)}/agent-files/${encodeURIComponent(fileId)}`),
+      result => result.file.workId === workId && result.file.id === fileId && result.file.byteLength === Buffer.byteLength(result.text) && result.file.sha256 === createHash('sha256').update(result.text).digest('hex')),
     getConfig: async () => validate(appConfigSchema, await call<unknown>('GET', '/api/config')),
     listWorks: async (): Promise<WorkSummary[]> => validate(workListResponseSchema, await call<unknown>('GET', '/api/works')),
     createWork: async (input: WorkCreateRequest): Promise<Work> =>

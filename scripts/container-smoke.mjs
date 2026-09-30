@@ -5,6 +5,7 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { randomUUID } from 'node:crypto'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const folder = await mkdtemp(join(tmpdir(), 'a4n-container-'))
@@ -71,6 +72,13 @@ try {
   workId = smoke.workId
   const first = smoke.final.artifacts.find(a => a.kind === 'prose' && a.chapter === 1)
   assert.equal(first.humanStatus, 'approved')
+  const promptPath = join(folder, 'prompt.md'), skillPath = join(folder, 'SKILL.md')
+  await writeFile(promptPath, 'Container author guidance sentinel.')
+  await writeFile(skillPath, '---\nname: plain-writing\ndescription: Keep sentences clear\n---\nUse concrete actions.')
+  const promptFile = await cli(['upload-prompt', workId, '--file', promptPath, '--request-id', randomUUID()])
+  const skillFile = await cli(['upload-skill', workId, '--file', skillPath, '--request-id', randomUUID()])
+  await submit('save-agent-config', { requestId: randomUUID(), expectedRevision: 0,
+    document: { preferences: { style: 'plain' }, defaults: { systemPromptRef: promptFile.id, skills: [skillFile.id] }, steps: { caption: { skills: [], systemPromptRef: null } } } })
   await submit('start-chapter', { chapter: 2, expectedPreviousProseId: first.id, expectedPreviousProseVersion: first.version })
   const beat = await cli(['get', workId, '--kind', 'beat', '--chapter', '2'])
   await submit('approve-beat', { chapter: 2, expectedArtifactId: beat.id, expectedHeadVersion: beat.version, content: beat.content })
@@ -84,6 +92,9 @@ try {
   const before = await cli(['get', workId])
   const list = await cli(['list'])
   const rows = await history()
+  const configBefore = await cli(['agent-config', workId])
+  const promptBefore = await cli(['get-agent-file', workId, promptFile.id])
+  const skillBefore = await cli(['get-agent-file', workId, skillFile.id])
   assert.equal(before.currentChapter, 2)
   assert.equal(before.chapters[1].needsContinuityReview, true)
   assert.deepEqual(before.chapters.map(c => c.proseStatus), ['approved', 'approved'])
@@ -94,6 +105,9 @@ try {
   assert.deepEqual(await cli(['get', workId]), before)
   assert.deepEqual(await cli(['list']), list)
   assert.deepEqual(await history(), rows)
+  assert.deepEqual(await cli(['agent-config', workId]), configBefore)
+  assert.deepEqual(await cli(['get-agent-file', workId, promptFile.id]), promptBefore)
+  assert.deepEqual(await cli(['get-agent-file', workId, skillFile.id]), skillBefore)
   const logs = await cli(['logs', workId])
   assert.deepEqual(logs.telemetry, [])
   assert.deepEqual(logs.commands, [])
@@ -108,6 +122,9 @@ try {
   assert.deepEqual(await cli(['get', workId]), before)
   assert.deepEqual(await cli(['list']), list)
   assert.deepEqual(await history(restored), rows)
+  assert.deepEqual(await cli(['agent-config', workId]), configBefore)
+  assert.deepEqual(await cli(['get-agent-file', workId, promptFile.id]), promptBefore)
+  assert.deepEqual(await cli(['get-agent-file', workId, skillFile.id]), skillBefore)
   console.log('PASS: same-origin Web/API, no-key two-chapter CLI, non-root image, full history and gates after recreation and stopped-directory backup/restore')
 } finally {
   // Only this randomly named smoke project and its own synthetic volume are removed.

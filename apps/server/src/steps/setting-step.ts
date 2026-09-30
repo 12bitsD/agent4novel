@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { settingDraftSchema } from '@agent4novel/contracts'
 import type { ArtifactStep } from '../pipeline/pipeline.js'
 import { assignSettingIds } from '../setting-content.js'
-import { callLlm, loadSkill, truncateSeed } from './llm-call.js'
+import { callLlm, systemFor, truncateSeed } from './llm-call.js'
 import { settingStepInputSchema, settingStepOutputSchema } from './setting-io.js'
 
 export function createSettingStep(options: { systemPrompt?: string } = {}): ArtifactStep {
@@ -14,7 +14,7 @@ export function createSettingStep(options: { systemPrompt?: string } = {}): Arti
       const { upstream } = settingStepInputSchema.parse(input)
       const draft = await callLlm({
         schema: settingDraftSchema,
-        system: options.systemPrompt ?? loadSkill('setting'),
+        system: systemFor('setting', config, options.systemPrompt),
         prompt: [
           `作者原始素材:\n${truncateSeed(input.seed)}`,
           `素材提炼稿:\n${JSON.stringify(upstream.caption, null, 2)}`,

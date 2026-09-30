@@ -26,6 +26,18 @@ Live 模式会把生成所需的素材和上游产物发送给所选远程 provi
 
 ## 独立运行节点与对照 SP
 
+作品的作者配置使用 [Wiki 007](../../../docs/wiki/007-author-agent-config.md) 的独立版本接口；凭据/Base URL继续由Wiki016持有。配置文件例为 `{"requestId":"<UUID>","expectedRevision":0,"document":{"preferences":{"style":"简洁自然"},"defaults":{},"steps":{}}}`；先读agent-config，使用看到的revision，不自动回填。上传文件需显式request-id；同一冻结请求可由作者明确重试，不自动重发。网络/5xx/不匹配回执为unknown，先读配置/文件检查；旧幂等回执不表示服务器仍停在该revision。只有保存配置后选择才生效，运行中的操作冻结实际配置和文件文本；上传只作指导，不执行工具。
+
+```bash
+./apps/cli/bin/a4n agent-config <workId>
+./apps/cli/bin/a4n upload-prompt <workId> --file guidance.md --request-id <UUID>
+./apps/cli/bin/a4n upload-skill <workId> --file SKILL.md --request-id <UUID>
+./apps/cli/bin/a4n save-agent-config <workId> --file config-request.json
+./apps/cli/bin/a4n get-agent-file <workId> <fileId>
+```
+
+文件≤32KiB，库≤64文件，每步≤4Skill，frontmatter和装配预算由服务端校验；CLI核对实际文件完整hash/字节数及资源归属。备份同时包含SQLite和prompts目录，不能只恢复数据库。Web配置/文件GET等待10秒、写入30秒；CLI读沿普通300秒，写30秒（显式CLI超时仍优先）；不修改生成期限。源码Step更新需新进程，编译Web更新需build和浏览器reload。
+
 对照单个节点时，先读 [Wiki 014 单节点实验](../../../docs/wiki/014-agent-cli-telemetry.md#单节点实验-run-step)，按节点补齐 upstream content。完整 monorepo 安装依赖后可直接运行，无需启动 HTTP server；worker 使用真实 provider，不创建或修改作品。
 
 ```bash
@@ -86,10 +98,11 @@ Prose文件沿用章号/id/version基线，content为`{text}`；save额外必须
 
 ```
 { requestId?, stepId, ok, latencyMs, inputTokens, outputTokens, finishReason, error,
-  generation?, promptHash, systemHash, attemptId }
+  generation?, promptHash, systemHash, attemptId, configRevision?, configFiles? }
 ```
 
 - `systemHash` 是本次实际 SP 内容的 hash：默认来自生产 SKILL.md，自定义 SP 时来自传入内容；generation 记录实际解析的公开生成参数。
+- 作者配置调用的configRevision与configFiles（ID、完整hash）记录操作快照；systemHash包含内置任务指导和作者指导，不记录指导文本或凭据。独立run-step不自动读取某作品的作者配置。
 - 失败排查:`logs <workId>` 回看当前窗口;`finishReason=length` = 输出被 token 上限截断;`finishReason=stop` 但 `ok=false` = 内容没过 schema；只暴露安全分类、长度与字段路径，不输出原始 text/cause/provider message
 - requestId / attemptId 可串联 `llm.call`、`llm.error`、命令摘要和响应。
 - 日志响应包含 `telemetry`、`commands`、`window`；LLM 与命令各保留全局最近 1000 条，过滤不会扩大窗口。`processInstanceId` 随进程重启变化；截断和空结果都不是未执行证明。

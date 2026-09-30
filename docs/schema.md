@@ -28,14 +28,14 @@ Work = {
   id: string
   title: string
   seed: string          // 脑洞原文（启动界面输入/上传文本）
-  config: AgentConfig   // 每作品可覆盖的 Agent 配置
+  config: AgentConfig   // 旧作品配置兼容来源；作者编辑使用下方独立revision
   createdAt: string
 }
 ```
 
 ### AgentConfig（Agent 配置）
 
-`agentConfigSchema` 保留既有 model、systemPrompt、skills、tools、directionCount，并加入可选 `thinking: "enabled" | "disabled"`、`temperature: number`（0–1）、`topP: number`（大于 0 且不超过 1）。`generationParametersSchema` 对这三项采用 strict 校验；省略项由 ModelRuntime 解析，provider 支持范围和默认值以 [Wiki 016](./wiki/016-model-runtime-provider-config.md) 为准。没有新增公开的作品配置编辑 UI/API。
+`agentConfigSchema` 保留既有 model、systemPrompt、skills、tools、directionCount，并加入可选 `thinking: "enabled" | "disabled"`、`temperature: number`（0–1）、`topP: number`（大于 0 且不超过 1）。`generationParametersSchema` 对这三项采用 strict 校验；省略项由 ModelRuntime 解析，provider 支持范围和默认值以 [Wiki 016](./wiki/016-model-runtime-provider-config.md) 为准。#7新增独立作者配置UI/API，见下方；解析后的AgentConfig携带可选安全`configRevision`与`configFiles:[{id,sha256}]`溯源，systemPrompt为实际已读取指导，skills/tools不作为工具执行授权。
 
 `LlmTelemetry.generation?` 使用相同 schema，记录本次已解析的生成参数。它是安全诊断，不含凭据或模型正文。
 
@@ -93,7 +93,7 @@ Web/CLI 在消费端解析公开响应并核对资源身份。错误体畸形、
 
 ## SQLite 持久化：#9
 
-生产使用 [`SqliteStore`](../apps/server/src/store/sqlite-store.ts) 实现 `WorkStore`；`InMemoryStore` 继续用于行为测试。SQLite v1 由 [`sqlite-schema.ts`](../apps/server/src/store/sqlite-schema.ts) 定义，两张 `STRICT` 表持有作品与每个产物版本，不按 kind 拆表。
+生产使用 [`SqliteStore`](../apps/server/src/store/sqlite-store.ts) 实现 `WorkStore`；`InMemoryStore` 继续用于行为测试。SQLite v2 由 [`sqlite-schema.ts`](../apps/server/src/store/sqlite-schema.ts) 定义；继承 v1 的两张 `STRICT` 表持有作品与每个产物版本，不按 kind 拆表。v2 新增作者配置与版本文件元数据两表，文本不入数据库。
 
 | 表 | 列与存储形态 |
 | --- | --- |
@@ -113,7 +113,7 @@ Web/CLI 在消费端解析公开响应并核对资源身份。错误体畸形、
 
 ### Schema 版本与恢复边界
 
-数据库版本使用 `PRAGMA user_version = 1`。初始化在取得写锁后重新读取版本和结构，只对真正无用户对象的 v0 空库建表；已有 v1 必须匹配已知表与索引定义。未来版本、未知旧结构或不匹配结构使启动失败，不删库、不降级、不悄悄退回内存。当前未提供历史库修复、导入或旧内存实例迁移工具。
+数据库版本使用 `PRAGMA user_version = 2`。初始化在取得写锁后重新读取版本和结构，只对真正无用户对象的 v0 空库建表；已有 v1 必须精确匹配已知表与索引定义，再事务迁移到 v2；v2 同样严格核对结构。未来版本、未知旧结构或不匹配结构使启动失败，不删库、不降级、不悄悄退回内存。当前未提供历史库修复、导入或旧内存实例迁移工具。
 
 连接启用外键、WAL、`synchronous = FULL` 和 5 秒 busy timeout。默认数据目录与备份/恢复操作见 [Wiki 009](./wiki/009-sqlite-persistence.md)。同一数据目录中的已提交作品、产物版本、通过状态和 inputs 可在服务重启后读取；未保存页面草稿、进程内遥测、正在运行的模型调用不在该持久化范围。
 
@@ -477,6 +477,18 @@ save 必须校验 `expectedHumanStatus`：通过不增加版本，审批前发�
 共享 `recoverProseSubmission` 把保存回读的作品／章节、下一版本、新身份、相同状态和逐字符全文与冻结请求匹配；精确匹配可确认保存结果，较新或不同内容按冲突保留本地输入。通过确认要求同 id/version/createdAt 和逐字符全文。未知重写不能仅凭 GET 新版认领成功；更早 unknown 也不会被后续 not-committed 清除。客户端最多自动回读一次，重试使用冻结基线，不自动改版本覆盖服务器。
 
 生产 WorkStore 使用 SQLite，成功保存的正文及其版本、状态和 inputs 在同一数据目录中跨服务重启保留；未保存的页面内容不恢复。诊断仍是进程内窗口，重启不会自动续跑模型。实际持久性验证见 [Wiki 009](./wiki/009-sqlite-persistence.md)。设定检索与工具执行 #28、作品 Wiki 档案演进及联合通过 #29 均为后续扩展，不属于正文保存语义。
+
+## 作者配置与版本文件：#7
+
+可执行定义为 `packages/contracts/src/author-config.ts`；设计与证据见 [Wiki 007](./wiki/007-author-agent-config.md)。作品配置独立于内容关卡和旧 `Work.config`：`{preferences:{style?,genre?,payoff?}, defaults:controls, steps:{caption?,creative?,outline?,setting?,beat?,prose?}}`。省略字段继承，节点逐字段覆盖作品默认，数组替换；`systemPromptRef:null` 清除作者 Prompt，仍保留内置任务指导。模型、directionCount、thinking、temperature、topP 继续服从 ModelRuntime；tools 只接受空数组。偏好每项最多500字符；文风用于Prose、题材用于除Caption外各步、爽点用于Creative/Outline/Beat/Prose。
+
+`GET /api/works/:id/agent-config` 返回 `{workId,revision,document,files,effective}`，effective 包含恰好六个唯一节点的实际模型/provider/参数/偏好/文件版本与运行模式。响应校验全部文件归属、唯一ID、选择与库中元数据完全匹配及provider/model一致。初始revision为0，仅此时兼容旧Work.config；保存后仅作者document和启动默认生效。已提交请求先匹配不可变回执，当前文件/模型不可用不否认历史提交；`PUT` 接收严格 `{requestId:UUID,expectedRevision:safe>=0,document}`，返回不可变 `{workId,requestId,revision,document}` 回执。SQLite `author_configs` 以作品/revision保存每次配置，requestId去重；同请求返回原回执，同ID异内容或旧revision为409；保存不改变产物或状态。
+
+`POST /api/works/:id/agent-files` 接收 `{requestId:UUID,kind:'prompt'|'skill',text}`，返回 `{id,workId,kind,name,description,sha256,byteLength,createdAt}`；`GET /api/works/:id/agent-files/:fileId` 返回 `{file,text}`。客户端核对完整hash、UTF-8字节数及提交关联。Prompt由共享formatter封装成受管SKILL.md，Skill要求合法frontmatter name/description与非空正文。每文件≤32768 UTF-8 bytes，frontmatter≤4096 bytes，作品≤64文件，每节点≤4唯一Skill，装配后系统文本≤48000字符；HTTP请求≤196608 bytes且严格UTF-8/JSON。禁止重复YAML key和alias，不执行脚本/链接/附件或allowed-tools；校验失败安全400，文件缺失/损坏安全404，未知服务端写入错误不等于未提交。
+
+文件路径由服务端在 `<dataDir>/prompts/<workId的完整SHA256>/<fileId>/<name>/SKILL.md` 生成，拒绝受管目录symlink；先0600临时文件写入/fsync，再exclusive hardlink原子发布/fsync目录，最后提交 `agent_files` 元数据。并发不能覆盖版本；数据库失败可留下无引用文件，同ID相同文本可安全重用。数据库只存元数据/引用，恢复必须包含整个数据目录。文件不可变，不提供删除或跨作品共享入口。
+
+advance/start-chapter/regenerate在操作首个可执行节点之前解析全部实际配置和文件文本快照；同操作不混revision，后续保存只影响下一操作。文件篡改、预算或配置错误在调用模型前拒绝；已读取的快照不因外部文件改变而变更。遥测增加可选 `configRevision` 和 `configFiles:[{id,sha256}]`，模型及systemHash仍记录实际调用，不记录文本或凭据。内置输出契约、ID、内容预算和工程校验不能由作者指导关闭。
 
 ## 后续章：#6 续写契约
 

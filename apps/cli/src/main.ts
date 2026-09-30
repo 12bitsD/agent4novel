@@ -1,10 +1,11 @@
-import { readFileSync, openSync, readSync, closeSync } from 'node:fs'
-import { artifactKinds, beatLimits, proseLimits, diagnosticQuerySchema } from '@agent4novel/contracts'
+import { readFileSync } from 'node:fs'
+import { artifactKinds, beatLimits, proseLimits, diagnosticQuerySchema, authorConfigLimits, authorConfigSaveSchema, agentFileUploadSchema } from '@agent4novel/contracts'
 import type { ArtifactKind } from '@agent4novel/contracts'
 import { CliError, createClient, parseCliTimeoutMs } from './client.js'
 import * as cmd from './commands.js'
 import { runLocalStep } from './local-step.js'
 import { helpFor, parseCommandLine } from './command-line.js'
+import { readBoundedText, readRequestJson } from './request-file.js'
 
 // agent4novel CLI(#14):Agent 从命令行驱动全链路。stdout 只出 JSON;进度/错误走 stderr。
 // 用法:pnpm cli <command> [args] [--key value],server 地址 --url 或 A4N_BASE_URL(默认 http://localhost:8787)
@@ -36,6 +37,19 @@ async function main(): Promise<void> {
 
   let result: unknown
   switch (command) {
+    case 'agent-config': result = await client.getAuthorConfig(pos[0]); break
+    case 'get-agent-file': result = await client.getAgentFile(pos[0], pos[1]); break
+    case 'save-agent-config': {
+      const parsed = authorConfigSaveSchema.safeParse(readRequestJson(flags.file, 196_608, 'Configuration'))
+      if (!parsed.success) throw new CliError('Invalid author configuration request', 'invalid-input')
+      result = await client.saveAuthorConfig(pos[0], parsed.data); break
+    }
+    case 'upload-skill':
+    case 'upload-prompt': {
+      const parsed = agentFileUploadSchema.safeParse({ requestId: flags['request-id'], kind: command === 'upload-skill' ? 'skill' : 'prompt', text: readBoundedText(flags.file, authorConfigLimits.fileBytes, 'Agent file') })
+      if (!parsed.success) throw new CliError('Invalid agent file request', 'invalid-input')
+      result = await client.uploadAgentFile(pos[0], parsed.data); break
+    }
     case 'run-step':
       result = await runLocalStep(pos[0], flags, timeoutMs)
       break
@@ -90,25 +104,7 @@ async function main(): Promise<void> {
       const isProse = command === 'approve-prose' || command === 'regenerate-prose' || command === 'save-prose'
       const limit = isProse ? proseLimits.bodyBytes : beatLimits.bodyBytes
       const label = command === 'start-chapter' ? 'Chapter' : isProse ? 'Prose' : 'Beat'
-      let source: string
-      let descriptor: number | undefined
-      try {
-        descriptor = openSync(flags.file, 'r')
-        const buffer = Buffer.alloc(limit + 1)
-        let length = 0
-        while (length < buffer.length) {
-          const read = readSync(descriptor, buffer, length, buffer.length - length, null)
-          if (read === 0) break
-          length += read
-        }
-        if (length > limit) throw new CliError(`${label} request file exceeds byte limit`, 'payload-too-large')
-        try {
-          source = isProse || command === 'start-chapter' ? new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, length)) : buffer.subarray(0, length).toString('utf8')
-        } catch { throw new CliError(`${label} request file must contain valid UTF-8`, 'invalid-input') }
-      } catch (error) {
-        if (error instanceof CliError) throw error
-        throw new CliError(`${label} request file could not be read`, 'usage')
-      } finally { if (descriptor !== undefined) closeSync(descriptor) }
+      const source = readBoundedText(flags.file, limit, label, isProse || command === 'start-chapter')
       let input: unknown
       try { input = JSON.parse(source) } catch { throw new CliError(`${label} request file must contain valid JSON`, 'invalid-input') }
       result = command === 'start-chapter' ? await cmd.startChapter(client, pos[0], input)

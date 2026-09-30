@@ -5,6 +5,8 @@ import type { WorkStore } from './store/work-store.js'
 import { appConfigSchema, healthSchema, type AppConfig } from '@agent4novel/contracts'
 import { contractJson, responseUnavailable } from './contract-response.js'
 import { staticWeb } from './runtime/static-web.js'
+import { authorConfigRoutes } from './routes/author-config.js'
+import type { AuthorConfigService } from './config/author-config-service.js'
 
 // demo = 无 LLM key 的演示模式
 export type AppMeta = AppConfig
@@ -14,6 +16,7 @@ export type AppDeps = {
   pipeline: Pipeline
   meta: AppMeta
   webRoot?: string
+  authorConfig?: AuthorConfigService
 }
 
 export function createApp(deps: AppDeps): Hono {
@@ -23,6 +26,7 @@ export function createApp(deps: AppDeps): Hono {
   app.get('/api/config', (c) => contractJson(c, appConfigSchema, deps.meta))
   app.get('/api/health', (c) => contractJson(c, healthSchema, { status: 'ok' }))
   app.route('/', worksRoutes(deps))
+  if (deps.authorConfig) app.route('/', authorConfigRoutes(deps.authorConfig))
   if (deps.webRoot) app.use('*', staticWeb(deps.webRoot))
   return app
 }

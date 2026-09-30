@@ -54,6 +54,7 @@ export type PipelineDeps = {
   steps: Map<string, ArtifactStep>
   definition: PipelineDefinitionEntry[]
   resolveConfig: (work: WorkDetail, stepId: string) => AgentConfig
+  snapshotConfig?: (work: WorkDetail) => Record<string, AgentConfig>
   // 消费守卫(#3c):consumes 的上游产物除了「最新版 approved」还要过领域校验,
   // 由启动装配层按 kind 注入,pipeline 保持泛型。守卫抛错 = 该产物不算数。
   consumeGuards?: Partial<Record<ArtifactKind, (content: JsonValue) => void>>
@@ -65,6 +66,7 @@ export class Pipeline {
   private steps: Map<string, ArtifactStep>
   private definition: PipelineDefinitionEntry[]
   private resolveConfig: (work: WorkDetail, stepId: string) => AgentConfig
+  private snapshotConfig?: PipelineDeps['snapshotConfig']
   private consumeGuards: Partial<Record<ArtifactKind, (content: JsonValue) => void>>
   // per-work 内存互斥锁(#3c):并发 advance → 409 advance-in-progress;真正事务/lease 归 #9
   private advancing = new Set<string>()
@@ -77,6 +79,7 @@ export class Pipeline {
     this.steps = deps.steps
     this.definition = deps.definition
     this.resolveConfig = deps.resolveConfig
+    this.snapshotConfig = deps.snapshotConfig
     this.consumeGuards = deps.consumeGuards ?? {}
 
     if (this.repeatChapters && (this.definition.at(-2)?.outputKind !== 'beat' || this.definition.at(-1)?.outputKind !== 'prose'
@@ -230,6 +233,8 @@ export class Pipeline {
     this.advancing.add(workId)
     try {
       let lastStepId: string | null = null
+      let snapshot: Record<string, AgentConfig> | undefined
+      const configs = () => snapshot ??= this.operationConfigs(workId)
       // 上限 +1:最后一次 getState 不落库也要能返回终态
       for (let i = 0; i <= this.definition.length; i++) {
         const state = this.getState(workId)
@@ -241,7 +246,7 @@ export class Pipeline {
             : { kind: 'awaiting-approval', state }
         }
         const entry = this.definitionFor(currentChapterOf(this.store.getWork(workId)!)).find((d) => d.stepId === state.nextStepId)!
-        const outcome = await this.executeEntry(workId, entry)
+        const outcome = await this.executeEntry(workId, entry, configs)
         if (outcome.kind === 'failed' || entry.gateAfter) return outcome
         lastStepId = entry.stepId
       }
@@ -252,17 +257,25 @@ export class Pipeline {
     }
   }
 
-  private async executeEntry(workId: string, entry: PipelineDefinitionEntry): Promise<AdvanceOutcome> {
+  private operationConfigs(workId: string): Record<string, AgentConfig> {
+    const work = this.store.getWork(workId)
+    if (!work) throw new KnownError('work-not-found', 'work not found')
+    return structuredClone(this.snapshotConfig?.(work) ?? Object.fromEntries(this.definition.map(entry => [entry.stepId, this.resolveConfig(work, entry.stepId)])))
+  }
+
+  private async executeEntry(workId: string, entry: PipelineDefinitionEntry, configs = () => this.operationConfigs(workId)): Promise<AdvanceOutcome> {
     let beatCommand: BeatCommandObservation | undefined
     let proseCommand: ProseExecutionObservation | undefined
     try {
+      const config = structuredClone(configs()[entry.stepId])
+      if (!config) throw new KnownError('config-invalid', 'step configuration is unavailable')
       if (entry.outputKind === 'beat') {
-        const result = await observeBeat(workId, 'generate-beat', null, execution => this.runEntry(workId, entry, execution), entry.chapter)
+        const result = await observeBeat(workId, 'generate-beat', null, execution => this.runEntry(workId, entry, config, execution), entry.chapter)
         beatCommand = result.command
       } else if (entry.outputKind === 'prose') {
-        const result = await observeProse(workId, 'generate-prose', null, execution => this.runEntry(workId, entry, execution), entry.chapter)
+        const result = await observeProse(workId, 'generate-prose', null, execution => this.runEntry(workId, entry, config, execution), entry.chapter)
         proseCommand = result.command
-      } else await this.runEntry(workId, entry)
+      } else await this.runEntry(workId, entry, config)
     } catch (err) {
       const cause = err instanceof BeatCommandError || err instanceof ProseCommandError ? err.cause : err
       const known = cause instanceof KnownError ? cause : null
@@ -341,7 +354,7 @@ export class Pipeline {
         execution.stage = 'model'
         const output = await runStep(this.steps.get(entry.stepId)!, {
           workId, seed: work.seed, upstream, chapter: request.chapter, regeneration: { content, instructions: parsed.instructions },
-        }, this.resolveConfig(work, entry.stepId))
+        }, this.operationConfigs(workId)[entry.stepId]!)
         execution.stage = 'output'
         const generated = beatContentSchema.parse(output.content)
         const candidate = assignBeatIds({ ...generated, writingPlan: generated.writingPlan.map(({ title, content }) => ({ title, content })) }, baseline.content)
@@ -376,7 +389,7 @@ export class Pipeline {
         execution.stage = 'model'
         const output = await runStep(this.steps.get(entry.stepId)!, {
           workId, seed: work.seed, upstream, chapter: request.chapter, regeneration: { content: parsed.content, instructions: parsed.instructions },
-        }, this.resolveConfig(work, entry.stepId))
+        }, this.operationConfigs(workId)[entry.stepId]!)
         execution.stage = 'output'
         const candidate = proseContentSchema.parse(output.content)
         execution.stage = 'commit'
@@ -403,10 +416,9 @@ export class Pipeline {
     }
   }
 
-  private async runEntry(workId: string, entry: PipelineDefinitionEntry, execution?: BeatExecution): Promise<Artifact> {
+  private async runEntry(workId: string, entry: PipelineDefinitionEntry, config: AgentConfig, execution?: BeatExecution): Promise<Artifact> {
     const step = this.steps.get(entry.stepId)!
     const work = this.store.getWork(workId)!
-    const config = this.resolveConfig(work, entry.stepId)
     const { upstream, inputs, preconditions: consumedPreconditions } = this.inputsFor(work, entry)
     const preconditions: ArtifactPrecondition[] = [{ kind: entry.outputKind, chapter: entry.chapter, head: null }, ...consumedPreconditions]
     if (entry.outputKind === 'beat' || entry.outputKind === 'prose') {

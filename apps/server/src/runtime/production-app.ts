@@ -11,10 +11,17 @@ import { createProseStep } from '../steps/prose-step.js'
 import { createFakeCaptionStep, createFakeCreativeStep, createFakeOutlineStep, createFakeSettingStep, createFakeBeatStep, createFakeProseStep } from '../steps/fake-step.js'
 import { modelRuntime } from '../steps/llm.js'
 import type { WorkStore } from '../store/work-store.js'
+import { AuthorConfigService } from '../config/author-config-service.js'
+import type { AuthorConfigRepository } from '../config/author-config-repository.js'
 
-export function createProductionApp(store: WorkStore, webRoot?: string) {
+export function createProductionApp(store: WorkStore, webRoot?: string, dataDir?: string) {
   // 无可用模型凭据 → fake 演示模式（不报错、不触网）。
   const demo = modelRuntime.mode === 'demo'
+  const repository = store as WorkStore & Partial<AuthorConfigRepository>
+  const authorConfig = dataDir && typeof repository.getAuthorConfig === 'function' && typeof repository.saveAuthorConfig === 'function'
+    && typeof repository.getAuthorConfigReceipt === 'function'
+    && typeof repository.listAgentFiles === 'function' && typeof repository.putAgentFile === 'function'
+    ? new AuthorConfigService(store, repository as WorkStore & AuthorConfigRepository, dataDir) : undefined
 
   const steps = new Map<string, ArtifactStep>([
     ['caption', demo ? createFakeCaptionStep() : createCaptionStep()],
@@ -42,10 +49,11 @@ export function createProductionApp(store: WorkStore, webRoot?: string) {
     repeatChapters: true,
     // Work.config 是作品级覆盖；未设置 model 时由 ModelRuntime 使用启动默认值。
     resolveConfig: (work) => work.config,
+    ...(authorConfig ? { snapshotConfig: work => authorConfig.snapshot(work) } : {}),
     consumeGuards,
   })
 
-  const app = createApp({ store, pipeline, meta: { demo }, webRoot })
+  const app = createApp({ store, pipeline, meta: { demo }, webRoot, authorConfig })
 
   return { app, demo }
 }
