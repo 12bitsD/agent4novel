@@ -103,20 +103,22 @@ CI配置见workflow；quality执行frozen安装/全测试/typecheck/build/编译
 | 5 CI无key及实际执行 | workflow只读contents、超时和同分支取消；脚本清空继承模型字段并只用本地mock/无keyfake；实际远端commit job在C7发布后取得，未取得前禁止merge/close |
 | 6 文档 | 双语README、Wiki/索引、schema健康契约、skill、handoff、前序009/016路由与操作说明；旧009审核区不变 |
 
-config RED4项真实缺行为（返回缺Web字段/开关未校验）后GREEN15；定向static/config/startup22通过及typecheck。全仓当前测试736（contracts100/server350/CLI166/Web120）、typecheck与build通过；仍有既有Web单chunk>500KB警告。frozen安装成功。正式冻结前补最终候选验证与三轮校准，不以这些快照代替独立审核。
+config RED4项真实缺行为（返回缺Web字段/开关未校验）后GREEN15；定向static/config/startup22通过及typecheck。修复后全仓当前测试741（contracts100/server350/CLI171/Web120）、typecheck与build通过；仍有既有Web单chunk>500KB警告。frozen安装成功。远端首次quality的组合测试超时修复后，定向90项与全仓质量/编译mock再次通过；容器代码未变，已有完整本地/初次远端container证据有效。正式冻结前补最终候选验证与三轮校准，不以这些快照代替独立审核。
 
-三轮自校准（2026-09-30）：①代码↔行为/测试，健康/静态/配置失败路径与编译mock、容器重建和新卷归档恢复一致，沿既有Store/Pipeline/CLI；②代码↔知识，README区分两个书架、显式Compose运行期配置与源码加载，schema只新增健康契约，ADR0003保存跨票发布物层级，旧009审核区字节不变；③完整候选↔AC，全部实现映射AC1–6，无公网/工具/作者配置/坏例扩票，远端实际CI保留C7强制门禁。质量清理结论：复用Hono/contractJson与既有条件写入，无第二状态机；资源定位职责归生产入口，白名单和日志边界清晰；生产只装需要的依赖/构建结果，CI按两job隔离反馈。文档schema/180个本地链接/双语事实/旧审核区/凭据扫描已通过；无独立格式/lint脚本，用typecheck、node --check和diff --check验证。
+三轮自校准（2026-09-30）：①代码↔行为/测试，健康/静态/配置失败路径与编译mock、容器重建和新卷归档恢复一致，沿既有Store/Pipeline/CLI；②代码↔知识，README区分两个书架、显式Compose运行期配置与源码加载，schema只新增健康契约，ADR0003保存跨票发布物层级，旧009审核区字节不变；③完整候选↔AC，全部实现映射AC1–6，无公网/工具/作者配置/坏例扩票，远端实际CI保留C7强制门禁。质量清理结论：复用Hono/contractJson与既有条件写入，无第二状态机；资源定位职责归生产入口，白名单和日志边界清晰；生产只装需要的依赖/构建结果，CI按两job隔离反馈。文档schema/181个本地链接/双语事实/旧审核区/凭据扫描已通过；无独立格式/lint脚本，用typecheck、node --check和diff --check验证。
+
+补充三轮自校准（CI修复候选）：①六个输入的子进程、失败码、零HTTP、文件不变和无泄露断言逐项相同，仅按用例分离期限，90定向与741全量通过；②代码/研究/Wiki记录首次远端失败和三案选择，当前证据不沿用旧tree，前序审核区保持；③32-file候选仍只覆盖AC1–6，首次CI失败不合并，重新审核后新commit两job成功才关闭。质量整理保持既有公共CLI测试接缝，无产品抽象或新状态。
 
 ### 完成审核证据
 
-- **清单与候选**：清单blob `42116082e8ca2804d826cc00f6578270077f60eb`；固定点 `b84e8a832ecc8d231ba3532b77ce9c32d4b23d6d`；T0 `35c39b0dc60490832c3a87d327d09ee7c3ed5616`；T1 `87bd1bf68ca0ad557daa7398f93a7c4051c41ed4`。31个精确文件见 `/tmp/a4n-33-evidence/manifest.txt`，候选完整diff/两类diff checks已回读；fixed-point..HEAD无本地提交、无unstaged/untracked余项。完成字段之外不改候选。
-- **逐项判定**：C1.1–C1.8 PASS：issue/依赖/Project快照、claim、固定点/分支、用户本机Docker+CI决定、三案研究及版本化TDD计划；C2.1–C2.5 PASS：真实static/config RED→GREEN、全包验证及AC映射，C2.6 N/A（本票有行为变化，已执行RED/GREEN）；C3.1–C3.6 PASS：最终质量输出、node语法、diff/凭据/日志/忽略规则与质量清理；C4.1–C4.9 PASS：Wiki/schema/双语README/ADR/research/handoff/skill/结构链接及三轮自校准，C4.3 CONTEXT N/A（未增加领域词，健康契约已写schema）；C5.1–C5.7 PASS：精确manifest、完整patch/空本地历史、独立双轴及R01新tree复核；C6.1/C6.2 PASS：文档发现直接修复、知识校验与新冻结候选两轴PASS；C6.3为本次受控忠实证据转录，C6.4 pending。全部输出在同一证据目录。C7实际远端CI待发布后取得，不列N/A、不提前记为PASS，失败返回相应门禁，成功才merge/close。
-- **验收与 TDD**：issue #33 AC1–3及6的代码/本地结果见上表；AC4/5配置与本地同脚本验证已通过，真实commit的远端quality/container保留C7强制条件。`static-red.log`3项因缺HTTP健康/HTML/缺build拒绝行为失败→`static-green.log`4通过；`config-red.log`4项缺字段/开关/非法校验→`runtime-green.log`定向22通过。声明式容器/CI配置通过实际构建启动和脚本验证，不以缺文件/命令冒充RED。生产SDK仅自建loopback mock；真实供应商未调用。
-- **本地门禁**：2026-09-30 Node24.19.0/pnpm12.5.1；`pnpm install --frozen-lockfile` PASS（frozen-install.log）；最终`pnpm test`736 PASS（contracts100/server350/CLI166/Web120，full-test.log）、`pnpm typecheck`/`pnpm build` PASS（full-typecheck.log/full-build.log）；`node scripts/production-smoke.mjs` PASS（production-smoke-final.log）；`node scripts/container-smoke.mjs` Linux arm64真实非root/同源/两章/旧章编辑/重建/整个目录归档新卷恢复PASS（container-smoke-final.log）。全部修改源JS用node --check验证，两类git diff --check PASS；无独立lint/format脚本，由类型/语法/whitespace覆盖。仅既有Web docx chunk>500KB警告；不表示质量/公网部署完成。`.env.local`和`.data`仍忽略，无实际凭据/私有素材/供应商响应泄露。
-- **双轴 review**：未参与本票实现且彼此隔离的 `/root/sqlite_standards_review` 和 `/root/sqlite_spec_review`，原始报告standards-review.md/spec-review.md保留。Standards原T0前候选发现R01[P2] Wiki016顶部配置入口不准确，已接受修复；新T0的standards-review-fixed.md与spec-review-fixed.md均PASS，零剩余actionable发现。两轴独立22项runtime与compiled SDK本地mock PASS；精确31-file diff/空提交历史/工作区/旧009审核区均核对。Spec明确AC5实际CI为C7待验，不能用本地结果替代。
-- **修复与回归**：R01仅Wiki016 reviewed日期及Agent Context实际落地/后续变化3行，准确区分源码加载`.env.local`与编译/容器运行期环境并路由033；无行为变化，C6.1行为RED N/A（文档修复直接结构/事实校验）。docs-validation-fixed.json为31files/181本地链接/schema/双语事实/凭据/旧audit字节不变PASS；新完整T0独立双轴复核PASS，原行为门禁适用。未拒绝任何发现、无新增Human裁决。
-- **知识维护**：本票Wiki/索引/009完成状态与后继入口/016启动边界、健康schema、双语README、handoff、运行skill均更新；ADR0003与三案research保存生产布局/整个目录卷及选型，沿ADR0002文件Prompt权威；CONTEXT未变（C4.3无新领域词）。既有009完成审核区逐字节相同。三轮自校准及复用/可读性/边界/效率结论见上文。剩余限制为本机单用户、诊断不跨重启、未保存内容不恢复、整目录备份须停止所有访问者、旧库降级不保证、远端CI等待C7。
-- **发布前裁决**：2026-09-30 未参与实现的 `/root/sqlite_spec_review` 对上述T1独立attestation PASS（`/tmp/a4n-33-evidence/attestation.md`与attestation-integrity.json）。清单blob/固定点/T0/T1均准确；C1–C5分节PASS（相关N/A与证据如上），C6.1/C6.2文档修复及新完整tree复核PASS，C6.3忠实受控转录PASS，C6.4精确比较T0→T1仅预留8字段内7项变化、全候选/空本地历史/工作区/凭据/证据映射PASS。独立确认736tests/181links/31files、R01原始发现保留及修复、旧009审核块字节不变与原始输出一致。remaining风险仍为上列边界及实际远端quality/container待C7，成功前禁止merge/close；失败回到相应门禁。本次一次性写入T1与裁决，终止比较结果、提交/CI/merge/关闭记录留GitHub完成评论，不写自身最终tree或提前宣称整节C6已通过。
+- **清单与候选**：清单blob `42116082e8ca2804d826cc00f6578270077f60eb`；固定点 `b84e8a832ecc8d231ba3532b77ce9c32d4b23d6d`；T0 `aa88c9b68c09b767e30c9183cb690309fc3e5ab0`；T1 `2fe2de2d7ef5dc2fd728764276d3b80989378eae`。32文件manifest-ci-fix.txt含CLI测试切片修复；首笔commit26e4dd407165288757829ff5beee7d631437a930及原审核/attestation保留，全历史/完整patch/工作区已审核。
+- **逐项判定**：C1.1–C1.8 PASS：原issue/依赖/Project/授权/分支/三案/TDD/元数据终态核对且独立live回读一致；C2.1–C2.5 PASS：原行为真实RED→GREEN、全部AC映射/边界、修复保持原CLI公共接缝，C2.6 N/A（有行为且原TDD已做）；C3.1–C3.6 PASS：当前741/full类型构建/compiled mock/语法/diff/凭据/日志/质量结论；C4.1–C4.9 PASS：知识/双语事实/181links/旧audit/三校准，C4.3 CONTEXT N/A无新词；C5.1–C5.7 PASS：32files/精确tree/首笔commit及staged完整patch/独立双轴/新实质候选重新审核；C6.1/C6.2 PASS：原R01直接文档修复、CI测试结构修复（无新产品行为RED，真实CI超时为触发），全部受影响门禁与新独立双轴PASS。C6.3为本次忠实受控转录，C6.4 pending。C7初次quality失败/container成功，修复后等待新commit真实CI，不把旧成功替代当前证据。
+- **验收与 TDD**：AC映射及static/config行为RED→GREEN见上文；CI初次失败日志ci-initial-failed.log保留，六用例拆分不改产品行为/校验，ci-test-green.log90通过、ci-test-typecheck.log通过。测试结构整理无新产品行为，C6.1新增行为RED N/A，首次远端超时是修复触发证据。
+- **本地门禁**：2026-09-30当前候选pnpm test741通过（contracts100/server350/CLI171/Web120）、typecheck/build通过（full-*-ci-fix.log），production-smoke-ci-fix.log通过。Docker/workflow/生产代码blobs不变，前次真实Linux容器完整验收与初次远端container成功仍可复用；新commit远端两job待C7。无独立lint脚本，类型/语法/diff检查；仅既有Web chunk>500KB警告。无真实key/private输入进入候选，secret仍忽略。
+- **双轴 review**：原Standards R01及修复后双轴PASS/原T1 attestation/原终止PASS均保留于证据目录；本次实质测试结构与研究/Wiki事实变化使旧候选结论失效；当前完整T0的standards-review-ci-fix.md和spec-review-ci-fix.md独立PASS，零actionable发现。两轴分别运行六用例/完整90用例通过，历史、精确delta、其余blobs、旧audit、元数据与CI首败均独立核对。无拒绝发现或新增人决。
+- **修复与回归**：Wiki016的R01修复保持；首次远端组合用例5秒超时，六输入拆为独立用例且保留每进程/每测试5秒、零HTTP、安全输出和文件不变所有断言。当前定向90/full741/typecheck/build/compiled mock通过；未修改产品校验、workflow、镜像或超时上限。
+- **知识维护**：Wiki033变化事件和三案研究记录CI发现；其余Wiki/schema/双语README/ADR/handoff/skill与代码仍一致，旧009审核区字节不变；C4.3 CONTEXT N/A（无新领域词）。补充三轮校准见上文。C2.6 N/A（原行为已TDD），修复仅测试结构/文档直接校验。无新增Human裁决。
+- **发布前裁决**：2026-09-30 未参与实现的 /root/sqlite_spec_review 对上述T1独立C6.4 attestation PASS，原始attestation-ci-fix.md及integrity保留候选之外。清单blob/固定点/T0/T1准确；C1–C5分节PASS（N/A与逐项证据如上）；C6.1/C6.2测试结构/文档修复、当前门禁与新双轴PASS；C6.3忠实转录PASS；C6.4精确T0→T1仅预留清单/逐项/双轴3字段、其余字节不变，32files/181links/741tests及原始输出/独立六例与90例/完整候选/26e4dd4历史/工作区/凭据PASS。原CI质量失败保留；新commit两job仍C7强制条件，成功前禁止merge/close。剩余风险为本机单用户、诊断/未保存内容不跨重启、停服全目录备份/降级限制和待远端CI。本次一次性填T1及裁决，终止比较/最终C6/提交CImergeclose留GitHub评论，不写自身最终tree。
 
 ## 边界与非目标
 
@@ -131,6 +133,14 @@ config RED4项真实缺行为（返回缺Web字段/开关未校验）后GREEN15�
 - **决定**：独立#33，先验证SQLite生产装配与容器恢复，保留#7原AC与后续队列。
 - **影响**：本票原生依赖#9；生产运行、容器/CI和配置迭代有独立验收。
 - **上下文处理**：preserve原产品决定和#7作者配置目的，新增本票入口，不把后续能力写成已实现。
+
+### 2026-09-30 — 远端冷启动测试期限按用例归属
+
+- **触发证据**：PR37初次run36650338613的container成功，quality在CLI畸形文件组合测试的5秒总期限失败；六个独立冷启动共用同一预算。
+- **原假设**：本机组合测试约1.4秒，默认期限足够。
+- **决定**：三案评估后按六种输入拆为独立用例，保留每进程与每用例的5秒限制、零HTTP/无泄露/文件不变全部断言；不用放宽校验或重试掩盖失败。
+- **影响**：测试数量增加5，产品代码不变；返回C3/C5/C6重新审核后重跑真实CI，失败前候选不合并。
+- **上下文处理**：preserve原始RED/GREEN与首次审核/CI失败材料；replace本票当前候选证据。研究与原始日志保留原因。
 
 ## 交接结论
 

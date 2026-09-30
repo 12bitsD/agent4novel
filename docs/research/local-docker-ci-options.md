@@ -17,3 +17,5 @@
 CI三案：①单job全串行（简单但反馈与容器日志混合）；②质量门禁＋容器验收两个job（所选，独立超时/结果）；③多平台/模型矩阵（现阶段成本高，真实模型费用不进入CI）。固定Node24.19.0/pnpm12.5.1，Action固定已核对官方tag的commit；PR/main/manual，只读contents与同分支取消过期运行。[GitHub并发说明](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)支持cancel-in-progress。远端CI实际结果在C7发布后等待，失败修复返回相应门禁；本地成功不能代替远端结果。
 
 验收：HTTP健康/Web/API与目录隔离；可执行编译服务端及生产依赖；Linux容器两章与旧章编辑，重建容器逐字段恢复且不自动模型续跑；最终commit远端quality/container均真实通过。镜像和CI不使用本地供应商密钥或私人素材，测试只用合成数据和临时卷。无需新增人决点。
+
+首次远端quality运行36650338613暴露一个测试执行问题：六个CLI冷启动合用Vitest默认5秒，runner上的总耗时超限，而container job通过。修复三案：A只延长这个组合测试的期限（容易掩盖变慢）；B把六个输入拆为六个独立用例，保留每个子进程和测试各5秒上限及所有原断言（选择，故障可精确定位）；C串行运行全部工作区测试以减轻资源竞争（可行，但拖慢整个质量job且不能解决组合期限的归属）。B不改产品行为或安全校验；原始失败日志保留，重新冻结完整候选、复审和运行真实CI。
