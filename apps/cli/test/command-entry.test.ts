@@ -7,7 +7,12 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { cliBin, cliTestEnv } from './cli-process.js'
 
-describe('CLI command discovery and syntax', () => {
+// Wall-clock harness limits cover cold Node/tsx startup on shared CI runners.
+// Application request deadlines and validation assertions remain unchanged.
+const processTimeoutMs = 10_000
+const testTimeoutMs = 30_000
+
+describe('CLI command discovery and syntax', { timeout: testTimeoutMs }, () => {
   let server: ReturnType<typeof createServer>
   let baseUrl: string
   let requests: { method: string; url: string; body: string }[]
@@ -36,7 +41,7 @@ describe('CLI command discovery and syntax', () => {
   })
 
   async function invoke(args: string[], env: NodeJS.ProcessEnv = {}) {
-    const child = spawn(cliBin, args, { env: cliTestEnv({ A4N_BASE_URL: baseUrl, ...env }), stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000 })
+    const child = spawn(cliBin, args, { env: cliTestEnv({ A4N_BASE_URL: baseUrl, ...env }), stdio: ['ignore', 'pipe', 'pipe'], timeout: processTimeoutMs })
     let stdout = ''; let stderr = ''
     child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8')
     child.stdout.on('data', chunk => { stdout += chunk })
@@ -93,7 +98,7 @@ describe('CLI command discovery and syntax', () => {
     })
 
   const saveRequest = { chapter: 1, expectedArtifactId: 'prose-1', expectedHeadVersion: 1, expectedHumanStatus: 'pending', content: { text: 'private-text' } }
-  // Each CLI process has its own test deadline; six cold starts do not share 5s.
+  // Each CLI process has its own test deadline; six cold starts do not share one deadline.
   it.each([
     { label: 'broken JSON', bytes: Buffer.from('private-broken-json'), code: 'invalid-input' },
     { label: 'missing status', bytes: Buffer.from(JSON.stringify({ ...saveRequest, expectedHumanStatus: undefined })), code: 'invalid-input' },

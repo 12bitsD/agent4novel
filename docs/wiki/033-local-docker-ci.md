@@ -5,7 +5,7 @@ ticket_state: active
 context_state: current
 summary: "本机同源Web/API生产镜像、整个SQLite数据目录卷与无密钥GitHub CI。"
 topics: ["docker", "production-build", "ci", "volume-recovery"]
-code_paths: ["Dockerfile", "compose.yaml", ".github/workflows/**", "apps/server/src/runtime/**", "apps/server/scripts/**", "scripts/**"]
+code_paths: ["Dockerfile", "compose.yaml", ".github/workflows/**", "apps/server/src/runtime/**", "apps/server/scripts/**", "scripts/**", "apps/cli/test/command-entry.test.ts", "package.json"]
 symbols: ["createApp", "parseServerConfig", "A4N_DATA_DIR", "A4N_SERVE_WEB"]
 inherits: ["009", "016", "014"]
 changed_by: []
@@ -107,18 +107,18 @@ config RED4项真实缺行为（返回缺Web字段/开关未校验）后GREEN15�
 
 三轮自校准（2026-09-30）：①代码↔行为/测试，健康/静态/配置失败路径与编译mock、容器重建和新卷归档恢复一致，沿既有Store/Pipeline/CLI；②代码↔知识，README区分两个书架、显式Compose运行期配置与源码加载，schema只新增健康契约，ADR0003保存跨票发布物层级，旧009审核区字节不变；③完整候选↔AC，全部实现映射AC1–6，无公网/工具/作者配置/坏例扩票，远端实际CI保留C7强制门禁。质量清理结论：复用Hono/contractJson与既有条件写入，无第二状态机；资源定位职责归生产入口，白名单和日志边界清晰；生产只装需要的依赖/构建结果，CI按两job隔离反馈。文档schema/181个本地链接/双语事实/旧审核区/凭据扫描已通过；无独立格式/lint脚本，用typecheck、node --check和diff --check验证。
 
-补充三轮自校准（CI修复候选）：①六个输入的子进程、失败码、零HTTP、文件不变和无泄露断言逐项相同，仅按用例分离期限，90定向与741全量通过；②代码/研究/Wiki记录首次远端失败和三案选择，当前证据不沿用旧tree，前序审核区保持；③32-file候选仍只覆盖AC1–6，首次CI失败不合并，重新审核后新commit两job成功才关闭。质量整理保持既有公共CLI测试接缝，无产品抽象或新状态。
+补充三轮自校准（第二次CI修复候选）：①六输入断言不变，10秒子进程/30秒测试为夹具期限，root按包串行；定向90/Mac741/完整受限Linux741通过，无产品校验或请求期限变化；②研究与Wiki保存两次失败、首次局部Linux非RED限制及三案组合，新审核字段重置，旧009审核区保持；③32-file候选仍覆盖AC1–6，旧两轮CI失败不合并，新commit两job成功才关闭。复用既有CLI公共测试接缝，无新应用抽象；牺牲测试并发速度换取资源归属与更稳的冷启动验收，不承诺性能已优化。
 
 ### 完成审核证据
 
-- **清单与候选**：清单blob `42116082e8ca2804d826cc00f6578270077f60eb`；固定点 `b84e8a832ecc8d231ba3532b77ce9c32d4b23d6d`；T0 `aa88c9b68c09b767e30c9183cb690309fc3e5ab0`；T1 `2fe2de2d7ef5dc2fd728764276d3b80989378eae`。32文件manifest-ci-fix.txt含CLI测试切片修复；首笔commit26e4dd407165288757829ff5beee7d631437a930及原审核/attestation保留，全历史/完整patch/工作区已审核。
-- **逐项判定**：C1.1–C1.8 PASS：原issue/依赖/Project/授权/分支/三案/TDD/元数据终态核对且独立live回读一致；C2.1–C2.5 PASS：原行为真实RED→GREEN、全部AC映射/边界、修复保持原CLI公共接缝，C2.6 N/A（有行为且原TDD已做）；C3.1–C3.6 PASS：当前741/full类型构建/compiled mock/语法/diff/凭据/日志/质量结论；C4.1–C4.9 PASS：知识/双语事实/181links/旧audit/三校准，C4.3 CONTEXT N/A无新词；C5.1–C5.7 PASS：32files/精确tree/首笔commit及staged完整patch/独立双轴/新实质候选重新审核；C6.1/C6.2 PASS：原R01直接文档修复、CI测试结构修复（无新产品行为RED，真实CI超时为触发），全部受影响门禁与新独立双轴PASS。C6.3为本次忠实受控转录，C6.4 pending。C7初次quality失败/container成功，修复后等待新commit真实CI，不把旧成功替代当前证据。
-- **验收与 TDD**：AC映射及static/config行为RED→GREEN见上文；CI初次失败日志ci-initial-failed.log保留，六用例拆分不改产品行为/校验，ci-test-green.log90通过、ci-test-typecheck.log通过。测试结构整理无新产品行为，C6.1新增行为RED N/A，首次远端超时是修复触发证据。
-- **本地门禁**：2026-09-30当前候选pnpm test741通过（contracts100/server350/CLI171/Web120）、typecheck/build通过（full-*-ci-fix.log），production-smoke-ci-fix.log通过。Docker/workflow/生产代码blobs不变，前次真实Linux容器完整验收与初次远端container成功仍可复用；新commit远端两job待C7。无独立lint脚本，类型/语法/diff检查；仅既有Web chunk>500KB警告。无真实key/private输入进入候选，secret仍忽略。
-- **双轴 review**：原Standards R01及修复后双轴PASS/原T1 attestation/原终止PASS均保留于证据目录；本次实质测试结构与研究/Wiki事实变化使旧候选结论失效；当前完整T0的standards-review-ci-fix.md和spec-review-ci-fix.md独立PASS，零actionable发现。两轴分别运行六用例/完整90用例通过，历史、精确delta、其余blobs、旧audit、元数据与CI首败均独立核对。无拒绝发现或新增人决。
-- **修复与回归**：Wiki016的R01修复保持；首次远端组合用例5秒超时，六输入拆为独立用例且保留每进程/每测试5秒、零HTTP、安全输出和文件不变所有断言。当前定向90/full741/typecheck/build/compiled mock通过；未修改产品校验、workflow、镜像或超时上限。
-- **知识维护**：Wiki033变化事件和三案研究记录CI发现；其余Wiki/schema/双语README/ADR/handoff/skill与代码仍一致，旧009审核区字节不变；C4.3 CONTEXT N/A（无新领域词）。补充三轮校准见上文。C2.6 N/A（原行为已TDD），修复仅测试结构/文档直接校验。无新增Human裁决。
-- **发布前裁决**：2026-09-30 未参与实现的 /root/sqlite_spec_review 对上述T1独立C6.4 attestation PASS，原始attestation-ci-fix.md及integrity保留候选之外。清单blob/固定点/T0/T1准确；C1–C5分节PASS（N/A与逐项证据如上）；C6.1/C6.2测试结构/文档修复、当前门禁与新双轴PASS；C6.3忠实转录PASS；C6.4精确T0→T1仅预留清单/逐项/双轴3字段、其余字节不变，32files/181links/741tests及原始输出/独立六例与90例/完整候选/26e4dd4历史/工作区/凭据PASS。原CI质量失败保留；新commit两job仍C7强制条件，成功前禁止merge/close。剩余风险为本机单用户、诊断/未保存内容不跨重启、停服全目录备份/降级限制和待远端CI。本次一次性填T1及裁决，终止比较/最终C6/提交CImergeclose留GitHub评论，不写自身最终tree。
+- **清单与候选**：清单blob `42116082e8ca2804d826cc00f6578270077f60eb`；固定点 `b84e8a832ecc8d231ba3532b77ce9c32d4b23d6d`；T0 `0663f52c92929cae2c68572014ddf27b23f00d16`；T1 `8573b3eeed841367042b9fdc0cb067fe6b00c961`。32文件manifest-budget.txt；已有26e4dd4/b9fb674两笔提交与旧审核材料保留，全历史/完整patch/工作区已独立审核。
+- **逐项判定**：C1.1–C1.8 PASS：issue/依赖/Project/授权/claim/分支/三案/TDD/范围/元数据终态，独立live回读一致；C2.1–C2.5 PASS：原真实行为RED→GREEN与AC/边界，测试资源/夹具修复保持公共CLI接缝，C2.6 N/A（有行为且TDD已做）；C3.1–C3.6 PASS：当前全门禁/完整Linux与安全资源来源/质量结论；C4.1–C4.9 PASS：知识/双语/181links/旧audit/三校准，C4.3 CONTEXT N/A无新词；C5.1–C5.7 PASS：32files/精确tree/全部两commit与staged完整patch/新独立双轴，旧tree结论不代替新审核；C6.1/C6.2 PASS：R01与两次CI触发修复、当前定向/全量/受限Linux/typecheck/build/mock、重跑独立双轴；新增行为RED N/A（测试夹具/资源与文档，未改产品行为），不以环境超时或局部PASS冒充产品RED。C6.3本次忠实受控转录，C6.4 pending。C7两次quality超时/container成功；实际新commit两job成功才merge/close，无N/A或替代。
+- **验收与 TDD**：AC映射与原static/config真实RED→GREEN见上；ci-second-failed.log是本次触发证据。夹具预算/测试资源整理不改产品行为，C6.1新行为RED N/A，原产品TDD保留；首次2CPU Linux678项局部试验通过且未复现，不称RED；完整Linux741与定向90通过。
+- **本地门禁**：2026-09-30 ci-budget-targeted.log90/ci-budget-typecheck.log PASS；完整pnpm test741（100/350/171/120）/typecheck/build及compiled mock PASS（full-*-budget.log/production-smoke-budget.log）；2CPU、4GiB上限、断外网Linux完整741 PASS（linux-budget-green.log）。原镜像/服务/workflow代码未改，原完整容器恢复与两次远端container仍是对应相同实现的历史证据，新commit结果待C7。补充linux-budget-verified.log完整741/exit0；linux-budget-command.json实际argv及linux-budget-container-limits.json安全inspect确认NanoCpus2000000000/Memory4294967296/networknone/只读mount，与执行输出匹配。无独立lint，类型/语法/whitespace及安全检查；既有Web chunk警告；secret忽略且无泄露。
+- **双轴 review**：原R01修复、旧双轴/attestation/terminal原始报告保留；root test资源策略及夹具预算是新实质候选；当前T0的standards-review-budget.md和spec-review-budget.md独立PASS，零actionable发现。两轴各自CLI90 PASS，机械normalize确认除夹具/注释外输入/断言/逻辑同字节；完整候选/两commit/delta/无余项/旧audit/安全及Linux资源来源/完整741输出均独立核对。無拒绝发现/新人决，新CI仍C7条件。
+- **修复与回归**：六输入独立用例保留；第二次CI单例及续章组合超时后，根test指定workspace-concurrency=1，command-entry每子进程10秒/每测试30秒。全部输入/错误/无HTTP/安全输出/文件不变断言一致，无skip/retry，应用请求和job期限不变；Mac及完整Linux门禁通过，不能替代新远端CI。
+- **知识维护**：Wiki033追加第二次失败/选型事件，research三案组合及局部试验限制；schema/双语README/ADR/handoff/skill事实未漂移，旧009审核区字节不变。C4.3 CONTEXT N/A（无新领域词）；C2.6 N/A（原产品行为已TDD）；本次测试夹具调整/文档直接校验。补充三校准见上文，无新人决。
+- **发布前裁决**：独立 reviewer `/root/sqlite_spec_review` 在 attestation-budget.md 对清单blob `42116082e8ca2804d826cc00f6578270077f60eb`、固定点 `b84e8a832ecc8d231ba3532b77ce9c32d4b23d6d`、T0 `0663f52c92929cae2c68572014ddf27b23f00d16` → T1 `8573b3eeed841367042b9fdc0cb067fe6b00c961` 给出 C6.4 PASS：仅四个预留字段受控转录，32文件、两笔历史提交、工作区、安全、旧audit和原始门禁/双轴来源均一致。C1–C5 分节PASS（逐项N/A见上）；C6.1/C6.2修复与全门禁/重新双轴PASS，C6.3忠实转录PASS，C6.4独立attestation PASS。本次C6.5仅一次填入T1及此裁决；C6.6独立终止核验、C6.7安全manifest与新commit实际quality/container两job成功仍待发布流程，不提前宣称整节C6或ticket完成。两次真实CI失败及678局部试验保留，不能用本地或旧container成功代替新commit CI；本机单用户、遥测窗口、未保存页面编辑、停止全目录备份/不保证降级等限制保留。
 
 ## 边界与非目标
 
@@ -141,6 +141,14 @@ config RED4项真实缺行为（返回缺Web字段/开关未校验）后GREEN15�
 - **决定**：三案评估后按六种输入拆为独立用例，保留每进程与每用例的5秒限制、零HTTP/无泄露/文件不变全部断言；不用放宽校验或重试掩盖失败。
 - **影响**：测试数量增加5，产品代码不变；返回C3/C5/C6重新审核后重跑真实CI，失败前候选不合并。
 - **上下文处理**：preserve原始RED/GREEN与首次审核/CI失败材料；replace本票当前候选证据。研究与原始日志保留原因。
+
+### 2026-09-30 — 共享runner资源与冷启动夹具预算
+
+- **触发证据**：第二次run36651606459仍在独立byte-limit和续章组合测试的5秒失败，container成功。
+- **原假设**：第一次按输入拆分且保留5秒就足够；局部Linux678项通过，但缺Web test目录且未复现远端，不能证明假设。
+- **决定**：新三案组合选择按工作区串行与有界冷启动夹具预算：每进程10秒、每测试30秒，保留所有行为/安全断言，不skip或retry；不改应用请求/CI job期限。
+- **影响**：本地完整741与2CPU/4GiB上限、断外网Linux完整741通过；新实质候选重新走双轴/有限attestation，仍须新commit真实CI。根pnpm test执行策略变化，生成/保存/关卡不变。
+- **上下文处理**：preserve第一次研究/修复及两次原始失败，replace当前候选证据和“拆分足够”假设；研究保留被新证据推翻的理由。
 
 ## 交接结论
 
