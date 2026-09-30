@@ -1,7 +1,7 @@
 ---
 wiki_id: "008"
 ticket: 8
-ticket_state: active
+ticket_state: done
 context_state: current
 summary: "已保存正文选段、备注、不可变来源快照与按章回看。"
 topics: ["bad-examples", "prose-selection", "snapshot", "idempotency"]
@@ -19,7 +19,7 @@ last_context_reviewed: "2026-09-30"
 
 - **读取时机**：正文选段/坏例快照、去重或回看。
 - **原始目的**：作者手工积累AI味片段，作为后续调整Prompt/Skill的依据；WHAT/AC见[#8](https://github.com/12bitsD/agent4novel/issues/8)。
-- **实际落地**：阅读/编辑正文原生选段、可选备注、按章分页回看已接线；SQLite v3严格迁移、UUID事务去重和来源hash核对保护不可变快照。CLI/API独立可用，Web未知写入保留原请求；整仓、浏览器及容器恢复联验通过。最终交付以live issue/PR/CI为准。
+- **实际落地**：阅读/编辑正文原生选段、可选备注、按章分页回看已接线；SQLite v3严格迁移、UUID事务去重和来源hash核对保护不可变快照。CLI/API独立可用，Web未知写入保留原请求；整仓、浏览器及容器恢复联验通过。[PR39](https://github.com/12bitsD/agent4novel/pull/39)已合并、#8已关闭，[对应CI](https://github.com/12bitsD/agent4novel/actions/runs/36701963863)两job成功；本页原审核记录保留。
 - **当前价值**：继承已保存正文baseline、SQLite全部版本和保守unknown恢复；坏例不改正文状态。
 - **后续变化**：自动分析、重定位、Wiki联动后置；最终MVP联验在#1。
 - **代码入口**：共享坏例契约、独立Repository/SQLite、HTTP/CLI、正文选段与回看面板。
@@ -101,4 +101,4 @@ TDD实际RED：`contracts-red.log`缺少目标validator、`server-http-red.log`�
 
 ## 交接结论
 
-本票已有完整可运行的手动坏例闭环，独立review/有限attestation/远端CI与合并关闭尚待完成，不能提前当作交付。下一票#1整体验收；三方案及所有已对齐点见[总决定清单](../research/mvp-delivery-options.md)。没有新的Human待对齐点。
+本票由PR39合并关闭，完整完成评论及终态核对live #8；原发布前审核证据逐字保留。整体验收从[Wiki001](./001-mvp-acceptance.md)进入；三方案及所有已对齐点见[总决定清单](../research/mvp-delivery-options.md)。没有新的Human待对齐点。
