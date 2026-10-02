@@ -171,3 +171,4 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [025 CLI 命令发现与参数校验](./025-cli-command-safety.md) | [#25](https://github.com/12bitsD/agent4novel/issues/25) | current | 帮助零副作用、严格参数与安全 usage |
 | [033 本机 Docker 与 CI](./033-local-docker-ci.md) | [#33](https://github.com/12bitsD/agent4novel/issues/33) | current | 同源生产服务、整个数据目录卷、容器恢复与无密钥 CI |
 | [041 README 与 MVP 清点交接](./041-readme-mvp-handoff.md) | [#41](https://github.com/12bitsD/agent4novel/issues/41) | current | 用户入口、清点文档及三项待修复边界的发布 |
+| [043 MVP 复审边界修复](./043-mvp-review-boundary-fixes.md) | [#43](https://github.com/12bitsD/agent4novel/issues/43) | current | 配置导航、原起章基线和静态文件规范路径 |

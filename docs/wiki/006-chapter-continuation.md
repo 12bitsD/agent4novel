@@ -8,9 +8,9 @@ topics: ["chapter-continuation", "human-review", "upstream-snapshot", "chapter-n
 code_paths: ["apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts", "packages/contracts/src/artifacts.ts", "apps/web/src/pages/Workspace.tsx", "apps/cli/src/commands.ts"]
 symbols: ["startChapter", "currentChapter", "previousChapter", "needsContinuityReview", "start-chapter"]
 inherits: ["022", "005", "004", "014", "025"]
-changed_by: ["019", "009"]
+changed_by: ["019", "009", "043"]
 read_when: ["continue-chapter", "navigate-chapters", "edit-previous-prose", "debug-chapter-context"]
-last_context_reviewed: "2026-09-30"
+last_context_reviewed: "2026-10-03"
 ---
 
 # 006 — 后续章续写与跨章创作
@@ -24,6 +24,8 @@ last_context_reviewed: "2026-09-30"
 - **后续变化**：#6 已随 PR #32 合并关闭；[Wiki 019](./019-contract-governance.md) 收敛本页多章协议的共享校验；[Wiki 009](./009-sqlite-persistence.md) 接入服务重启恢复，本页当次“内存／重启丢失”限制不再描述当前生产存储。多章行为与原审核证据保留；当前交接见 [handoff](../handoff.md)。
 - **代码入口**：Pipeline 负责章节循环和实际依赖快照，Store 原子条件写入；公共协议供 HTTP/Web/CLI 使用，Step 接收明确的上一章内容。
 
+
+本页相关后续变化：配置自动切章与原起章版本条件由 [Wiki043](./043-mvp-review-boundary-fixes.md) 跟踪。该票的修复候选与 main 发布状态分别判断，原完成审核不追改。
 ## 设计目的
 
 首章完成后，作者能显式开始下一章，经章纲把关、正文把关后再决定是否继续。旧章可以阅读和编辑正文，当前章的生成、编辑和响应不能因为阅读选择变化而串到另一章。书架、刷新与章节链接只恢复阅读，不调用模型。
@@ -129,6 +131,14 @@ Web 把传输失败和 HTTP 200 中 `writeOutcome:unknown` 都按未知结果保
 不做 SQLite、长期记忆、工具循环、作品 Wiki 更新、已通过章纲/设定回改、历史版本比较、自动完本判断或自动连跑后续章。#19 保留全仓契约收敛，本票只改多章能力所需边界。服务重启仍丢失作品；跨浏览器刷新恢复依赖原服务进程。
 
 ## 上下文演进
+
+### 2026-10-03 — 复审缺陷另票修复
+
+- **触发证据**：用户要求先合并文档，再修复三项已复现 P2；PR42 已合并，#41 已关闭。
+- **原假设**：既有审核未覆盖本次复审暴露的相邻边界，不能用已闭票状态消除新发现。
+- **决定**：配置自动切章与原起章版本条件进入 #43 的公共接口红绿和独立 review，不重写既有产品裁决。
+- **影响**：当前相关行为与回归从 Wiki043 接手；修复 PR 本轮先推送，不提前认定 main 已更新。
+- **上下文处理**：preserve 原目的、人决、失败经验和完成审核全部字节；replace 当前接手入口；本次修复证据保存在新票。
 
 ### 2026-09-30 — 多章产物及衔接依据持久保存
 

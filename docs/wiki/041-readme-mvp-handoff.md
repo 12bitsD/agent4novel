@@ -1,14 +1,14 @@
 ---
 wiki_id: "041"
 ticket: 41
-ticket_state: active
+ticket_state: done
 context_state: current
 summary: "收敛双语用户入口与 MVP 清点文档，保留三项待修复边界"
 topics: ["readme", "mvp-acceptance", "documentation", "delivery"]
 code_paths: ["README.md", "README.en.md", "docs/handoff.md", "docs/wiki/001-mvp-acceptance.md"]
 symbols: ["A4N_SEED_DEMO", "A4N_DATA_DIR", "WorkSession", "startChapter", "staticWeb"]
 inherits: ["001", "004", "007", "022", "025", "033"]
-changed_by: []
+changed_by: ["043"]
 read_when: ["review-user-documentation", "resume-mvp-review-fixes"]
 last_context_reviewed: "2026-10-03"
 ---
@@ -24,6 +24,8 @@ last_context_reviewed: "2026-10-03"
 - **后续变化**：用户明确要求先提交、推送并合入文档，再修复并推送三项缺陷；修复另票，不自动实施扩展。
 - **代码入口**：仅文档修改；缺陷代码入口与三个方案比较见 [Wiki001 复审](./001-mvp-acceptance.md#2026-10-03-清点与复审)。
 
+
+本页相关后续变化：文档发布后的三项行为修复由 [Wiki043](./043-mvp-review-boundary-fixes.md) 跟踪。该票的修复候选与 main 发布状态分别判断，原完成审核不追改。
 ## 设计目的
 
 [票面 #41](https://github.com/12bitsD/agent4novel/issues/41) 规定用户入口、当前状态、清点与保留边界。README 面向使用者；逐票设计、证据及已知缺陷留在工程 Wiki。个人 Work Wiki 是输出规范来源，不是尚未开发的作品设定 Wiki。
@@ -76,6 +78,14 @@ AC1 对应双语命令/版本、README 入口及必要术语；AC2 对应已回�
 本票不改代码、数据形状、领域词、架构、运行能力或流程规范，不新增付费调用或浏览器/容器人工验收。schema/CONTEXT/ADR/research/运行 skill 不受影响；既有问题比较保留在 Wiki001，无新外部选型。无独立 lint 脚本，现有类型/构建与文档结构检查替代。#28/#29 等扩展不开发、不关闭。
 
 ## 上下文演进
+
+### 2026-10-03 — 复审缺陷另票修复
+
+- **触发证据**：用户要求先合并文档，再修复三项已复现 P2；PR42 已合并，#41 已关闭。
+- **原假设**：既有审核未覆盖本次复审暴露的相邻边界，不能用已闭票状态消除新发现。
+- **决定**：文档发布后的三项行为修复进入 #43 的公共接口红绿和独立 review，不重写既有产品裁决。
+- **影响**：当前相关行为与回归从 Wiki043 接手；修复 PR 本轮先推送，不提前认定 main 已更新。
+- **上下文处理**：preserve 原目的、人决、失败经验和完成审核全部字节；replace 当前接手入口；本次修复证据保存在新票。
 
 ### 2026-10-03 — 清点文档与缺陷修复分开发布
 

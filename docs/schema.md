@@ -521,6 +521,8 @@ ChapterSummary = {
 
 后续章的 Beat/Prose 输入均在 `upstream` 中携带 `previousChapter: {chapter, beat, prose}`；只消费恰好前一章的最终内容，不引入全书正文拼接、摘要 Agent 或 Wiki 工具。生成前固定实际输入快照，提交时再次校验，调用中前章改变则返回 `upstream-changed`，不追加过期结果。
 
+起章原请求的 `expectedPreviousProseId` 与 `expectedPreviousProseVersion` 也必须与实际输入读取时的前章一致，并保持到条件提交。初检通过后、配置快照与实际输入取样之间若独立连接更新前章，拒绝本次过期请求，不把新版本自动替换为请求基线。行为修复上下文见 [Wiki043](./wiki/043-mvp-review-boundary-fixes.md)。
+
 前章内容计入节点的实际 system+prompt 总预算，超限在模型调用前拒绝；安全预算诊断新增 `previousChapterChars`，不输出原文。
 
 生成时写入 `Artifact.inputs`，正文保存与定稿保留它。上游版本变化或前章衔接已过期时，章节摘要的 `needsContinuityReview` 提醒检查；既有章纲/正文和 humanStatus 均保留。提示不表示内容已经重新校对，不触发级联重写，也不自动清除人工关卡。

@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。最后更新：2026-10-03。#1 及必需子票均已合并关闭，本机 MVP 已发布；当前远端状态和本次复审见 [Wiki001](./wiki/001-mvp-acceptance.md#2026-10-03-清点与复审)。复审发现三项待修复边界，#28/#29及长篇质量评估保持后置。
+> 用途：context compaction / 新会话接力。最后更新：2026-10-03。#1 及必需子票均已合并关闭，本机 MVP 已发布；当前远端状态和本次复审见 [Wiki001](./wiki/001-mvp-acceptance.md#2026-10-03-清点与复审)。复审发现的三项边界由 [Wiki043](./wiki/043-mvp-review-boundary-fixes.md) 修复；本轮先推送修复 PR，main 与闭票状态仍须远端核对。#28/#29 及长篇质量评估保持后置。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -16,12 +16,12 @@
 
 ## 当前里程碑与验证边界
 
-**本机 MVP 已发布，整体验证与边界从 [Wiki001](./wiki/001-mvp-acceptance.md) 进入。** 2026-10-03 回读 #1 及 #6/#19/#9/#33/#7/#8 均已关闭，对应 PR 均已合并；[PR40](https://github.com/12bitsD/agent4novel/pull/40) 对应源提交的 CI 与 [main CI](https://github.com/12bitsD/agent4novel/actions/runs/36727036119) 均成功。当前 main 为 `1571539b131fb11dea1fbfc5cb6f88e9c8c22815`。关闭记录证明交付状态，本次新发现不因已关闭而视为无缺陷。
+**本机 MVP 已发布，整体验证与边界从 [Wiki001](./wiki/001-mvp-acceptance.md) 进入。** 2026-10-03 回读 #1 及 #6/#19/#9/#33/#7/#8 均已关闭，对应 PR 均已合并；[PR40](https://github.com/12bitsD/agent4novel/pull/40) 对应源提交的 CI 与 [main CI](https://github.com/12bitsD/agent4novel/actions/runs/36727036119) 均成功。本次修复固定点为文档 PR42 合并后的 main `533631cdc28b1c09282845cdfcb6646cc8adbacf`。文档 #41 已关闭，源提交 quality/container CI 成功。关闭记录证明交付状态，本次新发现不因已关闭而视为无缺陷。
 
 - **交付状态**：#22/PR #30、#6/[PR #32](https://github.com/12bitsD/agent4novel/pull/32)、#19/[PR #34](https://github.com/12bitsD/agent4novel/pull/34)、#9/[PR #36](https://github.com/12bitsD/agent4novel/pull/36) 已关闭/合并；#9终止记录见[完成评论](https://github.com/12bitsD/agent4novel/issues/9#issuecomment-5897744738)。#33/[PR37](https://github.com/12bitsD/agent4novel/pull/37)已关闭/合并，最终源提交两job[CI成功](https://github.com/12bitsD/agent4novel/actions/runs/36653441274)。
 - **已验证基线**：#6 有 fake 多章、CLI/Web、独立真实 Beat2/Prose2 和本地门禁证据，见 [Wiki 006](./wiki/006-chapter-continuation.md)。真实节点使用合成上游，不是全书/全部节点真实模型验收，也不证明长篇质量。#19 的共享验证证据见其本票 Wiki；#9 的 SQLite、真实进程重启及关闭路径需看 Wiki 009 的实际结果，不沿用旧票测试。
 - **当前存储边界**：生产启动使用 SQLite，恢复已提交的作品、产物版本、状态和输入引用；未保存页面编辑不恢复，遥测仍在进程内，不自动恢复模型调用。旧内存进程不自动迁移或清空。#33同源Web/API、非root镜像、两章卷恢复及实际CI已验证。#7已接入默认/节点覆盖、Prompt/Skill版本和操作快照，实际交付见PR38和本票issue；#8已接入手工坏例快照与回看，交付状态核对#8；长期记忆与Wiki工具仍后置。
-- **复审与待修复项**：本次 815 项测试、类型检查和构建通过。新增定向复现发现配置草稿/未知请求在自动切章时丢失、起章前章版本条件未保持至生成、静态文件校验与读取路径解码不一致。触发条件与建议见 [复审记录](./wiki/001-mvp-acceptance.md#2026-10-03-清点与复审)，本轮未修改生产行为。
+- **复审与待修复项**：本次 815 项测试、类型检查和构建通过。新增定向复现发现配置草稿/未知请求在自动切章时丢失、起章前章版本条件未保持至生成、静态文件校验与读取路径解码不一致。触发条件与建议见 [复审记录](./wiki/001-mvp-acceptance.md#2026-10-03-清点与复审)，新修复候选由 [#43](https://github.com/12bitsD/agent4novel/issues/43) 和 Wiki043 记录；原复审是历史未修复快照，不能替代新红绿或 CI 证据。
 
 ## 已完成
 
@@ -107,7 +107,7 @@ CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化
 
 #22 已合入 main；其原 source、固定点和候选审核记录均属于已交付历史，入口为 [Wiki 022](./wiki/022-prose-generation-review.md)。新票从当前 main 核对基线，不能把旧票授权或审核结论当成新票完成证据。
 
-**当前先处理复审发现，再对齐扩展范围**。#1 已关闭，无需重复交付；三项待修复边界及证据见 Wiki001。#28/#29 尚未开工，长篇质量验证仍未完成。既有三方案研究与用户裁决继续有效，普通工程细节自主处理；重大范围或数据取舍再请求用户决定。
+**当前交付 #43 修复，再对齐扩展范围**。#1 和文档 #41 已关闭，无需重复交付；三项原发现见 Wiki001，修复与验证从 Wiki043 进入。本轮先推送修复 PR，合并及关闭须后续独立执行。#28/#29 尚未开工，长篇质量验证仍未完成。既有三方案研究与用户裁决继续有效，普通工程细节自主处理；重大范围或数据取舍再请求用户决定。
 
 | 交付批次 | 可验收结果 | 后续衔接 |
 |---|---|---|
