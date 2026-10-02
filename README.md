@@ -4,63 +4,38 @@
 
 <h1 align="center">agent4novel</h1>
 
-<p align="center">AI 辅助的中文网文创作工具 · 在你的电脑上运行，通过浏览器使用</p>
+<p align="center">AI 辅助的中文网文创作工具 · 本机运行，通过浏览器使用</p>
 
 <p align="center">
-  <a href="#快速开始">开始试用</a> ·
+  <a href="#快速开始">快速开始</a> ·
   <a href="#创作流程">创作流程</a> ·
   <a href="#文档">文档</a> ·
   <a href="./README.en.md">English</a>
 </p>
 
-<p align="center">
-  <a href="#当前状态"><img src="https://img.shields.io/badge/status-in_development-555555?style=flat-square" alt="开发中"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-555555?style=flat-square" alt="MIT 开源许可"></a>
-</p>
+输入故事想法，或导入 TXT、Markdown（`.md`）、Word（`.docx`）、PDF 文档中的文字。AI 帮你选择故事方向、规划大纲、补充设定并逐章写作；你负责修改内容、把关方向和推进下一章。
 
-输入故事想法，或上传 TXT、Markdown（`.md`）、Word（`.docx`）、PDF 文档中的文字作为素材。AI 提出故事方向、规划情节、补充人物与世界规则，再逐章生成正文。你选择故事方向，修改生成内容，并决定何时开始下一章。
+![章节目录、正文阅读区和编辑入口](./docs/assets/workspace-demo.jpg)
 
-![当前应用的章节目录、正文阅读区和编辑入口](./docs/assets/workspace-demo.jpg)
+<p align="center"><sub>演示模式的实际界面，正文为专门编写的示例。</sub></p>
 
-<p align="center"><sub>实际界面截图，来自演示模式。正文为专门编写的示例，不代表模型生成效果。</sub></p>
+## 当前状态
 
-<a id="它是怎么工作的"></a>
+**本机最小可用版本（MVP）已交付，项目持续开发中。** 当前支持：
 
-## 创作流程
-
-作者依次完成下表中的五步。「通过」表示接受当前内容，将其作为后续创作的依据。
-
-| 步骤 | AI 生成的内容 | 作者操作 |
-| --- | --- | --- |
-| **选择创意稿** | 默认两个故事方向，各自包含故事梗概、主要人物和冲突 | 比较、修改并选定一个方向 |
-| **编写大纲** | 全书的情节安排，描述主要冲突如何展开与解决 | 调整情节，再通过大纲 |
-| **完善设定** | 人物、人物关系、世界规则等故事背景信息 | 补充或修改，再通过设定 |
-| **编写章纲** | 某一章的写作计划：本章目标、内容顺序和结尾 | 直接修改，或让 AI 重新生成，再通过章纲 |
-| **撰写正文** | 根据章纲与设定写出的章节文字 | 直接修改，或让 AI 整章重写，再通过正文 |
-
-每章都经过「章纲 → 正文」两步。正文通过后，本章标记为完成；点击「开始下一章」会生成下一章章纲。章节目录支持回看旧章，以及编辑已通过的正文。
-
-已通过的设定和章纲目前不能修改。修改已通过的旧章正文后，已有后续章节会标记「待检查衔接」，提示作者检查情节是否连贯；应用保留后续章节的文字和通过状态，不会自动改写。
-
-### 调整创作偏好
-
-打开作品后，点击「Agent 配置」，设置文风、题材和爽点偏好，再点击「保存配置」。文风用于正文，题材用于创意稿及后续内容，爽点用于创意稿、大纲、章纲和正文。保存只影响下一次生成；已有内容和通过状态保留，正在生成的内容继续使用开始时的配置。
-
-「高级配置」可设置作品默认模型、生成参数，以及每个步骤的覆盖。模型需要先按下方说明配置对应密钥；演示模式仍使用示例。你也可以上传写作指导（Prompt）或带 `name`、`description` 的 `SKILL.md` 文件，选择后保存配置。文件作为写作指导使用，目前不执行工具、脚本或附件。上传成功的文件和已保存配置可以刷新后回看；尚未保存的配置修改只在当前页面保留。
-
-### 收集正文坏例
-
-在已保存的正文中选取一段文字，在下方填写可选备注，点击「标记为坏例」。阅读与编辑视图都支持选段；有未保存的正文或未确认的操作时，先完成保存和核对。点击「坏例收集」可回看本章样本，样本保留当时原文和正文版本，后来改写不会更新它。
-
-标记结果不明确时，保留页面，点击「核对标记结果」；需要重试时用「重试标记原请求」。不会自动分析、打分或改写正文。已保存的样本与作品一起保存在本机，刷新或重启后仍可回看。
+- 从脑洞或文档开始，选择创意稿，通过大纲与设定后进入逐章创作。
+- 每章独立审阅章纲和正文；按章浏览，编辑已通过的历史正文。
+- 设置文风、题材、爽点，选择模型与生成参数，上传写作指令（Prompt）和写作指导文件（Skill）。
+- 在已保存的正文中选段、备注并收集坏例，保留当时原文及版本供回看。
+- 本地保存作品、全部产物版本、配置、上传文件和坏例，支持服务重启与备份恢复。
 
 ## 快速开始
 
-> **作品会保存在本机。** 页面显示正文「已保存」后，使用同一数据目录重启服务即可恢复；尚未保存的页面修改不会恢复。
+<a id="用-docker-启动推荐"></a>
 
-### 用 Docker 启动（推荐）
+### Docker（推荐）
 
-安装 Git 和可运行 Compose 的 Docker（例如 Docker Desktop），然后执行：
+安装 Git 和支持 Compose 的 Docker（例如 Docker Desktop），运行：
 
 ```bash
 git clone https://github.com/12bitsD/agent4novel.git
@@ -68,13 +43,16 @@ cd agent4novel
 docker compose up --build -d --wait
 ```
 
-在浏览器打开 **[localhost:8787](http://localhost:8787)**，即可使用演示模式。Web 和 API 由同一服务提供，只开放本机访问。`docker compose ps` 查看健康状态；启动失败时用 `docker compose logs app` 检查。端口被占用时，用 `A4N_HTTP_PORT=8790 docker compose up --build -d --wait`，然后打开对应端口。
+打开 **[localhost:8787](http://localhost:8787)**。未指定模型且未提供任何 API key（模型服务密钥）时，应用使用内置示例，支持编辑和通过操作，不调用 AI。已有密钥时会启用真实模型；未指定模型时优先选择 DeepSeek，其次 LongCat。
 
-作品保存在 Docker 的数据卷中，容器重建后仍保留。它与下方源码运行的 `.data` 目录是两个独立书架。停止用 `docker compose stop`；备份、恢复和更新步骤见 [容器操作说明](./docs/wiki/033-local-docker-ci.md#维护操作)。
+用 `docker compose stop` 停止；`docker compose ps` 查看健康状态，`docker compose logs app` 查看启动错误。端口被占用时，运行 `A4N_HTTP_PORT=8790 docker compose up --build -d --wait`，再打开对应端口。Web 与 API 由同一服务提供，只开放本机访问。
 
-### 从源码启动演示模式
+<details>
+<summary>从源码启动</summary>
 
-以下命令适用于 macOS 和 Linux 终端。安装 Git、Node.js 22.13.0 或更高版本和 pnpm 12.5.1 后执行；构建与 CI 使用 Node.js 24.19.0：
+<a id="从源码启动演示模式"></a>
+
+使用项目固定版本 **Node.js 24.19.0、pnpm 12.5.1**；以下命令适用于 macOS 和 Linux。已有源码时，直接进入项目目录：
 
 ```bash
 git clone https://github.com/12bitsD/agent4novel.git
@@ -83,80 +61,110 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-保持终端中的程序运行，在浏览器打开 **[localhost:5173](http://localhost:5173)**。
+保持终端运行，打开 **[localhost:5173](http://localhost:5173)**。首次书架为空，可直接创建作品；如需预放示例，用 `A4N_SEED_DEMO=1 pnpm dev` 启动，只会填充空书架。
 
-未指定模型、也未提供 DeepSeek 或 LongCat 的 API key（调用模型服务的密钥）时，应用进入演示模式。演示模式使用内置示例内容，支持选择、编辑和通过操作，**不调用 AI 生成故事**。指定了模型但缺少对应密钥时，应用会启动失败。
+命令行入口：`pnpm cli --help`。作品操作、独立节点测试与诊断见 [CLI 说明](./docs/wiki/014-agent-cli-telemetry.md)。
 
-首次启动的书架为空，可直接创建作品。若要预放示例作品，在首次启动前用 `A4N_SEED_DEMO=1 pnpm dev` 启动；只有空书架会填入示例，重复启动不会重复添加。
+</details>
 
-### 配置模型服务
+<a id="配置模型服务"></a>
 
-目前支持 **DeepSeek** 和 **LongCat**，需要从所选服务获取 API key。
+### 接入真实模型
 
-先确认正文显示「已保存」，再停止服务：Docker 运行时用 `docker compose stop`，源码运行时在终端按 `Ctrl+C`。如已有 `.env.local`，直接编辑该文件。首次配置时，在 `agent4novel` 目录运行以下命令，创建配置文件，并设置为仅当前系统用户可读写：
+支持 **DeepSeek** 和 **LongCat**，从所选服务获取 API key。确认正文显示「已保存」后停止服务：Docker 用 `docker compose stop`，源码运行在终端按 `Ctrl+C`。已有 `.env.local` 时直接编辑，首次配置时创建仅当前用户可读写的文件：
 
 ```bash
 cp .env.example .env.local
 chmod 600 .env.local
 ```
 
-在 `.env.local` 中选择一种模型服务，填写模型名称和对应密钥，其余配置保留原值：
+在 `.env.local` 中填写以下一种配置，其他项保留原值：
 
-| 模型服务 | `A4N_MODEL` 的值 | 填写密钥的字段 |
+| 模型服务 | `A4N_MODEL` | 密钥字段 |
 | --- | --- | --- |
 | DeepSeek | `deepseek:deepseek-chat` | `DEEPSEEK_API_KEY` |
 | LongCat | `longcat:LongCat-2.0` | `LONGCAT_API_KEY` |
 
-保存文件，Docker 运行时用 `docker compose --env-file .env.local up --build -d --wait`；源码运行时用 `pnpm dev`。密钥只在运行时传入容器，不进入镜像。Docker 模式的数据目录固定在数据卷内，`.env.local` 中的 `A4N_DATA_DIR`、`A4N_HOST`、`A4N_PORT` 仅用于源码运行；Docker 宿主端口用 `A4N_HTTP_PORT`。
+Docker 用 `docker compose --env-file .env.local up --build -d --wait` 重启；源码运行用 `pnpm dev`。指定模型但缺少对应密钥时，启动会失败。
 
-使用真实模型时，你的输入和生成所需的故事内容会发送给所选模型服务。`.env.local` 不会被 Git 默认加入版本记录；密钥应保留在该文件中。更多配置选项见 [模型配置说明](./docs/wiki/016-model-runtime-provider-config.md#配置契约)。
+API key 只在运行时传入，`.env.local` 被 Git 忽略。真实模型会把生成所需的输入和故事内容发送给所选服务；完整参数见 [模型配置说明](./docs/wiki/016-model-runtime-provider-config.md#配置契约)。
 
-### 保存与备份作品
+<a id="它是怎么工作的"></a>
 
-Docker 使用独立的数据卷，恢复时要继续使用同一 Compose 项目名称；不要删除作品的数据卷。详细命令见 [容器备份与恢复](./docs/wiki/033-local-docker-ci.md#维护操作)。
+## 创作流程
 
-源码运行时，默认数据文件是项目目录下的 `.data/agent4novel.sqlite`。需要更换位置时，在 `.env.local` 中设置 `A4N_DATA_DIR`，填入数据目录的绝对路径；相对路径从项目根目录计算。切换到另一个空目录会显示空书架，原目录中的作品仍保留。
+系统先将输入整理为提炼稿，再进入以下流程。「通过」表示接受当前内容，作为后续生成依据。
 
-数据目录还包含上传的写作指导和Skill版本文件。备份时，先停止使用该数据目录的所有服务，再把整个数据目录复制到一个新的备份位置。恢复时也先停止服务，保留当前目录的备份，再从你选定的备份恢复整个目录。不要只复制仍在运行中的数据库文件。详细步骤和旧版内存数据的保全边界见 [作品存储与恢复](./docs/wiki/009-sqlite-persistence.md)。
+| 阶段 | 生成内容 | 作者操作 |
+| --- | --- | --- |
+| 创意稿 | 默认两个故事方向，包含梗概、人物和冲突 | 比较、修改并选定一个方向 |
+| 大纲 | 全书情节安排和主要冲突 | 编辑并通过 |
+| 设定 | 人物、关系、世界规则等背景 | 编辑并通过 |
+| 章纲 | 本章目标、内容顺序和结尾 | 编辑或重新生成，再通过 |
+| 正文 | 根据章纲和设定写出的章节文字 | 编辑或整章重写，再通过 |
 
-## 当前状态
+正文通过后，本章完成；点击「开始下一章」生成下一章章纲。章节目录可回看旧章，已通过正文默认阅读，点击「编辑」后修改并自动保存，仍保持已通过。修改旧章后，已有后续章节保留文字与状态，并提示「待检查衔接」。
 
-**本机 MVP 已具备逐章创作、作者配置、持久化和手动坏例收集。** 工具仍在持续开发，生成内容需要作者把关。保存与使用时请留意：
+<a id="调整创作偏好"></a>
 
-- **作品保存在本机。** 页面显示正文「已保存」后，刷新浏览器或重启服务都能恢复；请继续使用同一数据目录。尚未保存的正文，以及设定和章纲尚未提交的手动修改，仅留在当前页面，刷新页面或放弃修改后离开会丢失这些修改。
-- **中断的生成需要手动继续。** 重启服务不会自动重新调用 AI。先打开作品检查已保存内容，再决定继续生成；运行诊断日志不会跨服务重启保留。
-- **尚未完成整本小说的生成质量评估。** 已有测试的范围和结果见 [章节续写验证记录](./docs/wiki/006-chapter-continuation.md#测试与验证)。
+### 调整写作配置
+
+打开「Agent 配置」，设置文风、题材、爽点。文风用于正文，题材用于创意稿及后续内容，爽点用于创意稿、大纲、章纲和正文。高级配置支持默认模型/参数与每步覆盖，也可上传并选用 Prompt 或带 `name`、`description` 的 `SKILL.md`，最后点击「保存配置」。
+
+保存影响下次生成；正在进行的生成沿用开始时的配置，已有内容和通过状态保留。已上传文件与已保存配置可刷新回看。模型选择需先按上文接入对应服务；演示模式仍使用内置示例。
+
+<a id="收集正文坏例"></a>
+
+### 收集坏例
+
+在已保存的正文中选段，填写可选备注，点击「标记为坏例」；阅读和编辑视图均支持。「坏例收集」中可回看本章样本，后来改写不影响样本原文。切章前先标记样本，或清除选段和备注。
+
+先保存正文并核对未确认的操作。标记结果不明确时保留页面，用「核对标记结果」确认，需要重试时点击「重试标记原请求」。
+
+## 数据与限制
+
+正文显示「已保存」后，刷新页面或重启服务可恢复。继续使用同一数据位置；Docker 与源码运行拥有独立的书架：
+
+| 运行方式 | 数据位置 | 保留与切换 |
+| --- | --- | --- |
+| Docker | Compose 的 `data` 数据卷 | 重建容器会保留；继续使用同一 Compose 项目名称，不要删除数据卷 |
+| 源码 | 默认 `.data/agent4novel.sqlite`，上传文件也在 `.data` 下 | 可用 `A4N_DATA_DIR` 指定目录；相对路径从项目根目录计算，切换空目录会显示空书架 |
+
+<a id="保存与备份作品"></a>
+
+**备份与恢复应先停止所有使用该数据目录的服务，并保全整个目录，包括数据库和上传文件。** 恢复前另存当前目录。详细命令见 [Docker 维护](./docs/wiki/033-local-docker-ci.md#维护操作) 和 [作品存储与恢复](./docs/wiki/009-sqlite-persistence.md)。Docker 的数据目录固定在卷内；`A4N_DATA_DIR`、`A4N_HOST`、`A4N_PORT` 用于源码运行，Docker 宿主端口用 `A4N_HTTP_PORT`。
+
+- 未保存的正文、未提交的设定/章纲和配置修改只留在当前页面，刷新或放弃修改离开会丢失。
+- 已通过的设定和章纲目前只读；续写主要承接上一章，尚无长篇设定检索或作品 Wiki。
+- Prompt/Skill 只提供指导文本，不执行工具、脚本或附件；坏例用于手动回看，不自动分析、打分或改写。
+- 重启不会自动恢复模型生成；先检查已保存内容，再决定继续生成。诊断日志不跨重启保留。
+- 开始下一章前先保存配置并确认写入结果；当前自动切章可能丢失配置草稿或待核对的配置请求。其他已复现边界见 [当前复审记录](./docs/wiki/001-mvp-acceptance.md#2026-10-03-清点与复审)，行为修复尚未发布。
+- 当前面向本机单用户，没有账号与公网访问控制；整本小说的生成质量尚未完成评估，工程验收范围见 [MVP 验证记录](./docs/wiki/001-mvp-acceptance.md#测试与验证)。
 
 <a id="架构"></a>
 
 ## 文档
 
-**本 README 面向人类使用者**，说明项目用途、创作流程、安装方法和使用限制。
-
-**工程文档主要面向开发与运行 Agent**，即负责开发、测试或操作项目的 AI 助手；人类开发者也可以查阅。工程设计与验证记录在 Wiki，需求与验收标准在 Issues，优先级与排期在 Project。
+README 提供使用入口。工程上下文和验证见 [项目 Wiki](./docs/wiki/README.md)，需求与后续计划见 [Issues](https://github.com/12bitsD/agent4novel/issues)。
 
 <a id="技术栈"></a>
 <a id="开发流程"></a>
 <a id="开发"></a>
 
 <details>
-<summary>Agent 工程文档入口</summary>
+<summary>开发与运行 Agent 的工程入口</summary>
 
-- **开发规则**：[AGENTS.md](./AGENTS.md) 与 [完成检查清单](./docs/agents/ticket-completion-checklist.md)。
-- **运行与排障**：[运行指引](./.claude/skills/agent4novel-drive/SKILL.md)、[模型配置](./docs/wiki/016-model-runtime-provider-config.md)、[作品存储与恢复](./docs/wiki/009-sqlite-persistence.md)、[本机容器与 CI](./docs/wiki/033-local-docker-ci.md)、[命令行用法](./docs/wiki/014-agent-cli-telemetry.md)。
-- **设计与实现**：[工程 Wiki](./docs/wiki/README.md)、[架构决策](./docs/adr/)、[调研依据](./docs/research/)。
-- **术语与数据定义**：[领域词汇表](./CONTEXT.md)、[数据模型](./docs/schema.md)。
-- **任务交接**：[交接记录](./docs/handoff.md)。
+- **协作规则**：[AGENTS.md](./AGENTS.md)、[完成审核清单](./docs/agents/ticket-completion-checklist.md)。
+- **运行与诊断**：[运行 skill](./.claude/skills/agent4novel-drive/SKILL.md)、[CLI](./docs/wiki/014-agent-cli-telemetry.md)。
+- **设计与数据**：[领域词汇](./CONTEXT.md)、[数据模型](./docs/schema.md)、[ADR](./docs/adr/)、[研究](./docs/research/)。
+- **恢复开发上下文**：[交接记录](./docs/handoff.md)。
 
 </details>
 
-## 路线图
+<a id="路线图"></a>
 
-[Issues](https://github.com/12bitsD/agent4novel/issues) 记录需求、验收标准和处理状态；[初版功能范围](https://github.com/12bitsD/agent4novel/issues/1) 说明计划覆盖的功能。[Project 看板](https://github.com/users/12bitsD/projects/3) 管理优先级和排期，目前为私有，需要访问权限。
+优先级和排期由 [Project 看板](https://github.com/users/12bitsD/projects/3) 维护（访问需要权限）；[MVP 范围](https://github.com/12bitsD/agent4novel/issues/1) 保留初始目标与后续对齐。
 
 ---
 
-<p align="center">
-  <a href="https://github.com/12bitsD/agent4novel/issues">反馈问题或建议</a> ·
-  <a href="./LICENSE">MIT 开源许可</a>
-</p>
+[反馈问题或建议](https://github.com/12bitsD/agent4novel/issues) · [MIT 开源许可](./LICENSE)

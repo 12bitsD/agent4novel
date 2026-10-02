@@ -8,9 +8,9 @@ topics: ["author-config", "prompt-files", "skills", "configuration-snapshot"]
 code_paths: ["apps/server/src/runtime/production-app.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/store/sqlite-store.ts", "apps/web/src/pages/Workspace.tsx", "apps/cli/src/main.ts"]
 symbols: ["AgentConfig", "Pipeline", "SqliteStore"]
 inherits: ["016", "009", "033"]
-changed_by: ["008"]
+changed_by: ["008", "041"]
 read_when: ["configure-author-agent", "upload-skill", "freeze-generation-config"]
-last_context_reviewed: "2026-09-30"
+last_context_reviewed: "2026-10-03"
 ---
 
 # 007 — 作者 Agent 配置
@@ -81,6 +81,10 @@ RED→GREEN：config-red→config-files-green（公开入口/文件）；snapsho
 
 三轮自校准：①代码↔行为，默认/覆盖、同操作冻结、合法与异常写入、迁移/文件损坏/整个目录恢复一致；②代码↔最终知识，schema定义v2与文件发布、016保留provider HOW、README双语说明保存/指导文本，旧009/033审核字节不变；③完整候选↔AC1–7，全部有入口与本票证据，无工具/公网/Wiki扩票，实际CI保留C7。质量清理：复用公共契约、ModelRuntime、Pipeline操作入口和CLI有界读取；配置Repository与内容WorkStore分责，无第二关卡状态机；文件库/装配预算有界，日志只记安全标识。
 
+**样例时点**：上述 15.856 秒、877/528 tokens 属于首次实现候选。最终审核候选使用 `live-result-candidate.json` 与 `live-proof-candidate.log`：21.285 秒，输入 877、输出 772 tokens，仍只覆盖一次生产 Caption。最终来源已由原发布前裁决核对；本次没有新增模型调用。
+
+**当前缺陷**：配置面板的自动切章保护缺陷另见 [当前复审](./001-mvp-acceptance.md#2026-10-03-清点与复审)，服务端配置冻结的既有证据继续保留。
+
 ### 完成审核证据
 
 - **清单与候选**：清单blob42116082e8ca2804d826cc00f6578270077f60eb；固定点94054a1a577f2222973939415b6968d3d5eca79f；T0 83b5a7f962302361a862daaac0927f08c780fe8e；T1 207788c7e902f7c6d0a5fb8a2a241b6e019d55c7；49文件manifest.txt与完整candidate.patch，零本地中间提交。
@@ -97,6 +101,14 @@ RED→GREEN：config-red→config-files-green（公开入口/文件）；snapsho
 本机单用户，文件文本仅提示用途；不执行脚本/工具、不联网展开附件、不做跨作品共享库，不回改已生成内容或通过状态。凭据/Base URL/运行方式继续由Wiki016和Wiki033持有。
 
 ## 上下文演进
+
+### 2026-10-03 — 区分样例时点并更新交接
+
+- **触发证据**：原裁决使用最终候选的 21.285 秒，非审核正文另列首次实现的 15.856 秒；当前交接仍指向已完成的 #8/#1。本次还复现了配置草稿及未知写入的自动切章丢失。
+- **原假设**：真实调用段落无需区分候选时点，交付前队列仍能代表当前接手顺序。
+- **决定**：保留两份样例及其有限范围，新增时点说明；当前项目状态与待修复项链接 Wiki001。
+- **影响**：本轮不改变配置协议、执行快照或生产代码，也不扩大真实模型验证范围。
+- **上下文处理**：preserve 原样例、失败经验和完成审核字段；replace 当前交接队列，新增最终候选来源及复审边界。
 
 ### 2026-09-30 — 三案收敛后启动
 
@@ -132,4 +144,4 @@ RED→GREEN：config-red→config-files-green（公开入口/文件）；snapsho
 
 ## 交接结论
 
-本票本地能力已验证，独立双轴/有限attestation和对应commit远端CI通过后才合并关闭；终止状态看live issue。下一票#8坏例，最后#1 MVP联验。SQLite/Prompt文件一同保全，不降级旧程序或只恢复数据库；工具/Wiki扩展仍未接入。
+#7 已通过 PR38 合并关闭，#8 及 #1 也已交付；当前验证和待修复边界见 [Wiki001](./001-mvp-acceptance.md#2026-10-03-清点与复审)。SQLite 与 Prompt 文件须一同保全，不降级旧程序或只恢复数据库；#28/#29 的工具与作品 Wiki 扩展仍未实现。

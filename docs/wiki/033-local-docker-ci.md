@@ -8,9 +8,9 @@ topics: ["docker", "production-build", "ci", "volume-recovery"]
 code_paths: ["Dockerfile", "compose.yaml", ".github/workflows/**", "apps/server/src/runtime/**", "apps/server/scripts/**", "scripts/**", "apps/cli/test/command-entry.test.ts", "package.json"]
 symbols: ["createApp", "parseServerConfig", "A4N_DATA_DIR", "A4N_SERVE_WEB"]
 inherits: ["009", "016", "014"]
-changed_by: ["007", "008"]
+changed_by: ["007", "008", "041"]
 read_when: ["run-local-container", "debug-production-build", "verify-ci", "restore-container-volume"]
-last_context_reviewed: "2026-09-30"
+last_context_reviewed: "2026-10-03"
 ---
 
 # 033 — 本机 Docker Compose 与 GitHub CI
@@ -20,7 +20,7 @@ last_context_reviewed: "2026-09-30"
 - **读取时机**：构建/运行本机容器、CI或恢复数据卷。
 - **原始目的**：[#33](https://github.com/12bitsD/agent4novel/issues/33)把Docker/CI从#7拆出，交付本机单用户可运行产物。
 - **实际落地**：compiled server＋精简依赖、同源静态Web/健康接口、非root镜像和Compose已落地；本机Linux容器两章、旧章修改、重建与整个目录备份恢复通过。quality/container workflow已配置；[PR37](https://github.com/12bitsD/agent4novel/pull/37)已合并，#33已关闭，最终源提交两项[CI](https://github.com/12bitsD/agent4novel/actions/runs/36653441274)均成功。
-- **当前价值**：继承#9整个数据目录、v1迁移、短事务、显式seed与不自动续跑；部署范围由用户明确选择。
+- **当前价值**：继承 #9 整个数据目录、v1 迁移、短事务、显式 seed 与不自动恢复模型生成；部署范围由用户明确选择。
 - **后续变化**：[Wiki007](./007-author-agent-config.md)扩展恢复联验，验证作者配置与Prompt/Skill文件；[Wiki008](./008-bad-example-collection.md)再覆盖不可变坏例及SQLite v3恢复。公网/账号/镜像发布/自动部署不在本票。
 - **代码入口**：Hono公开应用、生产装配、server构建、Docker/Compose、质量/容器CI及验收脚本。
 
@@ -60,7 +60,7 @@ root实现本票；独立评审按canonical清单委派给未参与实现的revi
 
 ### 维护操作
 
-前提：Docker引擎运行，`docker compose version`可用；Git下载仓库。Compose固定容器host0.0.0.0、内部8787和`/data`，只将宿主127.0.0.1端口映射出来；不支持公网部署。plain `docker compose up --build -d --wait`进入无key演示，真实模型用`docker compose --env-file .env.local up --build -d --wait`，provider字段仍按[Wiki016](./016-model-runtime-provider-config.md#配置契约)配置。宿主端口改`A4N_HTTP_PORT`；默认8787。模型密钥不经过Docker构建参数或COPY。
+前提：Docker引擎运行，`docker compose version`可用；Git下载仓库。Compose固定容器host0.0.0.0、内部8787和`/data`，只将宿主127.0.0.1端口映射出来；不支持公网部署。`docker compose up --build -d --wait` 仅在未指定模型且没有供应商密钥时进入演示模式；已有密钥时可启用真实模型，显式模型缺对应密钥则拒绝启动。使用 `.env.local` 时执行 `docker compose --env-file .env.local up --build -d --wait`，供应商字段及选择顺序仍按 [Wiki016](./016-model-runtime-provider-config.md#配置契约) 配置。宿主端口改 `A4N_HTTP_PORT`；默认8787。模型密钥不经过Docker构建参数或COPY。
 
 `docker compose ps`查看健康，`docker compose logs app`检查安全启动报错；健康接口`/api/health`仅返回`{status:"ok"}`。显式Web开关但缺构建会提示`frontend build is unavailable; run pnpm build`；无效模型/存储/监听配置安全拒绝且不回显输入。源码开发仍用Vite5173+API8787。编译发布`pnpm build`后可`pnpm --filter @agent4novel/server start`运行演示；该入口只使用进程环境，不自动加载`.env.local`。CLI在安装依赖的宿主执行`./apps/cli/bin/a4n ... --url http://127.0.0.1:8787`。
 
@@ -79,7 +79,7 @@ docker compose -p agent4novel-restored run --build --rm --no-deps -T --entrypoin
 docker compose -p agent4novel-restored up -d --wait
 ```
 
-后续维护该恢复书架时继续使用同一个`-p agent4novel-restored`。更新先停止并备份整个卷，再`git pull --ff-only`和对应项目的`docker compose up --build -d --wait`；不删除卷、不隐式seed或续跑模型。未知/更高SQLite版本安全拒绝；旧程序降级没有保证，先保全卷，选择兼容程序或在新项目恢复备份。
+后续维护该恢复书架时继续使用同一个`-p agent4novel-restored`。更新先停止并备份整个卷，再`git pull --ff-only`和对应项目的`docker compose up --build -d --wait`；不删除卷，不隐式填充示例或恢复模型生成。未知/更高SQLite版本安全拒绝；旧程序降级没有保证，先保全卷，选择兼容程序或在新项目恢复备份。
 
 CI配置见workflow；quality执行frozen安装/全测试/typecheck/build/编译本地mock验证，container执行真实镜像两章及停服务归档恢复。PR/main/manual触发，两job超时、有同分支取消策略且contents只读；不获取供应商key、不做镜像发布或自动部署。远端对应commit的job结果必须回读成功才merge/close。
 
@@ -126,6 +126,14 @@ config RED4项真实缺行为（返回缺Web字段/开关未校验）后GREEN15�
 
 ## 上下文演进
 
+### 2026-10-03 — 修正启动条件与当前交接
+
+- **触发证据**：Compose 会消费已有运行环境中的模型与供应商密钥；当前维护段却将普通启动无条件描述为演示，交接还指向已交付的配置/坏例/父票。
+- **原假设**：未带 `--env-file` 的启动环境没有模型凭据，发布时的后续队列仍可复用。
+- **决定**：补充进入演示模式的条件，项目当前进度和静态文件边界的新发现链接 Wiki001。
+- **影响**：文档说明与现有配置选择一致，不改变容器、端口、凭据来源或静态文件行为。
+- **上下文处理**：preserve 原方案、验证和完成审核字段；replace 启动条件及过期的末尾队列。
+
 ### 2026-09-30 — 本机部署与作者配置分票
 
 - **触发证据**：用户要求Docker与CI，但原#7持有作者配置AC；用户进一步明确选择本机部署终点。
@@ -168,4 +176,4 @@ config RED4项真实缺行为（返回缺Web字段/开关未校验）后GREEN15�
 
 ## 交接结论
 
-本地容器、编译发布物与最终源提交远端CI均已验证，PR37合并且#33关闭；终止状态由issue/PR/job回读。#7继承同一整个数据目录与编译发布物资源定位；完整MVP仍要配置、坏例和父票联验。
+本地容器、编译发布物与最终源提交远端 CI 均已验证，PR37 已合并、#33 已关闭。#7/#8 继承同一整个数据目录与编译发布物资源定位，本机 MVP 总票也已交付。当前复审的静态文件边界缺陷及其触发条件见 [Wiki001](./001-mvp-acceptance.md#2026-10-03-清点与复审)，未据此宣称默认构建可读取任意外部文件。
