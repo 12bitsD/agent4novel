@@ -52,13 +52,77 @@ it('serves the absolute Web root and assets on the same application as the API, 
 it('keeps API misses, absent assets, private names and paths outside the Web root unavailable', async () => {
   const { webRoot, deps } = fixture()
   const app = createApp({ ...deps, ...{ webRoot } })
-  for (const path of ['/api/unknown', '/assets/missing.js', '/.env.local', '/%2eenv.local', '/assets/outside.txt', '/assets/%2e%2e/%2e%2e/private.txt']) {
+  for (const path of ['/api/unknown', '/%61pi/unknown', '/assets/missing.js', '/.env.local', '/%2eenv.local', '/assets/outside.txt', '/assets/%2e%2e/%2e%2e/private.txt', '/assets/%', '/assets/%00file.txt', '/assets/%5cfile.txt']) {
     const response = await app.request(path)
     expect(response.status, path).toBe(404)
     expect(await response.text(), path).not.toContain('PRIVATE_STATIC_MARKER')
   }
   const apiMiss = await app.request('/api/unknown')
   expect(apiMiss.headers.get('content-type')).toContain('application/json')
+})
+
+it('rejects encoded path separators when the encoded name points outside the Web root', async () => {
+  const { folder, webRoot, deps } = fixture()
+  writeFileSync(join(webRoot, 'assets', 'file.txt'), 'PUBLIC_STATIC_MARKER')
+  symlinkSync(join(folder, 'private.txt'), join(webRoot, 'assets%2Ffile.txt'))
+  const app = createApp({ ...deps, webRoot })
+
+  for (const path of ['/assets%2Ffile.txt', '/assets%2ffile.txt']) {
+    const response = await app.request(path)
+    expect(response.status, path).toBe(404)
+    expect(await response.text(), path).not.toContain('PRIVATE_STATIC_MARKER')
+  }
+})
+
+it('serves the checked public file when its encoded reserved name also names an outside symlink', async () => {
+  const { folder, webRoot, deps } = fixture()
+  writeFileSync(join(webRoot, 'assets', 'file?.txt'), 'PUBLIC_STATIC_MARKER')
+  symlinkSync(join(folder, 'private.txt'), join(webRoot, 'assets', 'file%3F.txt'))
+  const app = createApp({ ...deps, webRoot })
+
+  const response = await app.request('/assets/file%3F.txt')
+  expect(response.status).toBe(200)
+  expect(await response.text()).toBe('PUBLIC_STATIC_MARKER')
+})
+
+it('serves encoded public filenames without decoding their percent, space or Unicode characters again', async () => {
+  const { webRoot, deps } = fixture()
+  const files = [
+    { name: '100%.txt', path: '/assets/100%25.txt' },
+    { name: 'literal%2Fname.txt', path: '/assets/literal%252Fname.txt' },
+    { name: 'chapter one.txt', path: '/assets/chapter%20one.txt' },
+    { name: '章节.txt', path: '/assets/%E7%AB%A0%E8%8A%82.txt' },
+  ]
+  for (const { name } of files) writeFileSync(join(webRoot, 'assets', name), 'PUBLIC_STATIC_MARKER')
+  const app = createApp({ ...deps, webRoot })
+
+  for (const { path } of files) {
+    const response = await app.request(path)
+    expect(response.status, path).toBe(200)
+    expect(response.headers.get('content-type'), path).toContain('text/plain')
+    expect(await response.text(), path).toBe('PUBLIC_STATIC_MARKER')
+  }
+  const head = await app.request('/assets/100%25.txt', { method: 'HEAD' })
+  expect(head.status).toBe(200)
+  expect(head.headers.get('content-length')).toBe('20')
+  expect(await head.text()).toBe('')
+  const range = await app.request('/assets/literal%252Fname.txt', { headers: { range: 'bytes=0-5' } })
+  expect(range.status).toBe(206)
+  expect(range.headers.get('content-range')).toBe('bytes 0-5/20')
+  expect(await range.text()).toBe('PUBLIC')
+})
+
+it('rejects outside symlinks whose public names contain percent-encoded characters', async () => {
+  const { folder, webRoot, deps } = fixture()
+  symlinkSync(join(folder, 'private.txt'), join(webRoot, 'assets', 'outside%.txt'))
+  symlinkSync(join(folder, 'private.txt'), join(webRoot, 'assets', 'outside%2F.txt'))
+  const app = createApp({ ...deps, webRoot })
+
+  for (const path of ['/assets/outside%25.txt', '/assets/outside%252F.txt']) {
+    const response = await app.request(path)
+    expect(response.status, path).toBe(404)
+    expect(await response.text(), path).not.toContain('PRIVATE_STATIC_MARKER')
+  }
 })
 
 it('rejects enabling Web serving with a missing build instead of silently serving an empty site', () => {
