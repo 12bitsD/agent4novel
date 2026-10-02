@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。最后更新：2026-09-30。#5/#22/#6/#19/#9/#33/#7/#8 已逐票合并关闭；本机 MVP 功能与整体验证已具备，当前 #1 总票做发布收口，终态核对 live issue。统一入口为 [Wiki001](./wiki/001-mvp-acceptance.md)；#28/#29及长篇质量评估后置。
+> 用途：context compaction / 新会话接力。最后更新：2026-10-03。#1 及必需子票均已合并关闭，本机 MVP 已发布；当前远端状态和本次复审见 [Wiki001](./wiki/001-mvp-acceptance.md#2026-10-03-清点与复审)。复审发现三项待修复边界，#28/#29及长篇质量评估保持后置。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -12,14 +12,16 @@
 既有硬规则全部保留：每票 grill 对齐、实现前给执行计划、建立 Wiki 上下文、TDD 红绿切片、回写代码落点与变化原因、三轮自校准、Standards/Spec 双轴 review、修复后再交付。开始每票时完整读取并按 [Ticket 完成审核清单](./agents/ticket-completion-checklist.md) 执行；它是提交、直推或 PR/merge、远端回读顺序的唯一权威来源，逐票证据写入数字 Wiki、GitHub issue 与可回读远端状态。
 回复用中文。2026-09-30 用户授权每个任务和实质 gap 内部完成三方案研究，普通工程选择自主收敛；只有产品范围、不可逆数据影响、新权限/费用或核心体验降低升级 Human。当前关键裁决已完成：本机 Docker + CI。完整决定见 [交付研究](./research/mvp-delivery-options.md)，不重复询问已定选择。
 
+2026-10-03 用户要求对外输出遵循其个人 Work Wiki 的中性精确风：事实直陈，一句表达一件事，首次解释必要术语，明确已验证与未验证范围；删除情绪、修辞和没有具体信息的过渡语。个人 Work Wiki 的输出要求与 #29 的书级设定库属于不同用途。本次应用和清点结果见 [复审记录](./wiki/001-mvp-acceptance.md#2026-10-03-清点与复审)。
+
 ## 当前里程碑与验证边界
 
-**本机 MVP 的功能已交付，整体验证与边界从 [Wiki001](./wiki/001-mvp-acceptance.md) 进入。** #6显式下一章/目录/历史编辑、#19共享验证、#9跨进程恢复、#33同源Docker/CI、#7配置/文件/操作快照及#8手工坏例均已合并关闭。#8 PR39对应quality/container实际CI成功；总票#1需其自身审核/CI/合并关闭完成后才有终态，不以本段替代live记录。
+**本机 MVP 已发布，整体验证与边界从 [Wiki001](./wiki/001-mvp-acceptance.md) 进入。** 2026-10-03 回读 #1 及 #6/#19/#9/#33/#7/#8 均已关闭，对应 PR 均已合并；[PR40](https://github.com/12bitsD/agent4novel/pull/40) 对应源提交的 CI 与 [main CI](https://github.com/12bitsD/agent4novel/actions/runs/36727036119) 均成功。当前 main 为 `1571539b131fb11dea1fbfc5cb6f88e9c8c22815`。关闭记录证明交付状态，本次新发现不因已关闭而视为无缺陷。
 
 - **交付状态**：#22/PR #30、#6/[PR #32](https://github.com/12bitsD/agent4novel/pull/32)、#19/[PR #34](https://github.com/12bitsD/agent4novel/pull/34)、#9/[PR #36](https://github.com/12bitsD/agent4novel/pull/36) 已关闭/合并；#9终止记录见[完成评论](https://github.com/12bitsD/agent4novel/issues/9#issuecomment-5897744738)。#33/[PR37](https://github.com/12bitsD/agent4novel/pull/37)已关闭/合并，最终源提交两job[CI成功](https://github.com/12bitsD/agent4novel/actions/runs/36653441274)。
 - **已验证基线**：#6 有 fake 多章、CLI/Web、独立真实 Beat2/Prose2 和本地门禁证据，见 [Wiki 006](./wiki/006-chapter-continuation.md)。真实节点使用合成上游，不是全书/全部节点真实模型验收，也不证明长篇质量。#19 的共享验证证据见其本票 Wiki；#9 的 SQLite、真实进程重启及关闭路径需看 Wiki 009 的实际结果，不沿用旧票测试。
 - **当前存储边界**：生产启动使用 SQLite，恢复已提交的作品、产物版本、状态和输入引用；未保存页面编辑不恢复，遥测仍在进程内，不自动恢复模型调用。旧内存进程不自动迁移或清空。#33同源Web/API、非root镜像、两章卷恢复及实际CI已验证。#7已接入默认/节点覆盖、Prompt/Skill版本和操作快照，实际交付见PR38和本票issue；#8已接入手工坏例快照与回看，交付状态核对#8；长期记忆与Wiki工具仍后置。
-- **MVP 收尾条件**：按 [总票 #1](https://github.com/12bitsD/agent4novel/issues/1) 完成剩余需求后，联验两章双关卡、重启恢复、配置生效及坏例回看，并分别记录 fake、真实模型与 SQLite 重启证据。#1 当前保持 OPEN。
+- **复审与待修复项**：本次 815 项测试、类型检查和构建通过。新增定向复现发现配置草稿/未知请求在自动切章时丢失、起章前章版本条件未保持至生成、静态文件校验与读取路径解码不一致。触发条件与建议见 [复审记录](./wiki/001-mvp-acceptance.md#2026-10-03-清点与复审)，本轮未修改生产行为。
 
 ## 已完成
 
@@ -105,14 +107,14 @@ CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化
 
 #22 已合入 main；其原 source、固定点和候选审核记录均属于已交付历史，入口为 [Wiki 022](./wiki/022-prose-generation-review.md)。新票从当前 main 核对基线，不能把旧票授权或审核结论当成新票完成证据。
 
-**当前 #1 MVP 收口**。两章双关卡、历史修改、真实进程重启、配置/文件及坏例回看、实际容器整目录恢复已验证，完整证据面和有限供应商来源见Wiki001。范围已按三方案研究收敛并写回issue，普通工程细节不再逐项请求Human；新增重大冲突仍需升级。
+**当前先处理复审发现，再对齐扩展范围**。#1 已关闭，无需重复交付；三项待修复边界及证据见 Wiki001。#28/#29 尚未开工，长篇质量验证仍未完成。既有三方案研究与用户裁决继续有效，普通工程细节自主处理；重大范围或数据取舍再请求用户决定。
 
 | 交付批次 | 可验收结果 | 后续衔接 |
 |---|---|---|
 | #33 本机 Docker/CI（已交付） | 单容器同源服务、数据目录卷恢复、远端 fake CI | 不做公网部署/镜像发布/自动部署 |
 | #7 Agent 配置（已交付） | 作品默认＋每步覆盖，生成冻结配置和文件版本 | Prompt/Skill 文件沿 ADR0002，工具执行归 #28 |
 | #8 坏例（已交付） | 已保存正文选段、备注、原文快照和来源版本、列表回看 | 自动分析及持续重定位后置 |
-| #1 MVP 联验 | 两章双关卡、历史修改、服务/容器重启、配置生效、坏例回看 | 各票和实际贯通证据均完成才能关闭 |
+| #1 MVP 联验（已交付） | 两章双关卡、历史修改、服务/容器重启、配置生效、坏例回看 | 完成评论及远端状态作证；本次新发现另行修复 |
 | #28/#29 扩展 | 设定查询工具循环、作品 Wiki 档案演进 | 当前均未实现，保持后置 |
 
 WHAT/AC 和依赖以 [父票 #1](https://github.com/12bitsD/agent4novel/issues/1) 及子票为准；[研究与决定清单](./research/mvp-delivery-options.md) 保存取舍。#33 的 SQLite 恢复 AC 原生依赖 #9；不为纯排期增加其他硬依赖。不迁移或清空旧内存实例；切换且内有重要作品时先保全。配置的实现和验收见Wiki007；坏例已交付见Wiki008，整体验收见Wiki001。SQLite、容器、配置、坏例分别以本票Wiki与远端状态为准。

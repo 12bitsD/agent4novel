@@ -8,9 +8,9 @@ topics: ["agent-cli", "command-help", "argument-validation", "safe-discovery"]
 code_paths: ["apps/cli/src/main.ts", "apps/cli/src/command-line.ts", "apps/cli/test/command-entry.test.ts", "apps/cli/test/cli-process.ts"]
 symbols: ["a4n", "helpFor", "parseCommandLine", "usage", "--help"]
 inherits: ["014"]
-changed_by: []
+changed_by: ["041"]
 read_when: ["change-cli-command", "debug-cli-arguments", "discover-cli-command"]
-last_context_reviewed: "2026-09-28"
+last_context_reviewed: "2026-10-03"
 ---
 
 # 025 — CLI 命令发现与参数校验
@@ -106,6 +106,14 @@ RED 分片记录帮助实际 POST、缺 scoped help、未知参数被执行、�
 - **影响**：下一位 Agent 先读当前能力、边界与下一步，需要审核细节时再展开历史版本。
 - **上下文处理**：replace 状态与交接入口；compact 审核叙述；preserve 原始目的、范围裁决、失败实验和完整审核来源，不改变知识归属。
 
+### 2026-10-03 — 更新主线接手入口
+
+- **触发证据**：当前交接仍让主线接回 #5，#5 及后续本机 MVP 已交付。
+- **原假设**：CLI 交付时的下一票可以继续作为当前主线导航。
+- **决定**：项目进度链接当前 handoff 和 Wiki001，保留 CLI 帮助与语法校验的继承约束。
+- **影响**：只修正导航，不改变命令或结果语义。
+- **上下文处理**：preserve 原目的、失败经验及完成审核；replace 末尾旧队列。
+
 ## 交接结论
 
-可以依赖帮助与语法校验先于命令 I/O，并从命令专属帮助发现输入与副作用。不能据此认定语义输入有效、某次业务已成功或真实模型质量已达标；仍需检查响应、版本与人工关卡。统一结果、运行记录和 Outline 基线保护是后续独立范围。本票已交付；审核细节见发布时 Wiki，最终 PR、merge 和关闭结果见上方完成评论。项目主线继续按 [handoff](../handoff.md#下一步) 接回 #5。
+可以依赖帮助与语法校验先于命令 I/O，并从命令专属帮助发现输入与副作用。不能据此认定语义输入有效、某次业务已成功或真实模型质量已达标；仍需检查响应、版本与人工关卡。统一结果、运行记录和 Outline 基线保护是后续独立范围。本票已交付；审核细节见发布时 Wiki，最终 PR、merge 和关闭结果见上方完成评论。项目当前进度见 [handoff](../handoff.md#下一步)，本机 MVP 验证和待修复项见 [Wiki001](./001-mvp-acceptance.md#2026-10-03-清点与复审)。

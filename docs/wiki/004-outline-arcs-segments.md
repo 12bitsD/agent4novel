@@ -8,9 +8,9 @@ topics: ["outline", "story-arcs", "story-segments", "workflow-gates", "outline-r
 code_paths: ["packages/contracts/src/outline.ts", "packages/contracts/src/artifacts.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/steps/outline-io.ts", "apps/server/src/steps/outline-step.ts", "apps/server/src/routes/works.ts", "apps/server/src/start.ts", "apps/server/test/pipeline.test.ts", "apps/web/src/outline-review.ts", "apps/web/src/pages/OutlineReview.tsx"]
 symbols: ["outlineContentSchema", "outlineDraftSchema", "createOutlineStep", "PipelineDefinitionEntry", "workflowOf", "normalizeOutlineIds", "ReviewState", "advance-in-progress", "version-conflict"]
 inherits: ["011"]
-changed_by: ["016", "013", "005"]
+changed_by: ["016", "013", "005", "041"]
 read_when: ["change-outline-schema", "change-outline-generation", "debug-outline-gate", "change-outline-editor"]
-last_context_reviewed: "2026-09-08"
+last_context_reviewed: "2026-10-03"
 ---
 
 # 004 — 大纲生成：弧线 + 剧情点两层结构
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-09-08"
 - **原始目的**：用可审阅的全书结构替代“每章一句话”的分章大纲，并为后续章纲切片提供稳定输入。
 - **实际落地**：outline 成为 caption → creative → outline 链路的第三步，生成后停在人工关卡；作者可编辑草稿并单独通过。
 - **当前价值**：本文是弧线、剧情点、outline 关卡与编辑行为的当前 HOW；已有 ID 稳定，但批量新增存在重复 ID 的已知限制。
-- **后续变化**：模型配置由 [Wiki 016](./016-model-runtime-provider-config.md) 接管；[Wiki 013](./013-setting-generation-review.md) 在大纲后追加 Setting，Web 大纲通过动作成功后续跑一次 advance，生产链不再以 outline-approved 结束。大纲保存／通过本身的两步语义不变。
+- **后续变化**：模型配置由 [Wiki 016](./016-model-runtime-provider-config.md) 接管；[Wiki 013](./013-setting-generation-review.md) 在大纲后追加 Setting，Web 大纲通过动作成功后再执行一次 advance，生产链不再以 outline-approved 结束。大纲保存／通过本身的两步语义不变。
   [Wiki 005](./005-beat-generation-review.md) 已接入下游第一章章纲，消费完整已通过的大纲和设定；不改变本页的大纲契约。
 - **代码入口**：[outline contract](../../packages/contracts/src/outline.ts)、[pipeline](../../apps/server/src/pipeline/pipeline.ts)、[server assembly](../../apps/server/src/start.ts)、[works routes](../../apps/server/src/routes/works.ts)、[review state](../../apps/web/src/outline-review.ts)。
 
@@ -54,7 +54,7 @@ OutlineContent 存储 arcs：每份 3–8 条弧线，每条 2–8 个剧情点�
 
 ### Pipeline 与关卡
 
-下列三步装配和状态表保留 #4 交付时的基线；当前五步末态与 Beat 关卡见 [Wiki 005](./005-beat-generation-review.md)，Setting 关卡见 [Wiki 013](./013-setting-generation-review.md#服务端读模型与页面衔接)，旧三步定义仍在兼容测试中使用。
+下列三步装配和状态表保留 #4 交付时的基线；当前六节点及逐章章纲/正文关卡见 [Wiki 006](./006-chapter-continuation.md)，Setting 关卡见 [Wiki 013](./013-setting-generation-review.md#服务端读模型与页面衔接)，本机 MVP 的当前验证见 [Wiki001](./001-mvp-acceptance.md#2026-10-03-清点与复审)。旧三步定义仍在兼容测试中使用。
 
 运行时按 caption（自动通过）→ creative（消费 caption，人工选定）→ outline（消费 creative，人工审阅）装配。creative 消费守卫要求最新版本 approved 且恰好一个方向；选定后 Web 再调用 advance，生成 outline 并停在 awaiting-outline-review。
 
@@ -124,6 +124,14 @@ OutlineReview 采用纯状态映射加 React 视图：
 - outline fan-out 或多方案生成。
 
 ## 上下文演进
+
+### 2026-10-03 — 修正当前工作流导航
+
+- **触发证据**：当前生产链已有正文及逐章循环；本页导航仍指向五步末态。
+- **原假设**：第一章章纲交付后的导航仍能代表当前完整链路。
+- **决定**：当前工作流链接 Wiki006，整体验证链接 Wiki001，Setting 关卡链接保留。
+- **影响**：仅更新阅读入口，大纲结构、数量限制与作者关卡保持原语义。
+- **上下文处理**：preserve 三步装配/状态表和既有演进事件；replace 已漂移的“当前五步”描述。
 
 ### 2026-09-08 — 第一章章纲接线完成
 
