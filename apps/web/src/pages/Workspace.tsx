@@ -57,6 +57,11 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
   const [leaving, setLeaving] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
   const [configGuard, setConfigGuard] = useState({ dirty: false, locked: false })
+  const configGuardRef = useRef(configGuard)
+  const updateConfigGuard = useCallback((guard: typeof configGuard) => {
+    configGuardRef.current = guard
+    setConfigGuard(guard)
+  }, [])
   const [badExampleGuard, setBadExampleGuard] = useState({ dirty: false, locked: false })
   const settingRef = useRef<SettingReviewState | null>(null)
   const workRef = useRef<WorkView | null>(null)
@@ -273,9 +278,20 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
     if (view?.id === workId) acceptWork(view, false)
   }
 
+  const openStartedChapter = (view: WorkView | null, target: number) => {
+    if (!mounted.current || !view?.chapters.some(item => item.chapter === target)) return
+    frozenStart.current = null
+    setStartUncertain(false)
+    if (configGuardRef.current.dirty || configGuardRef.current.locked) {
+      setError('下一章章纲已生成，当前配置仍在本页。请先保存配置、加载服务器配置或核对原请求，再从章节目录打开下一章。')
+      return
+    }
+    onSelectChapter(target)
+  }
   const beginNextChapter = async () => {
     const current = proseRef.current
-    if (!current || generationBusy.current || starting || isProseDirty(current) || badExampleGuard.dirty) return
+    if (!current || generationBusy.current || starting || isProseDirty(current) || badExampleGuard.dirty
+      || configGuardRef.current.dirty || configGuardRef.current.locked) return
     if (!frozenStart.current && !chapterActions(workRef.current, current.baseline.chapter).includes('start-next-chapter')) return
     const request = frozenStart.current ?? { chapter: current.baseline.chapter + 1,
       expectedPreviousProseId: current.baseline.id, expectedPreviousProseVersion: current.baseline.version }
@@ -292,7 +308,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
       if (unknown) setError('开始下一章的结果尚未确认。可核对服务器，或重试同一份开始请求。')
       else if (outcome.kind === 'failed') setError(`下一章生成失败（${outcome.code}）${outcome.retryable ? '，可重试。' : '，请核对作品后重试。'}`)
       const view = await refresh()
-      if (mounted.current && view?.chapters.some(item => item.chapter === request.chapter)) onSelectChapter(request.chapter)
+      openStartedChapter(view, request.chapter)
     } catch (error) {
       if (!mounted.current) return
       const failure = error as { status?: number; code?: string }
@@ -304,11 +320,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
       setError(rejected ? `未开始下一章（${failure.code ?? failure.status}），请核对作品后重试。`
         : '开始下一章的结果尚未确认。可核对服务器，或重试同一份开始请求。')
       const view = await refresh()
-      if (mounted.current && view?.chapters.some(item => item.chapter === request.chapter)) {
-        frozenStart.current = null
-        setStartUncertain(false)
-        onSelectChapter(request.chapter)
-      }
+      openStartedChapter(view, request.chapter)
     } finally {
       generationBusy.current = false
       if (mounted.current) setStarting(false)
@@ -317,7 +329,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
   const confirmStart = async () => {
     const target = frozenStart.current?.chapter
     const view = await refresh()
-    if (mounted.current && target && view?.chapters.some(item => item.chapter === target)) onSelectChapter(target)
+    if (target) openStartedChapter(view, target)
   }
 
   const autosaveRef = useRef(runProse)
@@ -375,7 +387,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
       </button>
       {work && <h1>{work.title}</h1>}
       {work && <button type="button" style={{ ...btnSecondary, marginBottom: 16 }} onClick={() => setConfigOpen(true)}>Agent 配置</button>}
-      {configOpen && <AuthorConfigPanel workId={workId} onGuard={setConfigGuard} />}
+      {configOpen && <AuthorConfigPanel workId={workId} onGuard={updateConfigGuard} />}
       {!!work?.chapters.length && <nav aria-label="章节目录" className="chapter-directory">
         <h2>章节目录</h2><div className="setting-actions">{work.chapters.map(item => <button type="button" key={item.chapter}
           data-chapter={item.chapter} aria-current={item.chapter === chapter ? 'page' : undefined}
@@ -442,10 +454,10 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
         onApprove={() => void runProse('approve-prose')} onRegenerate={() => void runProse('regenerate-prose')}
         onConfirm={() => void runProse('confirm')} onRetry={() => void runProse('retry')} />}
       {showProse && prose && (actions.includes('start-next-chapter') || startUncertain) && <section style={{ marginTop: 24 }}>
-        <button type="button" style={btnPrimary} disabled={starting || generating || isProseDirty(prose) || badExampleGuard.dirty} onClick={() => void beginNextChapter()}>
+        <button type="button" style={btnPrimary} disabled={starting || generating || isProseDirty(prose) || badExampleGuard.dirty || configGuard.dirty || configGuard.locked} onClick={() => void beginNextChapter()}>
           {starting ? '正在生成下一章章纲…' : startUncertain ? '重试开始下一章' : '开始下一章'}
         </button>
-        <p className="setting-muted">先生成下一章章纲，把关后再生成正文。{isProseDirty(prose) ? '请先保存并确认本章修改。' : ''}{badExampleGuard.dirty ? '请先标记坏例或清除选段和备注。' : ''}</p>
+        <p className="setting-muted">先生成下一章章纲，把关后再生成正文。{isProseDirty(prose) ? '请先保存并确认本章修改。' : ''}{badExampleGuard.dirty ? '请先标记坏例或清除选段和备注。' : ''}{configGuard.dirty || configGuard.locked ? '请先保存配置、加载服务器配置或核对原请求。' : ''}</p>
       </section>}
       {work && <ReferenceMaterials key={chapter} work={work} chapter={chapter} hiddenKinds={[
         ...(!showPoster && !showOutline && !showSetting && !showBeat && !showProse ? ['seed'] : []),

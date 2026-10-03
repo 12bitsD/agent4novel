@@ -263,19 +263,19 @@ export class Pipeline {
     return structuredClone(this.snapshotConfig?.(work) ?? Object.fromEntries(this.definition.map(entry => [entry.stepId, this.resolveConfig(work, entry.stepId)])))
   }
 
-  private async executeEntry(workId: string, entry: PipelineDefinitionEntry, configs = () => this.operationConfigs(workId)): Promise<AdvanceOutcome> {
+  private async executeEntry(workId: string, entry: PipelineDefinitionEntry, configs = () => this.operationConfigs(workId), requiredInput?: ArtifactInput): Promise<AdvanceOutcome> {
     let beatCommand: BeatCommandObservation | undefined
     let proseCommand: ProseExecutionObservation | undefined
     try {
       const config = structuredClone(configs()[entry.stepId])
       if (!config) throw new KnownError('config-invalid', 'step configuration is unavailable')
       if (entry.outputKind === 'beat') {
-        const result = await observeBeat(workId, 'generate-beat', null, execution => this.runEntry(workId, entry, config, execution), entry.chapter)
+        const result = await observeBeat(workId, 'generate-beat', null, execution => this.runEntry(workId, entry, config, execution, requiredInput), entry.chapter)
         beatCommand = result.command
       } else if (entry.outputKind === 'prose') {
-        const result = await observeProse(workId, 'generate-prose', null, execution => this.runEntry(workId, entry, config, execution), entry.chapter)
+        const result = await observeProse(workId, 'generate-prose', null, execution => this.runEntry(workId, entry, config, execution, requiredInput), entry.chapter)
         proseCommand = result.command
-      } else await this.runEntry(workId, entry, config)
+      } else await this.runEntry(workId, entry, config, undefined, requiredInput)
     } catch (err) {
       const cause = err instanceof BeatCommandError || err instanceof ProseCommandError ? err.cause : err
       const known = cause instanceof KnownError ? cause : null
@@ -328,7 +328,9 @@ export class Pipeline {
       const previous = this.previousChapter(work, parsed.chapter)[1]!
       if (previous.id !== parsed.expectedPreviousProseId || previous.version !== parsed.expectedPreviousProseVersion) throw new KnownError('version-conflict', 'previous chapter has changed')
       const entry = this.definitionFor(parsed.chapter).find(d => d.outputKind === 'beat')!
-      return await this.executeEntry(workId, entry)
+      const requiredInput: ArtifactInput = { kind: 'prose', chapter: parsed.chapter - 1,
+        artifactId: parsed.expectedPreviousProseId, version: parsed.expectedPreviousProseVersion }
+      return await this.executeEntry(workId, entry, undefined, requiredInput)
     } finally { this.advancing.delete(workId) }
   }
 
@@ -416,11 +418,19 @@ export class Pipeline {
     }
   }
 
-  private async runEntry(workId: string, entry: PipelineDefinitionEntry, config: AgentConfig, execution?: BeatExecution): Promise<Artifact> {
+  private async runEntry(workId: string, entry: PipelineDefinitionEntry, config: AgentConfig, execution?: BeatExecution, requiredInput?: ArtifactInput): Promise<Artifact> {
     const step = this.steps.get(entry.stepId)!
     const work = this.store.getWork(workId)!
     const { upstream, inputs, preconditions: consumedPreconditions } = this.inputsFor(work, entry)
+    // A start request binds its predecessor before the configuration snapshot.
+    // Recheck the actual sample and retain that original condition at commit.
+    if (requiredInput && !inputs.some(input => input.kind === requiredInput.kind && input.chapter === requiredInput.chapter
+      && input.artifactId === requiredInput.artifactId && input.version === requiredInput.version)) {
+      throw new KnownError('upstream-changed', 'requested input has changed')
+    }
     const preconditions: ArtifactPrecondition[] = [{ kind: entry.outputKind, chapter: entry.chapter, head: null }, ...consumedPreconditions]
+    if (requiredInput) preconditions.push({ kind: requiredInput.kind, chapter: requiredInput.chapter,
+      head: { artifactId: requiredInput.artifactId, version: requiredInput.version, humanStatus: 'approved' } })
     if (entry.outputKind === 'beat' || entry.outputKind === 'prose') {
       for (const prior of this.definitionFor(entry.chapter ?? 1).slice(0, this.definition.findIndex(d => d.stepId === entry.stepId))) {
         const head = work.artifacts.find(a => a.kind === prior.outputKind && a.chapter === prior.chapter)

@@ -136,7 +136,7 @@ Once prose is shown as saved, it survives page refreshes and server restarts. Ke
 - Approved settings and chapter plans are read-only. Continuation mainly uses the preceding chapter; long-form setting search and a work Wiki are not yet available.
 - Prompt/Skill files provide text guidance; tools, scripts and attachments are not executed. Bad examples support manual review, with no automatic analysis, scoring or rewriting.
 - Restarts do not automatically resume model calls. Check saved content before continuing; diagnostic logs do not persist across restarts.
-- Save configuration and confirm its write result before starting the next chapter. Automatic chapter navigation can currently discard unsaved configuration or its unresolved request. See the [current review](./docs/wiki/001-mvp-acceptance.md#2026-10-03-清点与复审) for other reproduced boundary defects; behavioral fixes have not been published.
+- Save or reconcile configuration before starting the next chapter if it is unsaved, saving or has an unknown result. Editing configuration during generation keeps the current page; after saving or explicitly discarding edits, use the directory to open the generated chapter. Reconcile an unknown configuration request or explicitly retry the original request.
 - The app is for local single-user use, with no accounts or public-access controls. Full-novel generation quality has not been evaluated; see the [MVP verification record](./docs/wiki/001-mvp-acceptance.md#测试与验证) for engineering acceptance scope.
 
 <a id="architecture"></a>

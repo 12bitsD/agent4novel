@@ -8,7 +8,7 @@ topics: ["mvp-acceptance", "local-single-user", "delivery", "verification"]
 code_paths: ["scripts/container-smoke.mjs", "scripts/production-smoke.mjs", "apps/server/test/sqlite-restart.test.ts", "apps/web/src/pages/Workspace.tsx"]
 symbols: ["createApp", "WorkView", "BadExample", "AuthorConfigView"]
 inherits: ["006", "007", "008", "033"]
-changed_by: ["041"]
+changed_by: ["041", "043"]
 read_when: ["resume-mvp", "review-mvp-acceptance", "plan-post-mvp"]
 last_context_reviewed: "2026-10-03"
 ---
@@ -24,6 +24,8 @@ last_context_reviewed: "2026-10-03"
 - **后续变化**：#28/#29设定工具/作品Wiki、自动Wiki更新、已通过设定/章纲回改及长篇质量评估继续后置，不自动关闭拓展票。
 - **代码入口**：真实CLI容器联验、production SDK mock、跨进程恢复测试与Workspace；具体模块从继承Wiki进入。
 
+
+本页相关后续变化：复审 R1–R3 的实现与回归由 [Wiki043](./043-mvp-review-boundary-fixes.md) 跟踪。该票的修复候选与 main 发布状态分别判断，原完成审核不追改。
 ## 设计目的
 
 对当前已确认的本机单用户MVP作工程验收：作者能完成两章，回看和编辑历史正文，保全作品及作者配置/文件/坏例。记录真实模型调用的有限证据，避免把短样例扩大为整本小说质量证明。
@@ -138,6 +140,14 @@ last_context_reviewed: "2026-10-03"
 本机单用户、没有账号/公网部署；上一章承接，无长篇检索/档案/工具循环；Skill只作指导文字，不执行脚本/附件；坏例手工收集及回看。已通过设定/章纲回改、自动Wiki更新/重写后章、自动分析及长篇成书质量仍后置。历史初次Web RED缺失在Wiki008保留，本票不追认；当前功能回归和修复的真实RED/GREEN已有独立证明。
 
 ## 上下文演进
+
+### 2026-10-03 — 复审缺陷另票修复
+
+- **触发证据**：用户要求先合并文档，再修复三项已复现 P2；PR42 已合并，#41 已关闭。
+- **原假设**：既有审核未覆盖本次复审暴露的相邻边界，不能用已闭票状态消除新发现。
+- **决定**：复审 R1–R3 的实现与回归进入 #43 的公共接口红绿和独立 review，不重写既有产品裁决。
+- **影响**：当前相关行为与回归从 Wiki043 接手；修复 PR 本轮先推送，不提前认定 main 已更新。
+- **上下文处理**：preserve 原目的、人决、失败经验和完成审核全部字节；replace 当前接手入口；本次修复证据保存在新票。
 
 ### 2026-09-30 — 按既有决定聚合 MVP 工程验收
 

@@ -25,17 +25,19 @@ function contained(root: string, target: string): boolean {
 // Only built public files are served. Unknown API paths retain the JSON error contract.
 export function staticWeb(directory: string): MiddlewareHandler {
   const root = validateWebRoot(directory)
-  const serve = serveStatic({ root })
   return async (c, next) => {
     if (c.req.method !== 'GET' && c.req.method !== 'HEAD') return next()
+    if (/%2f/i.test(c.req.path)) return next()
     let path: string
     try { path = decodeURIComponent(c.req.path) } catch { return next() }
     if (path === '/api' || path.startsWith('/api/') || path.includes('\\') || path.includes('\0')
       || path.split('/').some(part => part.startsWith('.'))) return next()
+    let file: string
     try {
-      const file = realpathSync(join(root, path === '/' ? 'index.html' : path))
+      file = realpathSync(join(root, path === '/' ? 'index.html' : path))
       if (!contained(root, file) || !statSync(file).isFile()) return next()
     } catch { return next() }
-    return serve(c, next)
+    // An explicit path keeps serving and validation on the same file without another URL decode.
+    return serveStatic({ path: file })(c, next)
   }
 }

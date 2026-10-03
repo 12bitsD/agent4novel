@@ -8,7 +8,7 @@ topics: ["author-config", "prompt-files", "skills", "configuration-snapshot"]
 code_paths: ["apps/server/src/runtime/production-app.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/store/sqlite-store.ts", "apps/web/src/pages/Workspace.tsx", "apps/cli/src/main.ts"]
 symbols: ["AgentConfig", "Pipeline", "SqliteStore"]
 inherits: ["016", "009", "033"]
-changed_by: ["008", "041"]
+changed_by: ["008", "041", "043"]
 read_when: ["configure-author-agent", "upload-skill", "freeze-generation-config"]
 last_context_reviewed: "2026-10-03"
 ---
@@ -24,6 +24,8 @@ last_context_reviewed: "2026-10-03"
 - **后续变化**：[Wiki008](./008-bad-example-collection.md)在SQLite v3保全配置/文件并增加坏例快照；本页配置职责继续有效。工具执行与作品Wiki仍留#28/#29；本票不回改已有内容。
 - **代码入口**：生产装配、Pipeline、SQLite、Workspace和CLI。
 
+
+本页相关后续变化：配置草稿和未知请求的自动导航保护由 [Wiki043](./043-mvp-review-boundary-fixes.md) 跟踪。该票的修复候选与 main 发布状态分别判断，原完成审核不追改。
 ## 设计目的
 
 三维偏好、每步实际配置和Skill文件选择可见可验证；一次操作冻结配置，不混用运行期间的改动。
@@ -101,6 +103,14 @@ RED→GREEN：config-red→config-files-green（公开入口/文件）；snapsho
 本机单用户，文件文本仅提示用途；不执行脚本/工具、不联网展开附件、不做跨作品共享库，不回改已生成内容或通过状态。凭据/Base URL/运行方式继续由Wiki016和Wiki033持有。
 
 ## 上下文演进
+
+### 2026-10-03 — 复审缺陷另票修复
+
+- **触发证据**：用户要求先合并文档，再修复三项已复现 P2；PR42 已合并，#41 已关闭。
+- **原假设**：既有审核未覆盖本次复审暴露的相邻边界，不能用已闭票状态消除新发现。
+- **决定**：配置草稿和未知请求的自动导航保护进入 #43 的公共接口红绿和独立 review，不重写既有产品裁决。
+- **影响**：当前相关行为与回归从 Wiki043 接手；修复 PR 本轮先推送，不提前认定 main 已更新。
+- **上下文处理**：preserve 原目的、人决、失败经验和完成审核全部字节；replace 当前接手入口；本次修复证据保存在新票。
 
 ### 2026-10-03 — 区分样例时点并更新交接
 

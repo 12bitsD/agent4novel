@@ -8,7 +8,7 @@ topics: ["docker", "production-build", "ci", "volume-recovery"]
 code_paths: ["Dockerfile", "compose.yaml", ".github/workflows/**", "apps/server/src/runtime/**", "apps/server/scripts/**", "scripts/**", "apps/cli/test/command-entry.test.ts", "package.json"]
 symbols: ["createApp", "parseServerConfig", "A4N_DATA_DIR", "A4N_SERVE_WEB"]
 inherits: ["009", "016", "014"]
-changed_by: ["007", "008", "041"]
+changed_by: ["007", "008", "041", "043"]
 read_when: ["run-local-container", "debug-production-build", "verify-ci", "restore-container-volume"]
 last_context_reviewed: "2026-10-03"
 ---
@@ -24,6 +24,8 @@ last_context_reviewed: "2026-10-03"
 - **后续变化**：[Wiki007](./007-author-agent-config.md)扩展恢复联验，验证作者配置与Prompt/Skill文件；[Wiki008](./008-bad-example-collection.md)再覆盖不可变坏例及SQLite v3恢复。公网/账号/镜像发布/自动部署不在本票。
 - **代码入口**：Hono公开应用、生产装配、server构建、Docker/Compose、质量/容器CI及验收脚本。
 
+
+本页相关后续变化：静态资源同一路径校验与读取由 [Wiki043](./043-mvp-review-boundary-fixes.md) 跟踪。该票的修复候选与 main 发布状态分别判断，原完成审核不追改。
 ## 设计目的
 
 作者用Compose启动前后端与SQLite，在本机浏览器使用。数据独立于容器，重建后可继续编辑已保存作品；CI使用fake合成案例证明对应commit的工程可运行性。WHAT/AC以issue为准。
@@ -125,6 +127,14 @@ config RED4项真实缺行为（返回缺Web字段/开关未校验）后GREEN15�
 本机单用户；无公网服务/鉴权/云资源/TLS/registry/自动部署。#7作者配置、#8坏例另票；#28/#29继续后置。原内存服务不迁移/停止。CI不调用真实provider，不把工程成功称为小说质量或公网已上线。数据卷删除和旧库降级不属于启动/升级默认动作。
 
 ## 上下文演进
+
+### 2026-10-03 — 复审缺陷另票修复
+
+- **触发证据**：用户要求先合并文档，再修复三项已复现 P2；PR42 已合并，#41 已关闭。
+- **原假设**：既有审核未覆盖本次复审暴露的相邻边界，不能用已闭票状态消除新发现。
+- **决定**：静态资源同一路径校验与读取进入 #43 的公共接口红绿和独立 review，不重写既有产品裁决。
+- **影响**：当前相关行为与回归从 Wiki043 接手；修复 PR 本轮先推送，不提前认定 main 已更新。
+- **上下文处理**：preserve 原目的、人决、失败经验和完成审核全部字节；replace 当前接手入口；本次修复证据保存在新票。
 
 ### 2026-10-03 — 修正启动条件与当前交接
 
