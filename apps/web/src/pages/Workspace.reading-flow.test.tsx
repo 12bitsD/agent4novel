@@ -15,9 +15,10 @@ const work = () => ({ id: base.workId, title: '阅读作品', seed: '脑洞', co
   workflowState: 'prose-approved', nextStepId: null, allowedActions: ['save-draft', 'start-next-chapter'] })
 const json = (body: unknown) => new Response(JSON.stringify(body))
 const button = (host: HTMLElement, text: string) => Array.from(host.querySelectorAll('button')).find(item => item.textContent === text)
-async function mount(fetchMock: (url: string, init?: RequestInit) => Promise<Response>, options: { wide?: boolean; chapter?: number } = {}) {
+async function mount(fetchMock: (url: string, init?: RequestInit) => Promise<Response>, options: { wide?: boolean; width?: number; chapter?: number } = {}) {
   vi.useFakeTimers(); vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true); vi.stubGlobal('fetch', fetchMock)
-  vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: options.wide ?? false })))
+  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: options.width === undefined
+    ? options.wide ?? false : options.width >= Number(query.match(/min-width:\s*(\d+)px/)?.[1]) })))
   const host = document.createElement('div'); document.body.append(host); const root = createRoot(host)
   await act(async () => root.render(<Workspace workId={base.workId} initialChapter={options.chapter} onBack={() => {}} />))
   return { host, dispose: async () => { await act(async () => root.unmount()); host.remove(); vi.useRealTimers(); vi.unstubAllGlobals() } }
@@ -32,6 +33,34 @@ async function edit(host: HTMLElement, value: string) {
 }
 
 describe('reading flow in the chapter workspace', () => {
+  it.each([768, 890, 900])('keeps the %ipx reading column available with a collapsed directory and preserves the author toggle on resize', async width => {
+    const options = { width }
+    const calls = vi.fn(async (_url: string, _init?: RequestInit) => json(work()))
+    const ui = await mount(calls, options)
+    try {
+      const directory = ui.host.querySelector<HTMLDetailsElement>('details')!
+      const preview = ui.host.querySelector('.prose-preview')!
+      expect(directory.open).toBe(false)
+      await act(async () => directory.querySelector('summary')!.click())
+      expect(directory.open).toBe(true)
+      options.width = 1440
+      await act(async () => window.dispatchEvent(new Event('resize')))
+      expect(directory.open).toBe(true)
+      expect(ui.host.querySelector('.prose-preview')).toBe(preview)
+      options.width = 375
+      await act(async () => window.dispatchEvent(new Event('resize')))
+      expect(directory.open).toBe(true)
+      expect(calls.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+    } finally { await ui.dispose() }
+  })
+
+  it('starts the 901px side directory open at the layout boundary', async () => {
+    const ui = await mount(async () => json(work()), { width: 901 })
+    try {
+      expect(ui.host.querySelector<HTMLDetailsElement>('details')!.open).toBe(true)
+    } finally { await ui.dispose() }
+  })
+
   it('starts with a compact mobile directory while keeping one chapter navigation and one readable prose', async () => {
     const calls = vi.fn(async (_url: string, _init?: RequestInit) => json(work()))
     const ui = await mount(calls)
