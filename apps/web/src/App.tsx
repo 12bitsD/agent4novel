@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Bookcase from './pages/Bookcase.js'
 import Entry from './pages/Entry.js'
 import Workspace from './pages/Workspace.js'
+import ThemeControl from './ThemeControl.js'
 
 type View = { name: 'bookcase' } | { name: 'entry' } | { name: 'workspace'; workId: string; chapter?: number }
 
@@ -26,26 +27,25 @@ export default function App() {
     setView(next)
   }
 
-  if (view.name === 'entry') {
-    return (
+  const page = view.name === 'entry' ? (
       <Entry
         onBack={() => navigate({ name: 'bookcase' })}
         onCreated={(workId) => navigate({ name: 'workspace', workId })}
       />
-    )
-  }
-  if (view.name === 'workspace') {
-    return <Workspace key={view.workId} workId={view.workId} initialChapter={view.chapter} onBack={() => navigate({ name: 'bookcase' })}
+    ) : view.name === 'workspace' ? <Workspace key={view.workId} workId={view.workId} initialChapter={view.chapter} onBack={() => navigate({ name: 'bookcase' })}
       onChapterChange={chapter => {
         const url = new URL(window.location.href)
         url.searchParams.set('chapter', String(chapter))
         window.history.replaceState(null, '', url)
-      }} />
-  }
-  return (
+      }} /> : (
     <Bookcase
       onNew={() => navigate({ name: 'entry' })}
       onOpen={(workId) => navigate({ name: 'workspace', workId })}
     />
   )
+  return <div className="app-shell">
+    <a className="skip-link" href="#main-content">跳到主要内容</a>
+    <header className="app-header"><span className="brand">agent4novel</span><span className="brand-note">中文小说 · 写作工作台</span><ThemeControl /></header>
+    <div id="main-content" tabIndex={-1}>{page}</div>
+  </div>
 }

@@ -18,7 +18,6 @@ const setting = { ...creative, id: 'setting-1', kind: 'setting', version: 1, hum
 describe('Workspace generation continuity', () => {
   it('retains only the selected direction after selection automatically starts generation', async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
     let selected = false
     let rejectGeneration: (reason: Error) => void = () => {}
     const fetchMock = vi.fn(async (url: string) => {
@@ -37,19 +36,20 @@ describe('Workspace generation continuity', () => {
     const root = createRoot(host)
     try {
       await act(async () => root.render(<Workspace workId="work-test" onBack={() => {}} />))
-      expect(host.querySelectorAll('[role="tab"]')).toHaveLength(2)
-      await act(async () => (host.querySelectorAll<HTMLButtonElement>('[role="tab"]')[1]!).click())
+      expect(host.querySelectorAll('[role="group"][aria-label="创作方向"] button[aria-pressed]')).toHaveLength(2)
+      await act(async () => (host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="创作方向"] button[aria-pressed]')[1]!).click())
       await act(async () => Array.from(host.querySelectorAll('button')).find(b => b.textContent?.startsWith('就按'))!.click())
+      await act(async () => Array.from(host.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')).find(b => b.textContent === '确认选定')!.click())
       expect(host.textContent).toContain('正在生成大纲')
       expect(host.textContent).toContain('完整的创意梗概')
       expect(host.textContent).not.toContain('未选方向')
       expect(host.textContent).not.toContain('脑洞（seed）')
-      expect(host.querySelectorAll('[role="tab"]')).toHaveLength(1)
+      expect(host.querySelectorAll('[role="group"][aria-label="创作方向"] button[aria-pressed]')).toHaveLength(1)
       expect(host.querySelectorAll('textarea,input')).toHaveLength(0)
       expect(fetchMock.mock.calls.filter(([url]) => url.endsWith('/advance'))).toHaveLength(1)
       await act(async () => rejectGeneration(new Error('synthetic transport failure')))
     } finally {
-      await act(async () => root.unmount()); host.remove(); confirm.mockRestore(); vi.unstubAllGlobals()
+      await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals()
     }
   })
 

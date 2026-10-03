@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { outlineContentSchema } from '@agent4novel/contracts'
 import type { CreativePack, OutlineContent } from '@agent4novel/contracts'
 import { approveArtifact, saveOutlineDraft } from '../api.js'
+import { ConfirmDialog } from '../ConfirmDialog.js'
 import { btnPrimary, btnSecondary, cardStyle, chipStyle, fieldStyle, smallBtnStyle } from '../ui.js'
 import {
   addArc,
@@ -23,9 +24,6 @@ import {
 } from '../outline-review.js'
 import type { ReviewState } from '../outline-review.js'
 
-// 弧线强调色轮转(决策 16:珊瑚→紫→青→琥珀→粉)
-const ARC_COLORS = ['accent', 'violet', 'teal', 'amber', 'pink'] as const
-
 // 大纲 review 视图(#4):弧线时间线卡片 + 剧情点行内列表。
 // 所有编辑走 outline-review 纯命令;保存 = 草稿 pending;「通过」= 通用 approve。
 export default function OutlineReview(props: {
@@ -43,6 +41,7 @@ export default function OutlineReview(props: {
   const [s, setS] = useState<ReviewState>(() => initReview(props.content, props.headVersion))
   const [error, setError] = useState<string | null>(null)
   const [packOpen, setPackOpen] = useState(false)
+  const [approveCandidate, setApproveCandidate] = useState<ReviewState | null>(null)
 
   // 保存草稿;返回保存后的新状态(供「通过前保存」链路复用),失败返回 null。
   // 保存期间 busy 会挡住编辑,故响应回来时本地状态一定还是 next,可直接推导。
@@ -64,12 +63,12 @@ export default function OutlineReview(props: {
     }
   }
 
-  const doApprove = async () => {
-    if (!window.confirm('通过这份大纲？它将作为设定与后续章节生成的依据。')) return
+  const doApprove = async (candidate: ReviewState) => {
+    if (readonly || s.saving || s.approving) return
     setError(null)
     try {
       // 有脏编辑先保存(让通过落在最新内容上),再 approve
-      let cur = s
+      let cur = candidate
       if (isDirty(cur)) {
         const saved = await doSave(cur)
         if (!saved) return // doSave 已负责错误提示与状态复位
@@ -90,11 +89,18 @@ export default function OutlineReview(props: {
   }
 
   const label = (text: string) => (
-    <div style={{ fontSize: 12, color: 'var(--ink-2)', marginBottom: 4 }}>{text}</div>
+    <div className="field-label">{text}</div>
   )
 
   return (
-    <div style={{ paddingBottom: 96 }}>
+    <div className="outline-review">
+      <header className="page-heading">
+        <div>
+          <p className="eyebrow">全书大纲</p>
+          <h2>梳理故事的走向</h2>
+          <p className="page-lede">以弧线组织冲突，以剧情点安排变化。通过后作为设定与章纲的依据。</p>
+        </div>
+      </header>
       {/* 顶部:选定方向速览窄条(可折叠) */}
       {pack && (
         <section style={{ ...cardStyle, marginBottom: 16, background: 'var(--bg-sunken)' }}>
@@ -105,8 +111,8 @@ export default function OutlineReview(props: {
           >
             {packOpen ? '▾' : '▸'} 选定方向:{pack.title}
           </button>
-          {pack.tags.map((t, i) => (
-            <span key={t} style={{ ...chipStyle(ARC_COLORS[i % ARC_COLORS.length]!), marginLeft: 8 }}>
+          {pack.tags.map((t) => (
+            <span key={t} style={{ ...chipStyle('accent'), marginLeft: 8 }}>
               {t}
             </span>
           ))}
@@ -121,34 +127,38 @@ export default function OutlineReview(props: {
 
       {/* 提示条 */}
       {s.conflict && (
-        <p style={{ color: 'var(--warn-ink)', background: 'var(--warn-bg)', padding: 8, borderRadius: 'var(--radius)' }}>
+        <p className="status-message" role="alert">
           内容已在别处更新(409),你的编辑保留在原处;刷新后可基于最新版继续。
         </p>
       )}
-      {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
-      {s.notice && <p style={{ color: 'var(--ok)' }}>{s.notice}</p>}
+      {error && <p className="status-message status-error" role="alert">{error}</p>}
+      {s.notice && <p className="status-message" role="status">{s.notice}</p>}
 
       {/* 弧线时间线 */}
       {s.draft.arcs.map((arc, ai) => {
-        const accent = ARC_COLORS[ai % ARC_COLORS.length]!
         return (
           <section
             key={arc.arcId ?? `new-arc-${ai}`}
-            style={{ ...cardStyle, borderTop: `3px solid var(--${accent})`, marginBottom: 16 }}
+            className="flow-section surface"
+            style={{ marginBottom: 24 }}
           >
+            <p className="eyebrow">弧线 {String(ai + 1).padStart(2, '0')}</p>
             {readonly ? (
               <h2 style={{ margin: '0 0 8px' }}>{arc.title}</h2>
             ) : (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+              <div className="editor-title-row">
                 <input
+                  aria-label={`弧线 ${ai + 1} 标题`}
                   value={arc.title}
                   placeholder="弧线名(如:退婚之辱)"
                   onChange={(e) => setS((cur) => editArc(cur, ai, { title: e.target.value }))}
                   style={{ ...fieldStyle, fontSize: 18, fontWeight: 600 }}
                 />
-                <button aria-label="弧线上移" onClick={() => setS((cur) => moveArc(cur, ai, -1))} style={smallBtnStyle}>↑</button>
-                <button aria-label="弧线下移" onClick={() => setS((cur) => moveArc(cur, ai, 1))} style={smallBtnStyle}>↓</button>
-                <button aria-label="删除弧线" onClick={() => setS((cur) => removeArc(cur, ai))} style={smallBtnStyle}>删</button>
+                <div className="editor-tools">
+                  <button aria-label="弧线上移" onClick={() => setS((cur) => moveArc(cur, ai, -1))} style={smallBtnStyle}>↑</button>
+                  <button aria-label="弧线下移" onClick={() => setS((cur) => moveArc(cur, ai, 1))} style={smallBtnStyle}>↓</button>
+                  <button aria-label="删除弧线" onClick={() => setS((cur) => removeArc(cur, ai))} style={smallBtnStyle}>删</button>
+                </div>
               </div>
             )}
 
@@ -167,6 +177,7 @@ export default function OutlineReview(props: {
                     <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{arc[field]}</p>
                   ) : (
                     <textarea
+                      aria-label={`弧线 ${ai + 1} ${labels[field]}`}
                       rows={2}
                       value={arc[field]}
                       onChange={(e) => setS((cur) => editArc(cur, ai, { [field]: e.target.value }))}
@@ -183,6 +194,7 @@ export default function OutlineReview(props: {
               {arc.segments.map((seg, si) => (
                 <div
                   key={seg.segmentId ?? `new-seg-${si}`}
+                  className="outline-segment"
                   style={{
                     border: '1px solid var(--line)',
                     borderRadius: 'var(--radius)',
@@ -198,19 +210,23 @@ export default function OutlineReview(props: {
                     </>
                   ) : (
                     <>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+                      <div className="editor-title-row">
                         <span style={{ color: 'var(--ink-2)', fontSize: 13 }}>{si + 1}.</span>
                         <input
+                          aria-label={`弧线 ${ai + 1} 剧情点 ${si + 1} 标题`}
                           value={seg.title}
                           placeholder="剧情点名"
                           onChange={(e) => setS((cur) => editSegment(cur, ai, si, { title: e.target.value }))}
                           style={{ ...fieldStyle, fontWeight: 600 }}
                         />
-                        <button aria-label="剧情点上移" onClick={() => setS((cur) => moveSegment(cur, ai, si, -1))} style={smallBtnStyle}>↑</button>
-                        <button aria-label="剧情点下移" onClick={() => setS((cur) => moveSegment(cur, ai, si, 1))} style={smallBtnStyle}>↓</button>
-                        <button aria-label="删除剧情点" onClick={() => setS((cur) => removeSegment(cur, ai, si))} style={smallBtnStyle}>删</button>
+                        <div className="editor-tools">
+                          <button aria-label="剧情点上移" onClick={() => setS((cur) => moveSegment(cur, ai, si, -1))} style={smallBtnStyle}>↑</button>
+                          <button aria-label="剧情点下移" onClick={() => setS((cur) => moveSegment(cur, ai, si, 1))} style={smallBtnStyle}>↓</button>
+                          <button aria-label="删除剧情点" onClick={() => setS((cur) => removeSegment(cur, ai, si))} style={smallBtnStyle}>删</button>
+                        </div>
                       </div>
                       <textarea
+                        aria-label={`弧线 ${ai + 1} 剧情点 ${si + 1} 内容`}
                         rows={2}
                         value={seg.summary}
                         placeholder="这一段发生什么"
@@ -218,6 +234,7 @@ export default function OutlineReview(props: {
                         style={{ ...fieldStyle, marginBottom: 4 }}
                       />
                       <input
+                        aria-label={`弧线 ${ai + 1} 剧情点 ${si + 1} 落点`}
                         value={seg.outcome}
                         placeholder="落点:本段结束时局势变成什么样"
                         onChange={(e) => setS((cur) => editSegment(cur, ai, si, { outcome: e.target.value }))}
@@ -243,49 +260,42 @@ export default function OutlineReview(props: {
         </button>
       )}
 
-      {/* 保存 pill(脏时浮现) */}
-      {!readonly && isDirty(s) && (
-        <button
-          onClick={() => void doSave(s)}
-          disabled={s.saving || s.approving}
-          style={{
-            ...btnSecondary,
-            position: 'fixed',
-            right: 24,
-            bottom: 72,
-            borderRadius: 999,
-            background: 'var(--ink)',
-            color: 'var(--bg)',
-            boxShadow: 'var(--shadow-pill)',
-          }}
-        >
-          {s.saving ? '保存中……' : '保存草稿'}
-        </button>
-      )}
-
-      {/* 底部通过细条 */}
       {!readonly && (
-        <div
-          style={{
-            position: 'fixed',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            padding: '12px 24px',
-            background: 'var(--bg-raised)',
-            borderTop: '1px solid var(--line)',
-            display: 'flex',
-            justifyContent: 'center',
-          }}
-        >
+        <footer className="review-actions">
+          <span className="review-save-state" role="status">
+            {s.saving ? '保存中……' : isDirty(s) ? '有未保存的修改' : '通过前可编辑大纲'}
+          </span>
+          {isDirty(s) && (
+            <button
+              onClick={() => void doSave(s)}
+              disabled={s.saving || s.approving}
+              style={btnSecondary}
+            >
+              {s.saving ? '保存中……' : '保存草稿'}
+            </button>
+          )}
           <button
-            onClick={() => void doApprove()}
+            onClick={() => setApproveCandidate(s)}
             disabled={s.saving || s.approving}
-            style={{ ...btnPrimary, minWidth: 240 }}
+            style={btnPrimary}
           >
             {s.approving ? '通过中……' : '通过大纲 →'}
           </button>
-        </div>
+        </footer>
+      )}
+      {approveCandidate && (
+        <ConfirmDialog
+          title="通过大纲"
+          description="通过这份大纲？它将作为设定与后续章节生成的依据。"
+          cancelLabel="继续编辑"
+          confirmLabel="确认通过大纲"
+          onCancel={() => setApproveCandidate(null)}
+          onConfirm={() => {
+            // 先保存打开弹窗时的可见草稿，再沿用原审批接口；取消不执行任何命令。
+            setApproveCandidate(null)
+            void doApprove(approveCandidate)
+          }}
+        />
       )}
     </div>
   )

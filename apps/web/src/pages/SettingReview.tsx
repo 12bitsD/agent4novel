@@ -59,10 +59,10 @@ export default function SettingReview({ state, onAction, onApprove, onConfirm, o
     {editing && <><button type="button" style={smallBtnStyle} disabled={locked} data-setting-field={`${container.key}:add`} aria-describedby={errors(`${container.key}:add`).length ? `setting-error-${container.key}:add` : undefined}
       onClick={() => onAction({ type: 'add-item', target: container.key })}>＋ 新增卡片</button>{errorNote(`${container.key}:add`)}</>}
   </>
-  return <section ref={root} className="setting-review" aria-label="设定关卡">
+  return <section ref={root} className="setting-review review-page" aria-label="设定关卡">
     <header className="setting-review-header">
-      <div><p className="setting-eyebrow">作品基准 · 设定</p><h2>让故事有据可循</h2>
-        <p className="setting-muted">{approved ? '这份设定已通过，后续创作将使用此版本。' : '读一遍，补充你的想法，然后通过。修改仅保留在当前页面。'}</p></div>
+      <div className="review-copy"><p className="setting-eyebrow eyebrow">作品基准 · 设定</p><h2 className="page-heading">让故事有据可循</h2>
+        <p className="setting-muted page-lede">{approved ? '这份设定已通过，后续创作将使用此版本。' : '读一遍，补充你的想法，然后通过。修改仅保留在当前页面。'}</p></div>
       <div className="setting-actions">
         {!approved && <button type="button" style={btnSecondary} onClick={() => onAction({ type: 'mode', mode: editing ? 'preview' : 'edit' })}>{editing ? '预览设定' : '编辑设定'}</button>}
         <button type="button" style={btnPrimary} disabled={approved || locked} onClick={onApprove}>{approved ? '已通过' : busy ? '正在确认…' : '通过设定'}</button>
