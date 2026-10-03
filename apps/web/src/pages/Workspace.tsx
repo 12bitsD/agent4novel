@@ -58,7 +58,9 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
   const [configOpen, setConfigOpen] = useState(false)
   const [configExpanded, setConfigExpanded] = useState(false)
   // 2026-10-03 Human: “导航页和重复说明改进掉”；窄屏先显示当前章，目录仍由同一入口展开。
-  const [directoryExpanded, setDirectoryExpanded] = useState(() => typeof window.matchMedia !== 'function' || window.matchMedia('(min-width: 701px)').matches)
+  // 2026-10-03 Human: “字体，空间，各个组件排布和大小…更舒服一些”。
+  // 单列从中屏开始；只决定挂载默认值，resize 不覆盖作者的目录选择。
+  const [directoryExpanded, setDirectoryExpanded] = useState(() => typeof window.matchMedia !== 'function' || window.matchMedia('(min-width: 901px)').matches)
   const [configGuard, setConfigGuard] = useState({ dirty: false, locked: false })
   const configGuardRef = useRef(configGuard)
   const updateConfigGuard = useCallback((guard: typeof configGuard) => {
@@ -385,7 +387,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
       <aside className="work-rail" aria-label="作品导航">
       <button
         onClick={() => { if (dirty) setLeaving(true); else if (!navigated.current) { navigated.current = true; onBack() } }}
-        style={{ ...btnSecondary, padding: '4px 10px', fontSize: 13, marginBottom: 16 }}
+        style={{ ...btnSecondary, padding: '4px 10px', minHeight: 'var(--compact-control-height)', fontSize: 13, marginBottom: 16 }}
       >
         ← 返回书架
       </button>
@@ -406,7 +408,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
       {!work && <p className="setting-muted">正在读取作品…</p>}
       {work && !work.chapters.length && <p className="setting-muted">先完成创意稿、大纲与设定，再开始第一章。</p>}
       </aside>
-      <section className="work-stage" aria-label="当前创作内容">
+      <section className={showProse ? 'work-stage prose-stage' : 'work-stage'} aria-label="当前创作内容">
       {work && !showProse && <div className="stage-heading"><span className="eyebrow">{showBeat ? `${chapterLabel(chapter)} · 章纲` : showSetting ? '全书 · 设定' : showOutline ? '全书 · 大纲' : showPoster ? '全书 · 创意稿' : '创作起点'}</span><span className="stage-state">{generating ? '正在生成' : isCurrentChapter ? '当前创作' : '历史阅读'}</span></div>}
       {chapterSummary?.needsContinuityReview && <p className="setting-notice" role="status">前章正文已修改，请检查本章衔接。后续章节已保留，不会自动重写。</p>}
       {error && <p className="setting-notice" role="alert">{error}</p>}

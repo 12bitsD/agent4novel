@@ -5,7 +5,8 @@ import type { CSSProperties } from 'react'
 
 export const fieldStyle: CSSProperties = {
   width: '100%',
-  padding: 8,
+  padding: 10,
+  minHeight: 'var(--control-height)',
   borderRadius: 'var(--radius)',
   border: '1px solid var(--line)',
   background: 'var(--bg-raised)',
@@ -15,6 +16,7 @@ export const fieldStyle: CSSProperties = {
 
 export const smallBtnStyle: CSSProperties = {
   padding: '4px 10px',
+  minHeight: 'var(--compact-control-height)',
   fontSize: 13,
   cursor: 'pointer',
   borderRadius: 'var(--radius)',
@@ -24,8 +26,9 @@ export const smallBtnStyle: CSSProperties = {
 
 // 主行动按钮:通过明暗反转突出开始创作 / 生成 / 选定。
 export const btnPrimary: CSSProperties = {
-  padding: '10px 24px',
-  fontSize: 15,
+  padding: '8px 16px',
+  minHeight: 'var(--control-height)',
+  fontSize: 14,
   cursor: 'pointer',
   borderRadius: 'var(--radius)',
   border: '1px solid var(--accent)',
@@ -35,8 +38,9 @@ export const btnPrimary: CSSProperties = {
 
 // 次级按钮:与页面同底的细边框按钮
 export const btnSecondary: CSSProperties = {
-  padding: '10px 24px',
-  fontSize: 15,
+  padding: '8px 16px',
+  minHeight: 'var(--control-height)',
+  fontSize: 14,
   cursor: 'pointer',
   borderRadius: 'var(--radius)',
   border: '1px solid var(--line)',
@@ -45,6 +49,8 @@ export const btnSecondary: CSSProperties = {
 
 export const tabStyle = (active: boolean): CSSProperties => ({
   padding: '8px 16px',
+  minHeight: 'var(--control-height)',
+  fontSize: 14,
   borderRadius: 'var(--radius)',
   border: active ? '1px solid var(--ink)' : '1px solid var(--line)',
   background: active ? 'var(--ink)' : 'var(--bg-raised)',

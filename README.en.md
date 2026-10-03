@@ -15,9 +15,9 @@
 
 Enter a story idea or import text from TXT, Markdown (`.md`), Word (`.docx`), or PDF documents. AI helps develop directions, outlines, settings and chapter prose; you edit the content, review its direction and decide when to continue.
 
-![Chapter directory, prose reading area and editing control](./docs/assets/workspace-demo.jpg)
+![Light workbench with the chapter directory, prose reading column and header actions](./docs/assets/workspace-demo.jpg)
 
-<p align="center"><sub>Actual chapter-two interface in demo mode, shown in Chinese. The prose is an edited sample and does not demonstrate real-model output quality.</sub></p>
+<p align="center"><sub>Actual reading interface for a demo work, shown in Chinese. The prose is an edited sample and does not demonstrate real-model output quality.</sub></p>
 
 ## Current status
 
@@ -107,12 +107,14 @@ Prose approval completes the chapter. “Start next chapter” in the prose head
 
 Use “界面” (Appearance) at the top of the page to choose “跟随系统” (System), “浅色” (Light), or “深色” (Dark). This browser remembers the choice.
 
-Wide screens show chapters, prose and reference materials in separate areas. On phones, the chapter directory starts collapsed: open “章节目录” (Chapter directory), select a chapter, then collapse the directory to continue reading. Materials and configuration remain accessible. Prose uses a Songti-style Chinese serif font, with a limited line width and the original text's line breaks preserved. Interface text uses regular sans-serif fonts; the pixel font is limited to the brand.
+Wide screens show chapters, prose and reference materials in separate areas. Windows 900px wide or narrower use a single column, with the chapter directory initially collapsed. Open “章节目录” (Chapter directory), select a chapter, then collapse the directory to continue reading. Resizing the window preserves your current expanded or collapsed choice. Materials and configuration remain accessible.
+
+Prose uses a Songti-style Chinese serif font, with a limited line width and the original text's line breaks preserved. Editing and preview use the same font size, line spacing and text width; short chapters in preview occupy only the space their content needs. Interface text uses regular sans-serif fonts; the pixel font is limited to the brand. The system reading font may look different across devices.
 
 <details>
 <summary>Dark appearance</summary>
 
-![Dark prose workbench with a continuity warning after editing an earlier chapter](./docs/assets/workspace-dark.jpg)
+![Dark workbench with the prose reading column and header actions](./docs/assets/workspace-dark.jpg)
 
 Actual interface in demo mode. The prose is an edited sample and does not demonstrate real-model output quality.
 
