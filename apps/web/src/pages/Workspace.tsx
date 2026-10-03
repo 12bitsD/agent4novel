@@ -56,6 +56,9 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
   const setProse = useCallback((next: ProseReviewState) => { proseRef.current = next; setProseState(next) }, [])
   const [leaving, setLeaving] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
+  const [configExpanded, setConfigExpanded] = useState(false)
+  // 2026-10-03 Human: “导航页和重复说明改进掉”；窄屏先显示当前章，目录仍由同一入口展开。
+  const [directoryExpanded, setDirectoryExpanded] = useState(() => typeof window.matchMedia !== 'function' || window.matchMedia('(min-width: 701px)').matches)
   const [configGuard, setConfigGuard] = useState({ dirty: false, locked: false })
   const configGuardRef = useRef(configGuard)
   const updateConfigGuard = useCallback((guard: typeof configGuard) => {
@@ -378,27 +381,35 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
   const stepLabel = nextStep === 'prose' ? `${chapterLabel(chapter)}正文` : nextStep === 'beat' ? `${chapterLabel(chapter)}章纲` : nextStep === 'setting' ? '设定' : nextStep === 'outline' ? '大纲' : '创意稿'
 
   return (
-    <main style={{ padding: 24, maxWidth: 860 }}>
+    <main className="workbench">
+      <aside className="work-rail" aria-label="作品导航">
       <button
         onClick={() => { if (dirty) setLeaving(true); else if (!navigated.current) { navigated.current = true; onBack() } }}
         style={{ ...btnSecondary, padding: '4px 10px', fontSize: 13, marginBottom: 16 }}
       >
         ← 返回书架
       </button>
-      {work && <h1>{work.title}</h1>}
-      {work && <button type="button" style={{ ...btnSecondary, marginBottom: 16 }} onClick={() => setConfigOpen(true)}>Agent 配置</button>}
-      {configOpen && <AuthorConfigPanel workId={workId} onGuard={updateConfigGuard} />}
-      {!!work?.chapters.length && <nav aria-label="章节目录" className="chapter-directory">
-        <h2>章节目录</h2><div className="setting-actions">{work.chapters.map(item => <button type="button" key={item.chapter}
+      <p className="eyebrow">作品</p>
+      {work && <h1 className="work-title">{work.title}</h1>}
+      {!!work?.chapters.length && <details className="chapter-directory-shell" open={directoryExpanded} onToggle={event => setDirectoryExpanded(event.currentTarget.open)}>
+        <summary className="chapter-directory-summary"><span>章节目录</span><span className="chapter-directory-current">{chapterLabel(chapter)} · {chapterSummary?.title}</span></summary>
+        <nav aria-label="章节目录" className="chapter-directory">
+        <div className="setting-actions">{work.chapters.map(item => <button type="button" key={item.chapter}
           data-chapter={item.chapter} aria-current={item.chapter === chapter ? 'page' : undefined}
           disabled={navigationLocked} onClick={() => chooseChapter(item.chapter)} style={btnSecondary}>
-          {chapterLabel(item.chapter)} · {item.title} · {item.proseStatus === 'approved' ? '已通过' : item.proseStatus === 'pending' ? '正文待通过' : item.beatStatus === 'pending' ? '章纲待通过' : '待生成正文'}
-          {item.chapter === work.currentChapter ? '（当前章）' : ''}{item.needsContinuityReview ? ' · 待检查衔接' : ''}
+          <span className="chapter-label">{chapterLabel(item.chapter)} · {item.title}</span>
+          <span className="chapter-status">{item.proseStatus === 'approved' ? '已通过' : item.proseStatus === 'pending' ? '正文待通过' : item.beatStatus === 'pending' ? '章纲待通过' : '待生成正文'}
+          {item.chapter === work.currentChapter ? '（当前章）' : ''}{item.needsContinuityReview ? ' · 待检查衔接' : ''}</span>
         </button>)}</div>
-        <p className="setting-muted">{isCurrentChapter ? '正在创作当前章。' : '正在阅读历史章节。'}{navigationLocked ? '请先完成当前操作或核对服务器结果，再切换章节。' : ''}</p>
-      </nav>}
+        {navigationLocked && <p className="setting-muted" role="status">请先完成当前操作或核对服务器结果，再切换章节。</p>}
+      </nav></details>}
+      {!work && <p className="setting-muted">正在读取作品…</p>}
+      {work && !work.chapters.length && <p className="setting-muted">先完成创意稿、大纲与设定，再开始第一章。</p>}
+      </aside>
+      <section className="work-stage" aria-label="当前创作内容">
+      {work && !showProse && <div className="stage-heading"><span className="eyebrow">{showBeat ? `${chapterLabel(chapter)} · 章纲` : showSetting ? '全书 · 设定' : showOutline ? '全书 · 大纲' : showPoster ? '全书 · 创意稿' : '创作起点'}</span><span className="stage-state">{generating ? '正在生成' : isCurrentChapter ? '当前创作' : '历史阅读'}</span></div>}
       {chapterSummary?.needsContinuityReview && <p className="setting-notice" role="status">前章正文已修改，请检查本章衔接。后续章节已保留，不会自动重写。</p>}
-      {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
+      {error && <p className="setting-notice" role="alert">{error}</p>}
       {error && <button type="button" style={btnSecondary} onClick={() => void (startUncertain ? confirmStart() : refresh())}>刷新作品</button>}
 
       {work && !showPoster && !showOutline && !showSetting && !showBeat && !showProse && (
@@ -449,20 +460,29 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
         onApprove={() => void runBeat('approve-beat')} onRegenerate={() => void runBeat('regenerate-beat')}
         onConfirm={() => void runBeat('confirm')} onRetry={() => void runBeat('retry')} />}
       {showProse && prose && <ProseReview title={beat?.baseline.content.title ?? chapterLabel(chapter)} state={prose} onAction={proseAction}
+        contextLabel={starting || generating ? '正在生成' : isCurrentChapter ? '当前创作' : '历史阅读'}
+        primaryAction={(actions.includes('start-next-chapter') || startUncertain) && <div className="prose-next-action">
+          <button type="button" style={btnPrimary} disabled={starting || generating || isProseDirty(prose) || badExampleGuard.dirty || configGuard.dirty || configGuard.locked} onClick={() => void beginNextChapter()}>
+            {starting ? '正在生成下一章章纲…' : startUncertain ? '重试开始下一章' : '开始下一章'}
+          </button>
+          <p className="setting-muted prose-action-hint">先生成下一章章纲。{isProseDirty(prose) ? '请先保存并确认本章修改。' : ''}{badExampleGuard.dirty ? '请先标记坏例或清除选段和备注。' : ''}{configGuard.dirty || configGuard.locked ? '请先保存配置、加载服务器配置或核对原请求。' : ''}</p>
+        </div>}
         allowCommands={!starting && !startUncertain && !badExampleGuard.locked && (actions.includes('save-draft') || (actions.includes('approve') && actions.includes('regenerate')))}
         onBadExampleGuard={setBadExampleGuard}
         onApprove={() => void runProse('approve-prose')} onRegenerate={() => void runProse('regenerate-prose')}
         onConfirm={() => void runProse('confirm')} onRetry={() => void runProse('retry')} />}
-      {showProse && prose && (actions.includes('start-next-chapter') || startUncertain) && <section style={{ marginTop: 24 }}>
-        <button type="button" style={btnPrimary} disabled={starting || generating || isProseDirty(prose) || badExampleGuard.dirty || configGuard.dirty || configGuard.locked} onClick={() => void beginNextChapter()}>
-          {starting ? '正在生成下一章章纲…' : startUncertain ? '重试开始下一章' : '开始下一章'}
-        </button>
-        <p className="setting-muted">先生成下一章章纲，把关后再生成正文。{isProseDirty(prose) ? '请先保存并确认本章修改。' : ''}{badExampleGuard.dirty ? '请先标记坏例或清除选段和备注。' : ''}{configGuard.dirty || configGuard.locked ? '请先保存配置、加载服务器配置或核对原请求。' : ''}</p>
+      </section>
+      <aside className="work-inspector" aria-label="创作辅助">
+      {work && <section className="config-section"><h2 className="section-heading">创作设置</h2><p className="setting-muted">配置保存后用于新的生成。现有内容不会自动改写。</p>
+        <button type="button" style={btnSecondary} aria-expanded={configExpanded} aria-controls="author-config-content" onClick={() => { setConfigOpen(true); setConfigExpanded(value => !value) }}>Agent 配置</button>
+        {configOpen && <div id="author-config-content" hidden={!configExpanded}><AuthorConfigPanel workId={workId} onGuard={updateConfigGuard} /></div>}
+        {!configExpanded && (configGuard.dirty || configGuard.locked) && <p className="setting-notice" role="status">配置{configGuard.locked ? '结果尚未确认' : '有未保存的修改'}。请展开处理。</p>}
       </section>}
       {work && <ReferenceMaterials key={chapter} work={work} chapter={chapter} hiddenKinds={[
         ...(!showPoster && !showOutline && !showSetting && !showBeat && !showProse ? ['seed'] : []),
         ...(showPoster ? ['creative', 'caption'] : []), ...(showOutline ? ['outline'] : []), ...(showSetting ? ['setting'] : []), ...(showBeat ? ['beat'] : []),
       ]} />}
+      </aside>
       {switchingTo !== null && <ConfirmDialog title="切换章节？" description="切换会放弃当前章尚未保存的修改和意见。"
         cancelLabel="继续编辑" confirmLabel="放弃修改并切换" onCancel={() => setSwitchingTo(null)} onConfirm={() => {
           if (navigationLocked) { setSwitchingTo(null); return }

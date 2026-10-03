@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。最后更新：2026-10-03。#1 及必需子票均已合并关闭，本机 MVP 已发布；当前远端状态和本次复审见 [Wiki001](./wiki/001-mvp-acceptance.md#2026-10-03-清点与复审)。复审发现的三项边界由 [Wiki043](./wiki/043-mvp-review-boundary-fixes.md) 修复；本轮先推送修复 PR，main 与闭票状态仍须远端核对。#28/#29 及长篇质量评估保持后置。
+> 用途：context compaction / 新会话接力。最后更新：2026-10-03。#1 及必需子票均已合并关闭，本机 MVP 已发布；整体验证见 [Wiki001](./wiki/001-mvp-acceptance.md)。复审发现的三项边界已由 [Wiki043](./wiki/043-mvp-review-boundary-fixes.md) 修复，PR44 合入 main，#43 已关闭。当前推进 [Wiki035](./wiki/035-frontend-design.md) 的黑白灰界面，B/C 方向及用户反馈已接入，第二轮阅读与浏览器两章验收通过；发布前独立审核与远端交付从本票证据继续，关闭状态以 GitHub 为准。#28/#29 及长篇质量评估保持后置。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -16,12 +16,13 @@
 
 ## 当前里程碑与验证边界
 
-**本机 MVP 已发布，整体验证与边界从 [Wiki001](./wiki/001-mvp-acceptance.md) 进入。** 2026-10-03 回读 #1 及 #6/#19/#9/#33/#7/#8 均已关闭，对应 PR 均已合并；[PR40](https://github.com/12bitsD/agent4novel/pull/40) 对应源提交的 CI 与 [main CI](https://github.com/12bitsD/agent4novel/actions/runs/36727036119) 均成功。本次修复固定点为文档 PR42 合并后的 main `533631cdc28b1c09282845cdfcb6646cc8adbacf`。文档 #41 已关闭，源提交 quality/container CI 成功。关闭记录证明交付状态，本次新发现不因已关闭而视为无缺陷。
+**本机 MVP 已发布，整体验证与边界从 [Wiki001](./wiki/001-mvp-acceptance.md) 进入。** 2026-10-03 回读 #1 及 #6/#19/#9/#33/#7/#8 均已关闭，对应 PR 均已合并；[PR40](https://github.com/12bitsD/agent4novel/pull/40) 对应源提交的 CI 与 [main CI](https://github.com/12bitsD/agent4novel/actions/runs/36727036119) 均成功。文档 #41/PR42 与修复 #43/PR44 也已关闭/合并；#35 固定点为 main `19a30524fd0e7f34b3c5a8a99bb3bd4959b8ae2a`，对应 [main CI](https://github.com/12bitsD/agent4novel/actions/runs/37086938263) 的 quality/container 均成功。关闭记录证明交付状态，不能消除未来新发现。
 
 - **交付状态**：#22/PR #30、#6/[PR #32](https://github.com/12bitsD/agent4novel/pull/32)、#19/[PR #34](https://github.com/12bitsD/agent4novel/pull/34)、#9/[PR #36](https://github.com/12bitsD/agent4novel/pull/36) 已关闭/合并；#9终止记录见[完成评论](https://github.com/12bitsD/agent4novel/issues/9#issuecomment-5897744738)。#33/[PR37](https://github.com/12bitsD/agent4novel/pull/37)已关闭/合并，最终源提交两job[CI成功](https://github.com/12bitsD/agent4novel/actions/runs/36653441274)。
 - **已验证基线**：#6 有 fake 多章、CLI/Web、独立真实 Beat2/Prose2 和本地门禁证据，见 [Wiki 006](./wiki/006-chapter-continuation.md)。真实节点使用合成上游，不是全书/全部节点真实模型验收，也不证明长篇质量。#19 的共享验证证据见其本票 Wiki；#9 的 SQLite、真实进程重启及关闭路径需看 Wiki 009 的实际结果，不沿用旧票测试。
 - **当前存储边界**：生产启动使用 SQLite，恢复已提交的作品、产物版本、状态和输入引用；未保存页面编辑不恢复，遥测仍在进程内，不自动恢复模型调用。旧内存进程不自动迁移或清空。#33同源Web/API、非root镜像、两章卷恢复及实际CI已验证。#7已接入默认/节点覆盖、Prompt/Skill版本和操作快照，实际交付见PR38和本票issue；#8已接入手工坏例快照与回看，交付状态核对#8；长期记忆与Wiki工具仍后置。
-- **复审与待修复项**：本次 815 项测试、类型检查和构建通过。新增定向复现发现配置草稿/未知请求在自动切章时丢失、起章前章版本条件未保持至生成、静态文件校验与读取路径解码不一致。触发条件与建议见 [复审记录](./wiki/001-mvp-acceptance.md#2026-10-03-清点与复审)，新修复候选由 [#43](https://github.com/12bitsD/agent4novel/issues/43) 和 Wiki043 记录；原复审是历史未修复快照，不能替代新红绿或 CI 证据。
+- **复审与修复**：原定向复现发现配置草稿/未知请求在自动切章时丢失、起章前章版本条件未保持至生成、静态文件校验与读取路径解码不一致。原触发条件见 [复审记录](./wiki/001-mvp-acceptance.md#2026-10-03-清点与复审)，修复、有效红绿、完整门禁和独立审核见 Wiki043；[完成评论](https://github.com/12bitsD/agent4novel/issues/43#issuecomment-5964216514) 记录 PR/CI 与终止裁决。原复审保留为历史未修复快照，不能替代修复证据。
+- **当前工作**：#35 仅重组视觉和使用入口。用户在三个同概念 HTML 稿中选择“BC舒服些”；B 的写作工作台结构、C 的清楚黑白边界、主题选择和响应布局已接入。用户随后授权“导航页和重复说明改进掉，然后字体这些你看着怎么优化更有质感一些”。第二轮候选将像素字体收窄到品牌，书名和操作使用系统无衬线字体；正文采用中文宋体与拉丁衬线回退，桌面 20px、手机 18px、行高 1.85、阅读列最大 36em。手机目录默认折叠，目录和正文各保留一份；页头承载编辑与下一章动作，创作资料改为紧凑只读列表，原有保存、版本和未知请求保护继续适用。独立演示数据已从首章推进到第二章，经页面编辑、自动保存、通过及旧章修改后出现衔接提示；第二轮又实际验证2181字符长章、375/1440px亮暗布局、目录切章、配置草稿保护及完整两章前置流程；README已更新真实第二轮截图。字体取舍见 [字体研究](./research/frontend-font-options.md)，最终测试、审核与发布从 Wiki035 接手。
 
 ## 已完成
 
@@ -42,6 +43,7 @@
 - **#9** SQLite持久化：全部产物版本、状态和输入引用；正常/强制退出后两章及待通过第三章恢复已验证，见 [Wiki 009](./wiki/009-sqlite-persistence.md)。
 
 - **#7** 作者配置：PR38合并关闭，对应quality/container实际CI成功；默认/节点覆盖、文本文件版本、操作快照及HTTP/CLI/Web见[Wiki007](./wiki/007-author-agent-config.md)。
+- **#43** MVP 复审边界修复：PR44 已合入 main，#43 已关闭；配置导航、起章原基线与静态路径的证据见 [Wiki043](./wiki/043-mvp-review-boundary-fixes.md)。
 
 ## 已交付首章的关键约束
 
@@ -68,7 +70,7 @@
 - **LLM 调用**：`steps/llm-call.ts`统一generateObject + zod + maxOutputTokens（outline/setting/prose 16000，其余默认8000）+ 可配置超时 + 类型化错误。advance业务失败可为HTTP200 + failed outcome，不能只按HTTP成功判断。原始素材>100K字符截断，结构化上游不静默截断；Prose实际system+prompt超过400000字符在模型前拒绝。Setting/Beat/Prose显式SDK maxRetries=0；Pipeline不自动重试。ModelRuntime唯一HOW见 [Wiki 016](./wiki/016-model-runtime-provider-config.md)。
 - **CLI**：`./apps/cli/bin/a4n <cmd>`（stdout纯JSON）或`pnpm -s cli`；仅select/save-outline自动回填版本。Prose支持get、save-prose、approve-prose、regenerate-prose，文件显式绑定chapter/id/version，save另带expectedHumanStatus，重写另带instructions；结果未知最多回读一次，不自动重复写入。smoke延伸至正文生成、作者全文save、同版approve、精确回读prose-approved且无第二章；不是文学质量验收。独立run-step支持任意合法章号的Beat/Prose，后续章必须提供previousChapter，不写作品；start-chapter用文件显式绑定目标章与前章正文id/version。
 - **错误**：HTTP 统一 `{code, retryable, attemptId?, message, issues?}`；Setting 字段错误 issues 只含 path/code/message。合法且匹配命令的拒绝包才证明写前拒绝；传输/5xx/畸形响应（包括畸形 4xx）可能已写入，必须按对应恢复契约冻结请求并回读。
-- **web 设计系统**（#3c）：`apps/web/src/styles.css` 唯一全局面，亮暗双主题 CSS 变量（prefers-color-scheme + data-theme 预留）；多巴胺在点缀层（主 CTA 珊瑚 accent，方向 tab 珊瑚/紫/青轮转，chip 用强调色），底色纸白/墨黑极简；**内联样式只许 var(--*)，禁硬编码色值**。创意海报风险面抽纯函数 `web/src/creative-compare.ts`（tab↔directionId、保存全部、选定、409 保 dirty），vitest 覆盖，无浏览器 E2E。
+- **Web 视觉演进**：#3c 的多巴胺点缀和预留亮暗主题是原视觉基线。#35 正在替换为黑白灰层次和显式主题选择，当前方案、落点与验收看 [Wiki035](./wiki/035-frontend-design.md)；不得把设计稿当作实际产品验证。`styles.css` 继续作为全局样式入口，内联颜色使用 `var(--*)`。创意方向与保存、选定、版本保护等行为沿用既有模块。
 - 栈：pnpm workspaces + TS E2E、Vite+React(5173 /api proxy)、Hono(8787)、zod、Vitest、tsx、AI SDK v7 + `@ai-sdk/deepseek` + `@ai-sdk/openai-compatible`。Setting 使用 mdast-util-from-markdown + 自有允许列表 React renderer；测试计数与最终命令证据只记本票 Wiki。
 
 ## 词汇红线（CONTEXT.md 单源）
@@ -107,7 +109,7 @@ CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化
 
 #22 已合入 main；其原 source、固定点和候选审核记录均属于已交付历史，入口为 [Wiki 022](./wiki/022-prose-generation-review.md)。新票从当前 main 核对基线，不能把旧票授权或审核结论当成新票完成证据。
 
-**当前交付 #43 修复，再对齐扩展范围**。#1 和文档 #41 已关闭，无需重复交付；三项原发现见 Wiki001，修复与验证从 Wiki043 进入。本轮先推送修复 PR，合并及关闭须后续独立执行。#28/#29 尚未开工，长篇质量验证仍未完成。既有三方案研究与用户裁决继续有效，普通工程细节自主处理；重大范围或数据取舍再请求用户决定。
+**当前交付 #35 前端视觉，再对齐扩展范围**。#1、文档 #41 和修复 #43 已合并关闭，无需重复交付；#35 第二轮导航、说明和阅读排版已通过本地与浏览器验收，接下来完成独立审核、有限 attestation 和远端交付；发布证据与最终关闭状态从该票 Wiki／GitHub 读取。#28/#29 尚未开工，长篇质量验证仍未完成。既有三方案研究与用户裁决继续有效，普通工程细节自主处理；重大范围或数据取舍再请求用户决定。
 
 | 交付批次 | 可验收结果 | 后续衔接 |
 |---|---|---|
@@ -115,6 +117,7 @@ CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化
 | #7 Agent 配置（已交付） | 作品默认＋每步覆盖，生成冻结配置和文件版本 | Prompt/Skill 文件沿 ADR0002，工具执行归 #28 |
 | #8 坏例（已交付） | 已保存正文选段、备注、原文快照和来源版本、列表回看 | 自动分析及持续重定位后置 |
 | #1 MVP 联验（已交付） | 两章双关卡、历史修改、服务/容器重启、配置生效、坏例回看 | 完成评论及远端状态作证；本次新发现另行修复 |
+| #35 前端视觉（进行中） | B/C 组合、全流程黑白灰、主题选择；第二轮收敛折叠目录、页头动作与分层字体 | 保留关卡、版本和保存保护；第二轮截图与两章验收通过；独立审核和发布证据见 Wiki035／GitHub |
 | #28/#29 扩展 | 设定查询工具循环、作品 Wiki 档案演进 | 当前均未实现，保持后置 |
 
 WHAT/AC 和依赖以 [父票 #1](https://github.com/12bitsD/agent4novel/issues/1) 及子票为准；[研究与决定清单](./research/mvp-delivery-options.md) 保存取舍。#33 的 SQLite 恢复 AC 原生依赖 #9；不为纯排期增加其他硬依赖。不迁移或清空旧内存实例；切换且内有重要作品时先保全。配置的实现和验收见Wiki007；坏例已交付见Wiki008，整体验收见Wiki001。SQLite、容器、配置、坏例分别以本票Wiki与远端状态为准。

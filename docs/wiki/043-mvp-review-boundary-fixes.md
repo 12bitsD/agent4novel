@@ -1,14 +1,14 @@
 ---
 wiki_id: "043"
 ticket: 43
-ticket_state: active
+ticket_state: done
 context_state: current
 summary: "修复配置自动切章、起章前章版本与静态文件规范路径边界"
 topics: ["chapter-navigation", "conditional-write", "static-files", "review-fixes"]
 code_paths: ["apps/web/src/pages/Workspace.tsx", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/runtime/static-web.ts"]
 symbols: ["WorkSession", "startChapter", "runEntry", "staticWeb"]
 inherits: ["001", "006", "007", "033", "041"]
-changed_by: []
+changed_by: ["035"]
 read_when: ["debug-config-navigation", "review-start-baseline", "review-static-web-boundary"]
 last_context_reviewed: "2026-10-03"
 ---
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-10-03"
 - **原始目的**：[票面 #43](https://github.com/12bitsD/agent4novel/issues/43) 修复 [Wiki001 复审](./001-mvp-acceptance.md#2026-10-03-清点与复审) 的三项 P2，不扩大 MVP 产品范围。
 - **实际落地**：配置导航复用最新 dirty/locked 保护；起章原条件保持至实际输入与提交；静态资源只解码一次并从已校验规范路径读取。每项取得有效红绿，完整门禁及正式审核见下方证据。
 - **当前价值**：保持显式保存、原请求版本条件及静态发布目录，保留原复现和历史审核。
-- **后续变化**：文档已通过 PR42 合入 main；用户要求随后修复并推送，修复 PR 先保持开放。
+- **后续变化**：用户随后授权合并并关闭；[PR44](https://github.com/12bitsD/agent4novel/pull/44) 已合入 main，#43 已关闭。界面视觉由 [Wiki035](./035-frontend-design.md) 接手；三项保护边界仍有效。
 - **代码入口**：Workspace、Pipeline 与 staticWeb；测试从组件挂载、Pipeline/HTTP/SqliteStore 和 Hono HTTP 三个公共接口验证。
 
 ## 设计目的
@@ -83,6 +83,14 @@ AC1 对应 14 项配置导航挂载测试；AC2 对应三个双连接 baseline �
 
 ## 上下文演进
 
+### 2026-10-03 — 远端完成状态回读与视觉交接
+
+- **触发证据**：用户授权“都 pr approve 合入”；回读 PR44 为 MERGED，合并提交 `19a30524fd0e7f34b3c5a8a99bb3bd4959b8ae2a`，#43 为 CLOSED；对应 [main CI](https://github.com/12bitsD/agent4novel/actions/runs/37086938263) 成功。随后用户选择 #35 的 B/C 视觉组合。
+- **原假设**：本票初始交付要求先推送开放 PR，合并与关闭留待后续动作。
+- **决定**：当前交接改为已合并关闭；后续视觉重组由 [Wiki035](./035-frontend-design.md) 负责，不能削弱本票导航、条件写入和静态路径保护。
+- **影响**：新票从上述 main 固定点开始；旧审核只证明当次修复，不替代 #35 的新验收。
+- **上下文处理**：preserve 原发布前计划、失败证据和完成审核全部字节；replace 顶部状态及交接结论。终止记录见 [完成评论](https://github.com/12bitsD/agent4novel/issues/43#issuecomment-5964216514)，#35 仍在实施与验收中。
+
 ### 2026-10-03 — 从复审记录进入三个独立修复切片
 
 - **触发证据**：两种配置挂载复现及独立 SQLite/编码外链合成复现失败；用户授权先合并文档，再修复并推送。
@@ -93,4 +101,4 @@ AC1 对应 14 项配置导航挂载测试；AC2 对应三个双连接 baseline �
 
 ## 交接结论
 
-三项定向行为均已有新红绿证据；完整门禁、独立审核与发布前裁决从本票记录接手。来源和范围已明确，不需要再次对琐碎工程选择请求用户决定。修复分支的行为与 main 发布状态分别判断：本次先推送 PR，main 更新和 issue 关闭仍以后续远端动作作证，不提前宣布。
+三项修复已随 PR44 合入 main，#43 已关闭，终止状态和源提交验证见 [完成评论](https://github.com/12bitsD/agent4novel/issues/43#issuecomment-5964216514)。main 提交 `19a30524fd0e7f34b3c5a8a99bb3bd4959b8ae2a` 的 quality/container CI 成功。后续界面重组从 [Wiki035](./035-frontend-design.md) 接手；本票条件写入、冻结请求、配置导航与静态路径边界须继续保留。

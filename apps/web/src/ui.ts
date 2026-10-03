@@ -22,13 +22,13 @@ export const smallBtnStyle: CSSProperties = {
   background: 'var(--bg-raised)',
 }
 
-// 主行动按钮(珊瑚):开始创作 / 生成 / 选定
+// 主行动按钮:通过明暗反转突出开始创作 / 生成 / 选定。
 export const btnPrimary: CSSProperties = {
   padding: '10px 24px',
   fontSize: 15,
   cursor: 'pointer',
   borderRadius: 'var(--radius)',
-  border: 'none',
+  border: '1px solid var(--accent)',
   background: 'var(--accent)',
   color: 'var(--accent-ink)',
 }
@@ -60,11 +60,11 @@ export const cardStyle: CSSProperties = {
   padding: 16,
 }
 
-// 多巴胺 chip:tags/payoffs 轮用强调色;color 传 'accent' | 'violet' | 'teal' | 'amber' | 'pink'
+// 旧角色 token 在全局映射到灰阶；标签统一边框与文字层级。
 export const chipStyle = (color: 'accent' | 'violet' | 'teal' | 'amber' | 'pink'): CSSProperties => ({
   display: 'inline-block',
   padding: '2px 10px',
-  borderRadius: 999,
+  borderRadius: 'var(--radius)',
   fontSize: 13,
   border: `1px solid var(--${color})`,
   color: `var(--${color})`,

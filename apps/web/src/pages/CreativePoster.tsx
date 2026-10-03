@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import type { CaptionContent, CreativeContent, CreativePack } from '@agent4novel/contracts'
+import type { CaptionContent, CreativeContent } from '@agent4novel/contracts'
 import { saveCreativeDraft, selectCreativeDirection } from '../api.js'
+import { ConfirmDialog } from '../ConfirmDialog.js'
 import {
   activePack,
   beginSave,
@@ -15,10 +16,7 @@ import {
   switchTab,
 } from '../creative-compare.js'
 import type { CompareState } from '../creative-compare.js'
-import { btnPrimary, btnSecondary, cardStyle, chipStyle, fieldStyle } from '../ui.js'
-
-// 方向 tab 的多巴胺强调色轮转(A=珊瑚 / B=紫 / C=青)
-const TAB_COLORS = ['accent', 'violet', 'teal'] as const
+import { btnPrimary, btnSecondary, cardStyle, chipStyle, fieldStyle, tabStyle } from '../ui.js'
 
 // —— 小编辑器(全走本地缓存,不直达 server)——
 
@@ -26,31 +24,34 @@ function StringChipsEditor({
   items,
   onChange,
   readonly,
+  label,
 }: {
   items: string[]
   onChange: (items: string[]) => void
   readonly: boolean
+  label: string
 }) {
   if (readonly) {
     return (
       <span>
         {items.map((t, i) => (
-          <span key={i} style={{ ...chipStyle(TAB_COLORS[i % 3]!), marginRight: 6 }}>{t}</span>
+          <span key={i} style={{ ...chipStyle('accent'), marginRight: 6 }}>{t}</span>
         ))}
       </span>
     )
   }
   return (
-    <span>
+    <span className="chip-editor">
       {items.map((t, i) => (
         <input
           key={i}
+          aria-label={`${label} ${i + 1}`}
           value={t}
           onChange={(e) => onChange(items.map((x, j) => (j === i ? e.target.value : x)))}
           style={{ ...fieldStyle, width: 120, display: 'inline-block', marginRight: 6, padding: '2px 8px' }}
         />
       ))}
-      <button onClick={() => onChange([...items, ''])} style={{ ...btnSecondary, padding: '2px 10px', fontSize: 13 }}>
+      <button aria-label={`添加${label}`} onClick={() => onChange([...items, ''])} style={{ ...btnSecondary, padding: '2px 10px', fontSize: 13 }}>
         ＋
       </button>
     </span>
@@ -61,16 +62,18 @@ function HintListEditor({
   items,
   onChange,
   readonly,
+  label,
 }: {
   items: { title: string; content: string }[]
   onChange: (items: { title: string; content: string }[]) => void
   readonly: boolean
+  label: string
 }) {
   if (readonly) {
     return (
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+      <div className="hint-grid">
         {items.map((it, i) => (
-          <div key={i} style={{ ...cardStyle, padding: 10, minWidth: 160, flex: '1 1 200px' }}>
+          <div key={i} style={{ ...cardStyle, padding: 14 }}>
             <strong style={{ fontSize: 13 }}>{it.title}</strong>
             <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--ink-2)' }}>{it.content}</p>
           </div>
@@ -81,16 +84,18 @@ function HintListEditor({
   return (
     <div>
       {items.map((it, i) => (
-        <div key={i} style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'flex-start' }}>
+        <div key={i} className="hint-editor">
           <input
+            aria-label={`${label} ${i + 1} 标题`}
             value={it.title}
             placeholder="标题"
             onChange={(e) =>
               onChange(items.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))
             }
-            style={{ ...fieldStyle, width: 140 }}
+            style={fieldStyle}
           />
           <textarea
+            aria-label={`${label} ${i + 1} 内容`}
             rows={2}
             value={it.content}
             placeholder="内容"
@@ -100,6 +105,7 @@ function HintListEditor({
             style={fieldStyle}
           />
           <button
+            aria-label={`删除${label} ${i + 1}`}
             onClick={() => onChange(items.filter((_, j) => j !== i))}
             style={{ ...btnSecondary, padding: '2px 10px', fontSize: 13 }}
           >
@@ -141,10 +147,9 @@ export default function CreativePoster({
   const [s, setS] = useState<CompareState>(() => initCompare(content, headVersion))
   const [captionOpen, setCaptionOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [selectCandidate, setSelectCandidate] = useState<CompareState | null>(null)
 
   const pack = activePack(s)
-  const activeIndex = s.packs.findIndex((p) => p.directionId === s.activeId)
-  const accent = TAB_COLORS[activeIndex % 3]!
 
   const doSave = async () => {
     const next = beginSave(s)
@@ -161,10 +166,10 @@ export default function CreativePoster({
     }
   }
 
-  const doSelect = async () => {
-    if (!window.confirm(`就按「${pack.title}」这个方向写?选定后其余方向留在历史版本里。`)) return
-    const next = beginSelect(s)
-    if (next === s) return
+  const doSelect = async (candidate: CompareState) => {
+    if (readonly || s.saving || s.selecting) return
+    const next = beginSelect(candidate)
+    if (next === candidate) return
     setS(next)
     setError(null)
     try {
@@ -187,27 +192,24 @@ export default function CreativePoster({
   }
 
   return (
-    <div style={{ paddingBottom: 96 }}>
-      {/* 方向 tab:原生 button + aria */}
-      <div role="tablist" aria-label="创作方向" style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        {s.packs.map((p, i) => {
+    <div className="creative-review">
+      <header className="page-heading">
+        <div>
+          <p className="eyebrow">创作方向</p>
+          <h2>找到故事的起点</h2>
+          <p className="page-lede">比较各个方向，调整内容，再选定要继续写的故事。</p>
+        </div>
+      </header>
+      {/* 2026-10-03：B+C 视觉对齐；方向选择保留普通按钮语义，不模拟缺少键盘协议的 tabs。 */}
+      <div role="group" aria-label="创作方向" className="choice-row">
+        {s.packs.map((p) => {
           const active = p.directionId === s.activeId
-          const c = TAB_COLORS[i % 3]!
           return (
             <button
               key={p.directionId}
-              role="tab"
-              aria-selected={active}
+              aria-pressed={active}
               onClick={() => setS((cur) => switchTab(cur, p.directionId))}
-              style={{
-                padding: '8px 18px',
-                borderRadius: 999,
-                cursor: 'pointer',
-                border: `1px solid var(--${c})`,
-                background: active ? `var(--${c})` : 'var(--bg-raised)',
-                color: active ? 'var(--accent-ink)' : `var(--${c})`,
-                fontSize: 14,
-              }}
+              style={tabStyle(active)}
             >
               {s.drafts[p.directionId]?.title || p.title}
             </button>
@@ -216,30 +218,33 @@ export default function CreativePoster({
       </div>
 
       {s.conflict && (
-        <p style={{ color: 'var(--warn-ink)', background: 'var(--warn-bg)', padding: '8px 12px', borderRadius: 'var(--radius)' }}>
+        <p className="status-message" role="alert">
           内容已在别处更新(409),你的编辑保留在原处;刷新后可基于最新版继续。
         </p>
       )}
-      {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
-      {s.notice && <p style={{ color: 'var(--ok)' }}>{s.notice}</p>}
+      {error && <p role="alert" className="status-message status-error">{error}</p>}
+      {s.notice && <p role="status" className="status-message">{s.notice}</p>}
 
       {/* 海报主体 */}
-      <section style={{ ...cardStyle, borderTop: `3px solid var(--${accent})` }}>
+      <section className="flow-section surface">
+        <p className="field-label">方向标题</p>
         {readonly ? (
           <h2 style={{ marginTop: 0 }}>{pack.title}</h2>
         ) : (
           <input
+            aria-label="方向标题"
             value={pack.title}
             onChange={(e) => setS((cur) => editActive(cur, { title: e.target.value }))}
             style={{ ...fieldStyle, fontSize: 22, fontWeight: 700, marginBottom: 8 }}
           />
         )}
 
-        <p style={{ fontSize: 17, color: `var(--${accent})`, fontWeight: 600 }}>钩子</p>
+        <p className="section-heading">钩子</p>
         {readonly ? (
           <p style={{ fontSize: 16 }}>{pack.hook}</p>
         ) : (
           <textarea
+            aria-label="钩子"
             rows={2}
             value={pack.hook}
             onChange={(e) => setS((cur) => editActive(cur, { hook: e.target.value }))}
@@ -247,18 +252,20 @@ export default function CreativePoster({
           />
         )}
 
-        <p style={{ fontSize: 13, color: 'var(--ink-2)', marginBottom: 6 }}>题材标签</p>
+        <p className="section-heading">题材标签</p>
         <StringChipsEditor
+          label="题材标签"
           items={pack.tags}
           readonly={readonly}
           onChange={(tags) => setS((cur) => editActive(cur, { tags }))}
         />
 
-        <p style={{ fontSize: 13, color: 'var(--ink-2)', margin: '16px 0 6px' }}>梗概</p>
+        <p className="section-heading">梗概</p>
         {readonly ? (
           <p style={{ whiteSpace: 'pre-wrap' }}>{pack.synopsis}</p>
         ) : (
           <textarea
+            aria-label="梗概"
             rows={5}
             value={pack.synopsis}
             onChange={(e) => setS((cur) => editActive(cur, { synopsis: e.target.value }))}
@@ -266,29 +273,33 @@ export default function CreativePoster({
           />
         )}
 
-        <p style={{ fontSize: 13, color: 'var(--ink-2)', margin: '16px 0 6px' }}>人物</p>
+        <p className="section-heading">人物</p>
         <HintListEditor
+          label="人物"
           items={pack.characters}
           readonly={readonly}
           onChange={(characters) => setS((cur) => editActive(cur, { characters }))}
         />
 
-        <p style={{ fontSize: 13, color: 'var(--ink-2)', margin: '16px 0 6px' }}>设定</p>
+        <p className="section-heading">设定</p>
         <HintListEditor
+          label="设定"
           items={pack.setting}
           readonly={readonly}
           onChange={(setting) => setS((cur) => editActive(cur, { setting }))}
         />
 
-        <p style={{ fontSize: 13, color: 'var(--ink-2)', margin: '16px 0 6px' }}>爽点</p>
+        <p className="section-heading">爽点</p>
         <StringChipsEditor
+          label="爽点"
           items={pack.payoffs}
           readonly={readonly}
           onChange={(payoffs) => setS((cur) => editActive(cur, { payoffs }))}
         />
 
-        <p style={{ fontSize: 13, color: 'var(--ink-2)', margin: '16px 0 6px' }}>大纲走向</p>
+        <p className="section-heading">大纲走向</p>
         <HintListEditor
+          label="大纲走向"
           items={pack.outline}
           readonly={readonly}
           onChange={(outline) => setS((cur) => editActive(cur, { outline }))}
@@ -326,52 +337,42 @@ export default function CreativePoster({
         </section>
       )}
 
-      {/* 脏时浮动保存 pill */}
-      {!readonly && isDirty(s) && (
-        <button
-          onClick={doSave}
-          disabled={s.saving || s.selecting}
-          style={{
-            position: 'fixed',
-            right: 24,
-            bottom: 72,
-            borderRadius: 999,
-            border: 'none',
-            padding: '10px 22px',
-            fontSize: 14,
-            cursor: 'pointer',
-            background: 'var(--ink)',
-            color: 'var(--bg)',
-            boxShadow: 'var(--shadow-pill)',
-          }}
-        >
-          {s.saving ? '保存中……' : '保存全部方向'}
-        </button>
-      )}
-
-      {/* 底部选定细条 */}
       {!readonly && (
-        <div
-          style={{
-            position: 'fixed',
-            left: 0,
-            right: 0,
-            bottom: 0,
-            padding: '12px 24px',
-            background: 'var(--bg-raised)',
-            borderTop: '1px solid var(--line)',
-            display: 'flex',
-            justifyContent: 'center',
-          }}
-        >
+        <footer className="review-actions">
+          <span className="review-save-state" role="status">
+            {s.saving ? '保存中……' : isDirty(s) ? '有未保存的修改' : '编辑当前方向后可保存'}
+          </span>
+          {isDirty(s) && (
+            <button
+              onClick={doSave}
+              disabled={s.saving || s.selecting}
+              style={btnSecondary}
+            >
+              {s.saving ? '保存中……' : '保存全部方向'}
+            </button>
+          )}
           <button
-            onClick={doSelect}
+            onClick={() => setSelectCandidate(s)}
             disabled={s.saving || s.selecting}
-            style={{ ...btnPrimary, minWidth: 240 }}
+            style={btnPrimary}
           >
             {s.selecting ? '选定中……' : `就按「${pack.title}」这个方向写 →`}
           </button>
-        </div>
+        </footer>
+      )}
+      {selectCandidate && (
+        <ConfirmDialog
+          title="选定创作方向"
+          description={`就按「${activePack(selectCandidate).title}」这个方向写?选定后其余方向留在历史版本里。`}
+          cancelLabel="继续编辑"
+          confirmLabel="确认选定"
+          onCancel={() => setSelectCandidate(null)}
+          onConfirm={() => {
+            // 复用可访问确认；提交的方向、草稿和版本仍是打开弹窗时的同一份内容。
+            setSelectCandidate(null)
+            void doSelect(selectCandidate)
+          }}
+        />
       )}
     </div>
   )

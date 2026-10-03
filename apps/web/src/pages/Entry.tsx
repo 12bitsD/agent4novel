@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { seedCharBudget } from '@agent4novel/contracts'
 import { createWork, getConfig } from '../api.js'
 import type { AppConfig } from '../api.js'
@@ -24,6 +24,7 @@ export default function Entry({
   const [config, setConfig] = useState<AppConfig | null>(null)
   const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const fieldId = useId()
 
   useEffect(() => {
     getConfig()
@@ -64,7 +65,7 @@ export default function Entry({
   }
 
   return (
-    <main style={{ padding: 24, maxWidth: 640 }}>
+    <main className="entry-page">
       <button
         onClick={onBack}
         style={{ ...btnSecondary, padding: '4px 10px', fontSize: 13, marginBottom: 16 }}
@@ -72,56 +73,64 @@ export default function Entry({
         ← 返回书架
       </button>
       {config?.demo && (
-        <p
-          style={{
-            padding: '8px 12px',
-            background: 'var(--warn-bg)',
-            borderRadius: 'var(--radius)',
-            color: 'var(--warn-ink)',
-            fontSize: 14,
-          }}
-        >
+        <p className="status-message" role="status">
           演示模式（未配置可用模型凭据）：当前由内置 fake 生成示例内容
         </p>
       )}
 
-      <h1>开始创作</h1>
-      <p style={{ color: 'var(--ink-2)' }}>输入你的脑洞、设定或故事主线（也可以上传文档）。</p>
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="一句话脑洞，或整段设定 / 主线 / 模板文本……"
-        rows={10}
-        style={mainFieldStyle}
-      />
-      {text.length > SEED_WARN_CHARS && (
-        <p style={{ color: 'var(--warn-ink)', fontSize: 13 }}>
-          素材较长（{text.length.toLocaleString()} 字），生成时将截取前 {SEED_WARN_CHARS.toLocaleString()} 字。
-        </p>
-      )}
-      <div style={{ marginTop: 12, display: 'flex', gap: 12, alignItems: 'center' }}>
-        <button onClick={() => fileRef.current?.click()} style={btnSecondary}>
-          上传文档
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept={ACCEPTED_FILE_TYPES}
-          style={{ display: 'none' }}
-          onChange={(e) => onFiles(e.target.files)}
+      <header className="page-heading">
+        <div>
+          <p className="eyebrow">新作品</p>
+          <h1>开始创作</h1>
+          <p className="page-lede">输入你的脑洞、设定或故事主线（也可以上传文档）。</p>
+        </div>
+      </header>
+      <section className="entry-form surface">
+        <label className="field-label" htmlFor={`${fieldId}-material`}>创作素材</label>
+        <textarea
+          id={`${fieldId}-material`}
+          className="entry-material"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="一句话脑洞，或整段设定 / 主线 / 模板文本……"
+          rows={10}
+          style={mainFieldStyle}
         />
-        {notice && <span style={{ color: 'var(--ok)' }}>{notice}</span>}
-      </div>
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="标题（可选，留空取开头）"
-        style={{ ...mainFieldStyle, marginTop: 16, padding: 10 }}
-      />
-      {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
-      <button onClick={submit} disabled={busy} style={{ ...btnPrimary, marginTop: 16 }}>
-        {busy ? '处理中……' : '开始创作'}
-      </button>
+        {text.length > SEED_WARN_CHARS && (
+          <p className="status-message" role="status">
+            素材较长（{text.length.toLocaleString()} 字），生成时将截取前 {SEED_WARN_CHARS.toLocaleString()} 字。
+          </p>
+        )}
+        <div className="action-row" style={{ marginTop: 12 }}>
+          <button onClick={() => fileRef.current?.click()} style={btnSecondary}>
+            上传文档
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept={ACCEPTED_FILE_TYPES}
+            style={{ display: 'none' }}
+            onChange={(e) => onFiles(e.target.files)}
+          />
+          <small className="page-lede">TXT / MD / DOCX / PDF</small>
+          {notice && <span role="status" style={{ color: 'var(--ok)' }}>{notice}</span>}
+        </div>
+        <label className="field-label" htmlFor={`${fieldId}-title`} style={{ marginTop: 24 }}>作品标题（可选）</label>
+        <input
+          id={`${fieldId}-title`}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="标题（可选，留空取开头）"
+          style={{ ...mainFieldStyle, padding: 10 }}
+        />
+        {error && <p role="alert" className="status-message status-error">{error}</p>}
+        <div className="action-row entry-submit" style={{ marginTop: 24 }}>
+          <p className="page-lede">创建作品后，在工作台生成并审阅创作方向。</p>
+          <button onClick={submit} disabled={busy} style={btnPrimary}>
+            {busy ? '处理中……' : '开始创作'}
+          </button>
+        </div>
+      </section>
     </main>
   )
 }

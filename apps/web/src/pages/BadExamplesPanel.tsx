@@ -66,21 +66,21 @@ export default function BadExamplesPanel({ workId, chapter, selection, onClear, 
     } catch { if (active.current) setError('尚无法确认原标记；未找到记录也不代表先前请求不会完成。原请求仍保留。') }
     finally { writing.current = false; if (active.current) setBusy(false) }
   }
-  return <section aria-label="坏例收集" style={{ marginTop: 24 }}>
+  return <section aria-label="坏例收集" className="bad-examples">
     <button type="button" style={btnSecondary} disabled={locked} onClick={() => setOpen(value => !value)}>坏例收集</button>
     {open && <>
-      <h3>本章坏例</h3><p className="setting-muted">在正文中选取一段文字，再标记。样本保留当时原文，供你调整写作指导；不会自动分析或改写。</p>
+      <h3 className="section-heading">本章坏例</h3><p className="setting-muted">在正文中选取一段文字，再标记。样本保留当时原文，供你调整写作指导；不会自动分析或改写。</p>
       {!canMark && !locked && <p role="status">请先保存并确认正文操作，再标记坏例。</p>}
-      {selection && <><blockquote style={{ whiteSpace: 'pre-wrap' }}>{selection.text}</blockquote><p>选段来源：正文 v{selection.sourceVersion}</p></>}
-      <label>坏例备注（可选）<textarea aria-label="坏例备注（可选）" style={fieldStyle} rows={2} maxLength={badExampleLimits.note} value={note} disabled={locked || !canMark} onChange={e => setNote(e.target.value)} /></label>
+      {selection && <><blockquote className="selection-quote">{selection.text}</blockquote><p className="setting-muted">选段来源：正文 v{selection.sourceVersion}</p></>}
+      <label className="setting-field">坏例备注（可选）<textarea aria-label="坏例备注（可选）" style={fieldStyle} rows={2} maxLength={badExampleLimits.note} value={note} disabled={locked || !canMark} onChange={e => setNote(e.target.value)} /></label>
       <div className="setting-actions"><button type="button" style={btnPrimary} disabled={!selection || !canMark || locked} onClick={() => void submit()}>标记为坏例</button>
         {selection && <button type="button" style={btnSecondary} disabled={locked} onClick={onClear}>清除选段</button>}
         <button type="button" style={btnSecondary} onClick={() => void load()}>刷新坏例</button>
         {frozen && <><button type="button" disabled={busy} style={btnSecondary} onClick={() => void recover(false)}>核对标记结果</button><button type="button" disabled={busy} style={btnSecondary} onClick={() => void recover(true)}>重试标记原请求</button></>}
       </div>
-      {busy && <p role="status">正在处理标记…</p>}{error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
-      {!items.length && <p>本章暂无已读取的坏例。</p>}
-      <ol>{items.map(item => <li key={item.id}><p>正文 v{item.sourceVersion} · {item.createdAt}</p><blockquote style={{ whiteSpace: 'pre-wrap' }}>{item.text}</blockquote>{item.note && <p>备注：{item.note}</p>}</li>)}</ol>
+      {busy && <p role="status">正在处理标记…</p>}{error && <p className="setting-notice" role="alert">{error}</p>}{notice && <p className="setting-notice" role="status">{notice}</p>}
+      {!items.length && <p className="setting-muted">本章暂无已读取的坏例。</p>}
+      <ol className="bad-example-list">{items.map(item => <li key={item.id}><p className="setting-muted">正文 v{item.sourceVersion} · {item.createdAt}</p><blockquote className="selection-quote">{item.text}</blockquote>{item.note && <p>备注：{item.note}</p>}</li>)}</ol>
       {nextCursor !== undefined && <button type="button" style={btnSecondary} onClick={() => void load(nextCursor)}>继续读取坏例</button>}
     </>}
   </section>

@@ -36,10 +36,10 @@ export default function BeatReview({ state, onAction, allowCommands, onApprove, 
       {errors.length > 0 && <span id={`beat-error-${path}`} className="setting-field-error" role="alert">{errors.map(e => e.message).join('；')}</span>}
     </label>
   }
-  return <section ref={root} className="setting-review" aria-label="章纲关卡">
+  return <section ref={root} className="setting-review review-page beat-page" aria-label="章纲关卡">
     <header className="setting-review-header">
-      <div><p className="setting-eyebrow">{chapterLabel(state.baseline.chapter)} · 写作计划</p><h2>{approved ? '章纲已通过' : '先看清这一章，再开始写作'}</h2>
-        <p className="setting-muted">{approved ? '后续正文使用这份章纲。' : '修改仅保存在当前页面；点击通过后，一次定稿。'}</p></div>
+      <div className="review-copy"><p className="setting-eyebrow eyebrow">{chapterLabel(state.baseline.chapter)} · 写作计划</p><h2 className="page-heading">{approved ? '章纲已通过' : '先看清这一章，再开始写作'}</h2>
+        <p className="setting-muted page-lede">{approved ? '后续正文使用这份章纲。' : '修改仅保存在当前页面；点击通过后，一次定稿。'}</p></div>
       {!approved && <div className="setting-actions">
         <button type="button" style={btnSecondary} onClick={() => onAction({ type: 'mode', mode: editing ? 'preview' : 'edit' })}>{editing ? '预览章纲' : '编辑章纲'}</button>
         <button type="button" disabled={locked} style={btnPrimary} onClick={() => {
@@ -83,7 +83,7 @@ export default function BeatReview({ state, onAction, allowCommands, onApprove, 
     <section className="setting-section"><h3>章末落点与承接</h3>
       {editing ? field('ending', '章末落点与承接（支持简单 Markdown）', state.draft.ending, true, value => onAction({ type: 'field', field: 'ending', value })) : markdown(state.draft.ending)}
     </section>
-    {!approved && <section className="setting-section" style={{ ...cardStyle, background: 'var(--bg-sunken)' }}>
+    {!approved && <section className="setting-section rewrite-panel" style={{ ...cardStyle, background: 'var(--bg-sunken)' }}>
       <h3>需要另一个安排？</h3><p className="setting-muted">修改意见仅用于重新生成，可留空。整份生成成功后才替换当前内容。</p>
       {field('instructions', '本次修改意见（仅用于重新生成）', state.instructions, true, value => onAction({ type: 'instructions', value }))}
       <button type="button" style={btnSecondary} disabled={locked} onClick={() => setConfirmation({ title: '重新生成整份章纲？',

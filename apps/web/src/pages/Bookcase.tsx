@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { WorkSummary } from '@agent4novel/contracts'
 import { listWorks } from '../api.js'
-import { btnPrimary, cardStyle } from '../ui.js'
+import { btnPrimary } from '../ui.js'
 
 export default function Bookcase({
   onNew,
@@ -20,33 +20,41 @@ export default function Bookcase({
   }, [])
 
   return (
-    <main style={{ padding: 24, maxWidth: 960 }}>
-      <h1>书架</h1>
-      <button onClick={onNew} style={{ ...btnPrimary, marginBottom: 16 }}>
-        ＋ 开始创作
-      </button>
-      {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        {works.map((w) => (
+    <main className="bookcase-page">
+      <header className="page-heading">
+        <div>
+          <p className="eyebrow">作品库</p>
+          <h1>书架</h1>
+          <p className="page-lede">打开作品继续写作，或从一个新的故事开始。</p>
+        </div>
+        <button onClick={onNew} style={btnPrimary}>
+          ＋ 开始创作
+        </button>
+      </header>
+      {error && <p role="alert" className="status-message status-error">{error}</p>}
+      <div className="bookcase-grid">
+        {works.map((w, i) => (
           <button
             key={w.id}
             onClick={() => onOpen(w.id)}
-            style={{
-              ...cardStyle,
-              width: 220,
-              textAlign: 'left',
-              cursor: 'pointer',
-            }}
+            className="bookcase-card surface"
           >
-            <strong style={{ display: 'block', marginBottom: 8 }}>{w.title}</strong>
-            <span style={{ color: 'var(--ink-2)', fontSize: 13 }}>{w.seedPreview}</span>
-            <small style={{ display: 'block', marginTop: 8, color: 'var(--ink-3)' }}>
-              已完成 {w.chapterCount} 章
+            <span className="bookcase-index" aria-hidden="true">{String(i + 1).padStart(2, '0')}</span>
+            <strong className="bookcase-title">{w.title}</strong>
+            <span className="bookcase-preview">{w.seedPreview}</span>
+            <small className="bookcase-meta">
+              <span>已完成 {w.chapterCount} 章</span>
+              <span aria-hidden="true">打开 →</span>
             </small>
           </button>
         ))}
       </div>
-      {works.length === 0 && !error && <p style={{ color: 'var(--ink-2)' }}>暂无作品</p>}
+      {works.length === 0 && !error && (
+        <section className="empty-state surface">
+          <h2>暂无作品</h2>
+          <p className="page-lede">一段脑洞、一份设定或一条故事主线，都可以成为起点。</p>
+        </section>
+      )}
     </main>
   )
 }

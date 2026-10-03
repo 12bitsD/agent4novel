@@ -28,7 +28,7 @@ export function ConfirmDialog({ title, description, cancelLabel, confirmLabel, o
       }}>
       <button type="button" aria-label="关闭弹窗，继续编辑" className="setting-modal-close" onClick={onCancel}>×</button>
       <div className="setting-modal-mark" aria-hidden="true">!</div>
-      <h2 id={titleId}>{title}</h2>
+      <h2 id={titleId} className="section-heading">{title}</h2>
       <p id={descriptionId}>{description}</p>
       <div className="setting-actions">
         <button type="button" ref={cancel} style={btnSecondary} onClick={onCancel}>{cancelLabel}</button>

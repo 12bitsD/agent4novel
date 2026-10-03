@@ -8,7 +8,7 @@ topics: ["author-config", "prompt-files", "skills", "configuration-snapshot"]
 code_paths: ["apps/server/src/runtime/production-app.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/store/sqlite-store.ts", "apps/web/src/pages/Workspace.tsx", "apps/cli/src/main.ts"]
 symbols: ["AgentConfig", "Pipeline", "SqliteStore"]
 inherits: ["016", "009", "033"]
-changed_by: ["008", "041", "043"]
+changed_by: ["008", "041", "043", "035"]
 read_when: ["configure-author-agent", "upload-skill", "freeze-generation-config"]
 last_context_reviewed: "2026-10-03"
 ---
@@ -25,7 +25,7 @@ last_context_reviewed: "2026-10-03"
 - **代码入口**：生产装配、Pipeline、SQLite、Workspace和CLI。
 
 
-本页相关后续变化：配置草稿和未知请求的自动导航保护由 [Wiki043](./043-mvp-review-boundary-fixes.md) 跟踪。该票的修复候选与 main 发布状态分别判断，原完成审核不追改。
+本页相关后续变化：配置草稿和未知请求的自动导航保护已由 [Wiki043](./043-mvp-review-boundary-fixes.md) 修复并随 PR44 合入 main。配置入口和面板视觉由 [Wiki035](./035-frontend-design.md) 接手，仍在实施与验收中；本页配置与版本职责保持不变，原完成审核不追改。
 ## 设计目的
 
 三维偏好、每步实际配置和Skill文件选择可见可验证；一次操作冻结配置，不混用运行期间的改动。
@@ -103,6 +103,14 @@ RED→GREEN：config-red→config-files-green（公开入口/文件）；snapsho
 本机单用户，文件文本仅提示用途；不执行脚本/工具、不联网展开附件、不做跨作品共享库，不回改已生成内容或通过状态。凭据/Base URL/运行方式继续由Wiki016和Wiki033持有。
 
 ## 上下文演进
+
+### 2026-10-03 — 配置面板视觉演进交接
+
+- **触发证据**：用户在 #35 选择 B/C 视觉组合，要求全创作流程一致；#43/PR44 已关闭/合并，配置导航保护已进入 main。
+- **原假设**：本页配置面板随原工作区布局展示，功能与视觉由同一交付记录解释。
+- **决定**：视觉入口和响应布局由 [Wiki035](./035-frontend-design.md) 负责，本页继续解释配置保存、文件版本和操作快照。
+- **影响**：移动或折叠配置区域不得丢失未保存文本、文件选择或未知请求；主题切换不得改变配置或触发生成。#35 仍需独立验收这些边界。
+- **上下文处理**：preserve 原方案、失败经验、人决和完成审核全部字节；replace 顶部接手入口，视觉依据及新验证留在 Wiki035。
 
 ### 2026-10-03 — 复审缺陷另票修复
 

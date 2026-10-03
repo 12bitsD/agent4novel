@@ -8,7 +8,7 @@ topics: ["chapter-continuation", "human-review", "upstream-snapshot", "chapter-n
 code_paths: ["apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts", "packages/contracts/src/artifacts.ts", "apps/web/src/pages/Workspace.tsx", "apps/cli/src/commands.ts"]
 symbols: ["startChapter", "currentChapter", "previousChapter", "needsContinuityReview", "start-chapter"]
 inherits: ["022", "005", "004", "014", "025"]
-changed_by: ["019", "009", "043"]
+changed_by: ["019", "009", "043", "035"]
 read_when: ["continue-chapter", "navigate-chapters", "edit-previous-prose", "debug-chapter-context"]
 last_context_reviewed: "2026-10-03"
 ---
@@ -25,7 +25,7 @@ last_context_reviewed: "2026-10-03"
 - **代码入口**：Pipeline 负责章节循环和实际依赖快照，Store 原子条件写入；公共协议供 HTTP/Web/CLI 使用，Step 接收明确的上一章内容。
 
 
-本页相关后续变化：配置自动切章与原起章版本条件由 [Wiki043](./043-mvp-review-boundary-fixes.md) 跟踪。该票的修复候选与 main 发布状态分别判断，原完成审核不追改。
+本页相关后续变化：配置自动切章与原起章版本条件已由 [Wiki043](./043-mvp-review-boundary-fixes.md) 修复并随 PR44 合入 main。章节目录和正文工作台的视觉重组由 [Wiki035](./035-frontend-design.md) 接手，仍在实施与验收中；本页章级行为和原完成审核继续保留。
 ## 设计目的
 
 首章完成后，作者能显式开始下一章，经章纲把关、正文把关后再决定是否继续。旧章可以阅读和编辑正文，当前章的生成、编辑和响应不能因为阅读选择变化而串到另一章。书架、刷新与章节链接只恢复阅读，不调用模型。
@@ -131,6 +131,14 @@ Web 把传输失败和 HTTP 200 中 `writeOutcome:unknown` 都按未知结果保
 不做 SQLite、长期记忆、工具循环、作品 Wiki 更新、已通过章纲/设定回改、历史版本比较、自动完本判断或自动连跑后续章。#19 保留全仓契约收敛，本票只改多章能力所需边界。服务重启仍丢失作品；跨浏览器刷新恢复依赖原服务进程。
 
 ## 上下文演进
+
+### 2026-10-03 — 章节工作台视觉演进交接
+
+- **触发证据**：用户要求完成 #35，并在三个同概念视觉稿中选择“BC舒服些”；#43/PR44 已关闭/合并，main CI 成功。
+- **原假设**：本页说明多章行为，章节目录和正文的原视觉布局随其交付。
+- **决定**：由 [Wiki035](./035-frontend-design.md) 收敛 B 的工作台结构与 C 的黑白边界；本页继续负责章节行为及其历史理由。
+- **影响**：界面可重排目录、正文及材料入口，但显式起章、阅读章与工作章分离、自动保存和未知结果保护须继续成立；#35 尚未完成验收。
+- **上下文处理**：preserve 原目的、人决、失败经验及完成审核全部字节；replace 顶部视觉接手入口。#43 发布事实见其交接，#35 当前事实与验收从新页读取。
 
 ### 2026-10-03 — 复审缺陷另票修复
 

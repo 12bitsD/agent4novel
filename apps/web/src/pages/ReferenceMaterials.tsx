@@ -3,7 +3,7 @@ import { beatArtifactSchema, captionContentSchema, creativeContentSchema, outlin
 import type { WorkView } from '@agent4novel/contracts'
 import { initBeatReview } from '../beat-review.js'
 import { initSettingReview } from '../setting-review.js'
-import { btnSecondary, cardStyle } from '../ui.js'
+import { btnSecondary } from '../ui.js'
 import BeatReview from './BeatReview.js'
 import CreativePoster from './CreativePoster.js'
 import OutlineReview from './OutlineReview.js'
@@ -25,11 +25,12 @@ export default function ReferenceMaterials({ work, chapter, hiddenKinds }: { wor
     { kind: 'creative', label: '创意稿', exists: !!creative }, { kind: 'outline', label: '大纲', exists: !!outline },
     { kind: 'setting', label: '设定', exists: !!setting }, { kind: 'beat', label: '本章已通过章纲', exists: !!beat }]
     .filter(item => item.exists && !hiddenKinds.includes(item.kind))
-  return <section aria-label="创作资料" style={{ ...cardStyle, marginTop: 24 }}>
-    <h2 style={{ fontSize: 18 }}>创作资料</h2><p className="setting-muted">查看已通过的中间产物。</p>
-    <div className="setting-actions">{items.map(item => <button type="button" key={item.kind} style={btnSecondary}
+  return <section aria-label="创作资料" className="reference-materials">
+    <h2 className="section-heading">创作资料 <span className="setting-muted">· 只读</span></h2>
+    <div className="setting-actions reference-links">{items.map(item => <button type="button" key={item.kind} style={btnSecondary}
       aria-expanded={open === item.kind} onClick={() => setOpen(open === item.kind ? null : item.kind)}>{item.label}</button>)}</div>
-    {open === 'seed' && <p style={{ whiteSpace: 'pre-wrap' }}>{work.seed}</p>}
+    <div className="reference-body">
+    {open === 'seed' && <p className="source-text">{work.seed}</p>}
     {open === 'caption' && caption && <div><p className="setting-muted">输入阶段：{caption.inputStage}</p><p>{caption.summary}</p><ul>{caption.elements.map((item, i) => <li key={i}>{item.kind}：{item.content}</li>)}</ul>
       {caption.gaps.length > 0 && <><h3>待补充</h3><ul>{caption.gaps.map((gap, i) => <li key={i}>{gap}</li>)}</ul></>}</div>}
     {open === 'creative' && creative && creativeArtifact && <CreativePoster key={creativeArtifact.id} workId={work.id} content={creative}
@@ -40,5 +41,6 @@ export default function ReferenceMaterials({ work, chapter, hiddenKinds }: { wor
       onAction={noop} onApprove={noop} onConfirm={noop} onRetry={noop} />}
     {open === 'beat' && beat && <BeatReview state={initBeatReview(beat)} allowCommands={false}
       onAction={noop} onApprove={noop} onRegenerate={noop} onConfirm={noop} onRetry={noop} />}
+    </div>
   </section>
 }

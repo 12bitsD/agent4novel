@@ -12,6 +12,29 @@ const work = { id: 'work-test', title: 'test work', seed: 'source', config: {}, 
 function button(host: HTMLElement, text: string) { return Array.from(host.querySelectorAll('button')).find(b => b.textContent === text)! }
 
 describe('configuration in the creative workspace', () => {
+  it('keeps configuration drafts and the navigation guard when collapsed and reopened', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    const fetchMock = vi.fn(async (url: string) => new Response(JSON.stringify(url.endsWith('/agent-config') ? config() : work)))
+    vi.stubGlobal('fetch', fetchMock)
+    const host = document.createElement('div'); document.body.append(host); const root = createRoot(host)
+    const back = vi.fn()
+    try {
+      await act(async () => root.render(<Workspace workId="work-test" onBack={back} />))
+      const toggle = button(host, 'Agent 配置')
+      await act(async () => toggle.click())
+      const input = host.querySelector<HTMLInputElement>('input[aria-label="文风"]')!
+      await act(async () => { Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, '保留草稿'); input.dispatchEvent(new Event('input', { bubbles: true })) })
+      await act(async () => toggle.click())
+      expect(toggle.getAttribute('aria-expanded')).toBe('false')
+      expect(input.closest('[hidden]')).not.toBeNull()
+      await act(async () => toggle.click())
+      expect(host.querySelector<HTMLInputElement>('input[aria-label="文风"]')!.value).toBe('保留草稿')
+      expect(fetchMock.mock.calls.filter(([url]) => url.endsWith('/agent-config'))).toHaveLength(1)
+      await act(async () => button(host, '← 返回书架').click())
+      expect(host.textContent).toContain('离开当前创作页面？')
+      expect(back).not.toHaveBeenCalled()
+    } finally { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals() }
+  })
   it('retains the frozen write when its successful receipt is followed by a failed readback', async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     let saved = false

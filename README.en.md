@@ -17,7 +17,7 @@ Enter a story idea or import text from TXT, Markdown (`.md`), Word (`.docx`), or
 
 ![Chapter directory, prose reading area and editing control](./docs/assets/workspace-demo.jpg)
 
-<p align="center"><sub>Actual interface in demo mode, shown in Chinese, with specially written example prose.</sub></p>
+<p align="center"><sub>Actual chapter-two interface in demo mode, shown in Chinese. The prose is an edited sample and does not demonstrate real-model output quality.</sub></p>
 
 ## Current status
 
@@ -101,7 +101,22 @@ The system first prepares a story brief (Caption) from your input, then follows 
 | Chapter plan | This chapter's goal, content order and ending | Edit or regenerate, then approve |
 | Prose | Chapter text based on its plan and setting | Edit or rewrite the chapter, then approve |
 
-Prose approval completes the chapter. “Start next chapter” generates the next chapter plan. Use the chapter directory to revisit earlier chapters. Approved prose opens in reading mode; select “编辑” (Edit) to change it, with autosave preserving approval. Editing an earlier chapter flags existing later chapters for a continuity check while keeping their text and status.
+Prose approval completes the chapter. “Start next chapter” in the prose header generates the next chapter plan. Use the chapter directory to revisit earlier chapters. Approved prose opens in reading mode; select “编辑” (Edit) to change it, with autosave preserving approval. Editing an earlier chapter flags existing later chapters for a continuity check while keeping their text and status.
+
+### Reading and appearance
+
+Use “界面” (Appearance) at the top of the page to choose “跟随系统” (System), “浅色” (Light), or “深色” (Dark). This browser remembers the choice.
+
+Wide screens show chapters, prose and reference materials in separate areas. On phones, the chapter directory starts collapsed: open “章节目录” (Chapter directory), select a chapter, then collapse the directory to continue reading. Materials and configuration remain accessible. Prose uses a Songti-style Chinese serif font, with a limited line width and the original text's line breaks preserved. Interface text uses regular sans-serif fonts; the pixel font is limited to the brand.
+
+<details>
+<summary>Dark appearance</summary>
+
+![Dark prose workbench with a continuity warning after editing an earlier chapter](./docs/assets/workspace-dark.jpg)
+
+Actual interface in demo mode. The prose is an edited sample and does not demonstrate real-model output quality.
+
+</details>
 
 <a id="adjust-writing-preferences"></a>
 
