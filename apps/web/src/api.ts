@@ -118,9 +118,11 @@ export async function createWork(input: WorkCreateRequest): Promise<Work> {
 
 async function writeArtifact(workId: string, kind: 'creative' | 'outline', status: 'pending' | 'approved', path: string,
   method: 'PUT' | 'POST', body: unknown): Promise<Artifact> {
-  return validate(artifactSchema, await request(`/api/works/${encodeURIComponent(workId)}/artifacts/${kind}${path}`, {
-    method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  }), result => result.workId === workId && result.kind === kind && result.chapter === undefined && result.humanStatus === status, true)
+  return withDeadline(30_000, async signal => validate(artifactSchema,
+    await request(`/api/works/${encodeURIComponent(workId)}/artifacts/${kind}${path}`, {
+      method, signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }, error => !('command' in error)),
+    result => result.workId === workId && result.kind === kind && result.chapter === undefined && result.humanStatus === status, true))
 }
 
 // 保存全部方向，保持 pending；409 时调用者保留编辑内容。

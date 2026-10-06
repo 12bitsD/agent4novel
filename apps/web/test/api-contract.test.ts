@@ -1,6 +1,6 @@
 import { advanceOutcomeDtoSchema, httpErrorSchema } from '@agent4novel/contracts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createWork, getWork, listWorks, selectCreativeDirection, startChapter } from '../src/api.js'
+import { createWork, getWork, listWorks, saveCreativeDraft, saveOutlineDraft, selectCreativeDirection, startChapter } from '../src/api.js'
 
 afterEach(() => vi.unstubAllGlobals())
 const work = { id: 'w1', seed: '脑洞', title: '作品', config: {}, createdAt: 'today', artifacts: [],
@@ -84,5 +84,38 @@ describe('start-chapter command association', () => {
     const body = { kind: 'awaiting-approval', state: { workId: 'w1', stage: 'awaiting-approval', nextStepId: null, pendingGate: { kind: 'beat', chapter: 2 } }, telemetry: [] }
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json(body)))
     await expect(startChapter('w1', startRequest)).resolves.toEqual(body)
+  })
+})
+
+const outlineDraft = { arcs: [1, 2, 3].map(i => ({ title: '弧线' + i, conflict: '冲突', development: '发展', resolution: '局势', segments: [1, 2].map(j => ({ title: '点' + j, summary: '行动', outcome: '落点' })) })) }
+const legacyWrites = [
+  ['creative-save', () => saveCreativeDraft('w1', creative.content, 1)],
+  ['creative-select', () => selectCreativeDirection('w1', 'dir1', 1)],
+  ['outline-save', () => saveOutlineDraft('w1', outlineDraft, 1)],
+] as const
+
+describe('legacy material write receipt boundaries', () => {
+  it.each(legacyWrites)('%s keeps a foreign command error unknown without retry', async (_name, command) => {
+    const body = { code: 'version-conflict', message: 'different operation', retryable: false, command: startCommand }
+    expect(httpErrorSchema.safeParse(body).success).toBe(true)
+    const transport = vi.fn().mockResolvedValue(Response.json(body, { status: 409 }))
+    vi.stubGlobal('fetch', transport)
+    await expect(command()).rejects.toMatchObject({ code: 'invalid-response', writeOutcome: 'unknown' })
+    expect(transport).toHaveBeenCalledTimes(1)
+  })
+  it.each(legacyWrites)('%s stops waiting for a hung response at30s without replay', async (_name, command) => {
+    vi.useFakeTimers()
+    const transport = vi.fn(() => new Promise<Response>(() => {}))
+    vi.stubGlobal('fetch', transport)
+    try {
+      let settled = false
+      const outcome = command().catch(error => error).then(error => { settled = true; return error })
+      await vi.advanceTimersByTimeAsync(30_001)
+      expect(settled).toBe(true)
+      expect((await outcome).message).toContain('结果尚未确认')
+      expect(transport).toHaveBeenCalledTimes(1)
+      const signal = (transport.mock.calls[0] as unknown as [string, RequestInit])[1].signal
+      expect(signal?.aborted).toBe(true)
+    } finally { vi.useRealTimers() }
   })
 })
