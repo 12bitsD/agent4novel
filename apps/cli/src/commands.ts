@@ -1,7 +1,7 @@
 import type { ArtifactKind, CreativeContent, OutlineDraft, WorkView } from '@agent4novel/contracts'
 import {
   matchesSettingSubmission, settingApproveRequestSchema, settingApproveResponseSchema, settingArtifactSchema,
-  startChapterRequestSchema,
+  startChapterRequestSchema, outlineApprovalRequestSchema,
   perChapterKinds,
   beatApproveRequestSchema, beatRegenerateRequestSchema, beatArtifactSchema, recoverBeatSubmission, beatCommandErrorSchema, beatCommandResponseSchema,
   matchesBeatSubmission,
@@ -77,6 +77,13 @@ export async function approve(client: Client, workId: string, kind: ArtifactKind
     throw new CliError('Use approve-setting <workId> --file <request.json> to submit edited content and expectedHeadVersion', 'setting-approval-required')
   }
   return client.approve(workId, kind)
+}
+
+export async function approveOutline(client: Client, workId: string, input: unknown) {
+  const request = outlineApprovalRequestSchema.safeParse(input)
+  if (!request.success) throw new CliError('Invalid outline approval request; expectedArtifactId and expectedHeadVersion are required', 'invalid-input')
+  // The file owns the baseline. No GET/refill, automatic confirmation or duplicate POST.
+  return client.approveOutline(workId, request.data)
 }
 
 export async function approveSetting(client: Client, workId: string, input: unknown) {

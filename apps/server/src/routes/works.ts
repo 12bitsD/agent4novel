@@ -16,6 +16,7 @@ import {
   workViewSchema, startChapterRequestSchema,
   workCreateRequestSchema, workListResponseSchema, workSchema, artifactSchema,
   creativeDraftRequestSchema, selectCreativeRequestSchema, outlineDraftRequestSchema, approveRequestSchema,
+  outlineApprovalRequestSchema, outlineApprovalResponseSchema, outlineApprovalRequestBytes,
   advanceOutcomeDtoSchema, pipelineStateSchema, settingApproveResponseSchema, diagnosticResponseSchema, httpErrorSchema,
 } from '@agent4novel/contracts'
 import type { ApiError, Artifact, JsonValue, HumanStatus, ArtifactKind, OutlineContent, OutlineDraft, WorkflowState, WorkView, LlmTelemetry } from '@agent4novel/contracts'
@@ -79,6 +80,8 @@ function routeError(c: Context, err: unknown): Response {
   if (err instanceof KnownError) {
     const body = errorBody(err.code, msg, err.retryable, err.attemptId)
     switch (err.code) {
+      case 'invalid-input':
+        return c.json(body, 400)
       case 'work-not-found':
       case 'artifact-not-found':
         return c.json(body, 404)
@@ -300,6 +303,21 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
     }
   })
 
+  app.post('/api/works/:id/artifacts/outline/approve', bodyLimit({
+    maxSize: outlineApprovalRequestBytes,
+    onError: c => c.json(errorBody('payload-too-large', 'outline approval request exceeds body limit'), 413),
+  }), async c => {
+    const body = await readJsonBody(c)
+    if (!body.ok) return body.response
+    const parsed = outlineApprovalRequestSchema.safeParse(body.data)
+    if (!parsed.success) return c.json({ ...errorBody('invalid-input', 'invalid outline approval request'),
+      issues: parsed.error.issues.map(({ path, code }) => ({ path, code, message: 'invalid field' })),
+    }, 400)
+    try {
+      return contractJson(c, outlineApprovalResponseSchema, pipeline.approveOutline(c.req.param('id'), parsed.data))
+    } catch (error) { return routeError(c, error) }
+  })
+
   app.post('/api/works/:id/artifacts/setting/approve', bodyLimit({
     maxSize: settingLimits.bodyBytes,
     onError: (c) => c.json(errorBody('payload-too-large', 'setting request exceeds body limit'), 413),
@@ -408,7 +426,7 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
     return appendFromHead(c, store, current, { directions: [pack] }, 'approved')
   })
 
-  // saveOutlineDraft(#4):保存大纲草稿,永远 pending;「通过」走通用 /approve
+  // saveOutlineDraft(#4):保存大纲草稿,永远 pending;新版通过走专用可见版本条件命令。
   app.put('/api/works/:id/artifacts/outline', async (c) => {
     const workId = c.req.param('id')
     const work = store.getWork(workId)
