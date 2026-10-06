@@ -35,3 +35,23 @@ it.each(['creative', 'outline'] as const)('keeps an unknown %s save distinct fro
     expect(field.value).toBe('仍需保留的本页编辑')
   } finally { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals() }
 })
+
+it.each(['creative', 'outline'] as const)('preserves the unsaved %s draft when another client approves a new head', async kind => {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+  const host = document.createElement('div'); document.body.append(host); const renderer = createRoot(host); const guard = vi.fn()
+  const renderMaterial = (readonly: boolean) => kind === 'creative'
+    ? <CreativePoster workId="foreign-work" content={readonly ? { directions: [{ ...creative.directions[0], title: '外部选定方向' }] } : creative} headVersion={readonly ? 2 : 1} caption={null} readonly={readonly} onChanged={() => {}} onGuard={guard} />
+    : <OutlineReview workId="foreign-work" artifactId={readonly ? 'new-head' : 'old-head'} content={readonly ? { arcs: outline.arcs.map(item => ({ ...item, title: '外部大纲' })) } : outline} headVersion={readonly ? 2 : 1} pack={null} readonly={readonly} onChanged={() => {}} onGuard={guard} />
+  try {
+    await act(async () => renderer.render(renderMaterial(false)))
+    const field = host.querySelector<HTMLInputElement>(kind === 'creative' ? '[aria-label="方向标题"]' : 'input')!
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(field, '作者未保存的标题')
+    await act(async () => field.dispatchEvent(new Event('input', { bubbles: true })))
+    await act(async () => renderer.render(renderMaterial(true)))
+    expect(host.querySelector(kind === 'creative' ? '[aria-label="方向标题"]' : 'input')).toBe(field)
+    expect(field.value).toBe('作者未保存的标题')
+    expect(guard).toHaveBeenLastCalledWith({ dirty: true, locked: false })
+    expect(host.textContent).toContain('本页编辑已保留')
+    expect(button(host, '核对服务器内容')).toBeDefined()
+  } finally { await act(async () => renderer.unmount()); host.remove(); vi.unstubAllGlobals() }
+})

@@ -170,7 +170,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
   }, [dirty])
 
   const generate = useCallback(async (stepId = workRef.current?.nextStepId ?? null) => {
-    if (generationBusy.current || uncertainGeneration.current || !stepId) return
+    if (generationBusy.current || uncertainGeneration.current || !stepId || materialGuardRef.current.creative.dirty || materialGuardRef.current.creative.locked || materialGuardRef.current.outline.dirty || materialGuardRef.current.outline.locked) return
     const target = { kind: stepId, ...(stepId === 'beat' || stepId === 'prose' ? { chapter: workRef.current?.currentChapter } : {}) }
     const markUnknown = () => {
       uncertainGeneration.current = target
@@ -375,17 +375,20 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
   const actions = chapterActions(work, chapter)
   const isCurrentChapter = chapter === work?.currentChapter
   const state = generating ? 'generating' : (work?.workflowState ?? 'ready-to-generate')
-  const showOutline =
-    (work?.workflowState === 'awaiting-outline-review' || work?.workflowState === 'outline-approved') &&
+  const retainedCreative = creativeGuard.dirty || creativeGuard.locked
+  const retainedOutline = outlineGuard.dirty || outlineGuard.locked
+  const retainLegacy = retainedCreative || retainedOutline
+  const showOutline = !retainedCreative &&
+    (retainedOutline || work?.workflowState === 'awaiting-outline-review' || work?.workflowState === 'outline-approved') &&
     outline !== null &&
     outlineArtifact !== undefined
 
-  const showSetting = setting !== null && (work?.workflowState === 'awaiting-setting-review' || work?.workflowState === 'setting-approved')
-  const showProse = prose !== null && (!!chapterSummary || work?.workflowState === 'awaiting-prose-review' || work?.workflowState === 'prose-approved')
-  const showBeat = beat !== null && !showProse && (!!chapterSummary || work?.workflowState === 'awaiting-beat-review' || work?.workflowState === 'beat-approved')
+  const showSetting = !retainLegacy && setting !== null && (work?.workflowState === 'awaiting-setting-review' || work?.workflowState === 'setting-approved')
+  const showProse = !retainLegacy && prose !== null && (!!chapterSummary || work?.workflowState === 'awaiting-prose-review' || work?.workflowState === 'prose-approved')
+  const showBeat = !retainLegacy && beat !== null && !showProse && (!!chapterSummary || work?.workflowState === 'awaiting-beat-review' || work?.workflowState === 'beat-approved')
   // 生成间隙保留已选定的创意稿；动作权限仍由服务器读模型决定。
-  const showPoster = creative !== null && creativeArtifact !== undefined && (
-    work?.workflowState === 'awaiting-selection' || (
+  const showPoster = !retainedOutline && creative !== null && creativeArtifact !== undefined && (
+    retainedCreative || work?.workflowState === 'awaiting-selection' || (
       creativeArtifact.humanStatus === 'approved' && !showOutline && !showSetting && !showBeat && !showProse &&
       (work?.workflowState === 'ready-to-generate' || work?.workflowState === 'failed')
     )
@@ -434,7 +437,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
       )}
 
       {isCurrentChapter && (state === 'ready-to-generate' || state === 'failed') && work?.allowedActions.includes('generate') && (
-        <button onClick={() => void generate()} disabled={generating || generationUncertain} style={btnPrimary}>
+        <button onClick={() => void generate()} disabled={generating || generationUncertain || retainLegacy} style={btnPrimary}>
           {state === 'failed' ? `重试生成${stepLabel}` : `生成${stepLabel}`}
         </button>
       )}
@@ -463,7 +466,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
           content={outline as OutlineContent}
           headVersion={outlineArtifact.version}
           pack={creative?.directions[0] ?? null}
-          readonly={work!.workflowState === 'outline-approved'}
+          readonly={generating || outlineArtifact.humanStatus === 'approved'}
           onChanged={() => void refresh()}
           onGuard={updateOutlineGuard}
           onApproved={() => void continueAfterApproval()}

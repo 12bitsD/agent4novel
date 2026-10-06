@@ -53,11 +53,21 @@ export default function OutlineReview(props: {
   const [observedApproved, setObservedApproved] = useState(false)
   const active = useRef(false), operationSequence = useRef(0), commandBusy = useRef(false)
   const frozenOperation = useRef<unknown>(null)
-  const readonly = viewReadonly || observedApproved
+  const observedReadonlyContent = useRef<string | null>(null)
+  const externalReadonlyDraft = viewReadonly && !observedApproved && isDirty(s)
+  const readonly = observedApproved || (viewReadonly && !externalReadonlyDraft)
   const locked = s.saving || s.approving || unconfirmed || checking
   useEffect(() => { active.current = true; return () => { active.current = false; operationSequence.current++ } }, [workId])
-  useEffect(() => { onGuard?.({ dirty: !readonly && isDirty(s), locked }) }, [s, readonly, locked, onGuard])
+  useEffect(() => { onGuard?.({ dirty: !observedApproved && isDirty(s), locked }) }, [s, observedApproved, locked, onGuard])
   useEffect(() => () => onGuard?.({ dirty: false, locked: false }), [onGuard])
+
+  useEffect(() => {
+    if (!viewReadonly || externalReadonlyDraft || locked || props.headVersion < s.headVersion) return
+    const identity = JSON.stringify({ content: props.content, version: props.headVersion, id: props.artifactId })
+    if (observedReadonlyContent.current === identity) return
+    observedReadonlyContent.current = identity
+    setS(initReview(props.content, props.headVersion, props.artifactId))
+  }, [viewReadonly, externalReadonlyDraft, locked, props.content, props.headVersion, props.artifactId, s.headVersion])
 
   const failCommand = (error: unknown) => {
     const unknown = materialWriteUnconfirmed(error)
@@ -67,7 +77,7 @@ export default function OutlineReview(props: {
   }
 
   const doSave = async (state: ReviewState): Promise<ReviewState | null> => {
-    if (readonly || unconfirmed || checking || commandBusy.current) return null
+    if (readonly || externalReadonlyDraft || unconfirmed || checking || commandBusy.current) return null
     const next = beginSave(state)
     if (next === state) return state
     const sequence = ++operationSequence.current
@@ -87,7 +97,7 @@ export default function OutlineReview(props: {
   }
 
   const doApprove = async (candidate: ReviewState) => {
-    if (readonly || locked || commandBusy.current) return
+    if (readonly || externalReadonlyDraft || locked || commandBusy.current) return
     let current = candidate
     if (isDirty(current)) {
       const saved = await doSave(current)
@@ -106,6 +116,7 @@ export default function OutlineReview(props: {
       await approveOutline(workId, request)
       if (!active.current || sequence !== operationSequence.current) return
       frozenOperation.current = null; setS(state => approveSucceeded(state)); setObservedApproved(true)
+      onGuard?.({ dirty: false, locked: false })
       if (props.onApproved) props.onApproved(); else onChanged()
     } catch (error) { if (active.current && sequence === operationSequence.current) failCommand(error) }
     finally { if (active.current && sequence === operationSequence.current) commandBusy.current = false }
@@ -130,11 +141,11 @@ export default function OutlineReview(props: {
   return (
     <MaterialFrame className="outline-review" ariaLabel="大纲关卡" label="全书 · 大纲" title="梳理故事的走向"
       description={<p className="page-lede">以弧线组织冲突，以剧情点安排变化。通过后继续生成设定。</p>}
-      status={readonly ? <p className="setting-muted" role="status">这份大纲已通过，只读参阅。</p> : <>
+      status={externalReadonlyDraft ? <p role="status" className="setting-notice">服务器内容已变化，本页编辑已保留。请核对后决定是否载入。</p> : readonly ? <p className="setting-muted" role="status">这份大纲已通过，只读参阅。</p> : <>
           <span className="review-save-state" role="status">
             {s.saving ? '保存中……' : isDirty(s) ? '有未保存的修改' : s.notice === '已保存' ? '已保存' : '通过前可编辑大纲'}
           </span>
-      </>} actions={!readonly && !unconfirmed && <>
+      </>} actions={!readonly && !externalReadonlyDraft && !unconfirmed && <>
           {isDirty(s) && (
             <button
               onClick={() => void doSave(s)}
@@ -186,7 +197,7 @@ export default function OutlineReview(props: {
       {s.notice && s.notice !== '已保存' && <p className="status-message" role="status">{s.notice}</p>}
 
       {/* 弧线时间线 */}
-      <fieldset className="material-edit-fields" disabled={locked}>
+      <fieldset className="material-edit-fields" disabled={locked || externalReadonlyDraft}>
       {s.draft.arcs.map((arc, ai) => {
         return (
           <section
@@ -313,7 +324,7 @@ export default function OutlineReview(props: {
       )}
 
       </fieldset>
-      {(unconfirmed || s.conflict) && <section className="setting-recovery" aria-label="操作结果核对">
+      {(unconfirmed || s.conflict || externalReadonlyDraft) && <section className="setting-recovery" aria-label="操作结果核对">
         <button type="button" style={btnSecondary} disabled={checking} onClick={() => void readCurrent()}>核对服务器内容</button>
         {remote && <><p role="status">服务器当前版本 v{remote.version}，这是当前状态观察，不是原操作回执。</p>
           <details><summary>查看服务器材料</summary>{outlineContentSchema.parse(remote.content).arcs.map((item, index) => <div key={index}><h3>{item.title}</h3><p>{item.conflict}</p></div>)}</details>

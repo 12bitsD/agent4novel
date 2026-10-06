@@ -160,25 +160,26 @@ export default function CreativePoster({
   const active = useRef(false), operationSequence = useRef(0), commandBusy = useRef(false)
   const frozenOperation = useRef<unknown>(null)
   const observedReadonlyContent = useRef<string | null>(null)
-  const readonly = viewReadonly || observedApproved
+  const externalReadonlyDraft = viewReadonly && !observedApproved && isDirty(s)
+  const readonly = observedApproved || (viewReadonly && !externalReadonlyDraft)
   const locked = s.saving || s.selecting || unconfirmed || checking
   useEffect(() => { active.current = true; return () => { active.current = false; operationSequence.current++ } }, [workId])
 
   // Approved head changes are read-only observations; saved editable drafts keep their mounted controls.
   useEffect(() => {
-    if (!viewReadonly || unconfirmed || s.saving || s.selecting) return
+    if (!viewReadonly || externalReadonlyDraft || unconfirmed || s.saving || s.selecting) return
     const identity = JSON.stringify({ content, headVersion })
     if (observedReadonlyContent.current === identity) return
     observedReadonlyContent.current = identity
     setS(initCompare(content, headVersion))
-  }, [viewReadonly, unconfirmed, s.saving, s.selecting, content, headVersion])
+  }, [viewReadonly, externalReadonlyDraft, unconfirmed, s.saving, s.selecting, content, headVersion])
 
   const pack = activePack(s)
-  useEffect(() => { onGuard?.({ dirty: !viewReadonly && !observedApproved && isDirty(s), locked: s.saving || s.selecting || unconfirmed || checking }) }, [s, viewReadonly, observedApproved, unconfirmed, checking, onGuard])
+  useEffect(() => { onGuard?.({ dirty: !observedApproved && isDirty(s), locked: s.saving || s.selecting || unconfirmed || checking }) }, [s, viewReadonly, observedApproved, unconfirmed, checking, onGuard])
   useEffect(() => () => onGuard?.({ dirty: false, locked: false }), [onGuard])
 
   const doSave = async () => {
-    if (readonly || unconfirmed || checking || commandBusy.current) return
+    if (readonly || externalReadonlyDraft || unconfirmed || checking || commandBusy.current) return
     const next = beginSave(s); if (next === s) return
     const sequence = ++operationSequence.current
     commandBusy.current = true; frozenOperation.current = { operation: 'save-creative', expectedHeadVersion: next.headVersion, content: savePayload(next) }
@@ -196,7 +197,7 @@ export default function CreativePoster({
   }
 
   const doSelect = async (candidate: CompareState) => {
-    if (readonly || unconfirmed || checking || commandBusy.current || s.saving || s.selecting) return
+    if (readonly || externalReadonlyDraft || unconfirmed || checking || commandBusy.current || s.saving || s.selecting) return
     const next = beginSelect(candidate); if (next === candidate) return
     const sequence = ++operationSequence.current
     commandBusy.current = true; frozenOperation.current = { operation: 'select-creative', directionId: next.activeId, expectedHeadVersion: next.headVersion, content: savePayload(next) }
@@ -212,6 +213,7 @@ export default function CreativePoster({
       await selectCreativeDirection(workId, next.activeId, head)
       if (!active.current || sequence !== operationSequence.current) return
       frozenOperation.current = null; setS(current => selectSucceeded(current)); setObservedApproved(true)
+      onGuard?.({ dirty: false, locked: false })
       if (onSelected) onSelected(); else onChanged()
     } catch (error) {
       if (!active.current || sequence !== operationSequence.current) return
@@ -236,12 +238,12 @@ export default function CreativePoster({
   return (
     <MaterialFrame className="creative-review" ariaLabel="创意稿关卡" label="全书 · 创意稿" title="找到故事的起点"
       description={<p className="page-lede">比较方向、修改内容并选定。选定后继续生成大纲。</p>}
-      status={viewReadonly || observedApproved ? <p className="setting-muted" role="status">当前方向已选定，只读参阅。</p> : <>
+      status={externalReadonlyDraft ? <p role="status" className="setting-notice">服务器内容已变化，本页编辑已保留。请核对后决定是否载入。</p> : viewReadonly || observedApproved ? <p className="setting-muted" role="status">当前方向已选定，只读参阅。</p> : <>
           <span className="review-save-state" role="status">
             {s.saving ? '保存中……' : isDirty(s) ? '有未保存的修改' : s.notice === '已保存' ? '已保存' : '编辑当前方向后可保存'}
           </span>
       </>}
-      actions={!readonly && !unconfirmed && <>
+      actions={!readonly && !externalReadonlyDraft && !unconfirmed && <>
           {isDirty(s) && (
             <button
               onClick={doSave}
@@ -267,7 +269,7 @@ export default function CreativePoster({
             <button
               key={p.directionId}
               aria-pressed={active}
-              disabled={locked}
+              disabled={locked || externalReadonlyDraft}
               onClick={() => setS((cur) => switchTab(cur, p.directionId))}
               style={tabStyle(active)}
             >
@@ -286,7 +288,7 @@ export default function CreativePoster({
       {s.notice && s.notice !== '已保存' && <p role="status" className="status-message">{s.notice}</p>}
 
       {/* 海报主体 */}
-      <fieldset className="material-edit-fields" disabled={locked}>
+      <fieldset className="material-edit-fields" disabled={locked || externalReadonlyDraft}>
       <section className="flow-section surface">
         <p className="field-label">方向标题</p>
         {readonly ? (
@@ -399,7 +401,7 @@ export default function CreativePoster({
         </section>
       )}
 
-      {(unconfirmed || s.conflict) && <section className="setting-recovery" aria-label="操作结果核对">
+      {(unconfirmed || s.conflict || externalReadonlyDraft) && <section className="setting-recovery" aria-label="操作结果核对">
         <button type="button" style={btnSecondary} disabled={checking} onClick={() => void readCurrent()}>核对服务器内容</button>
         {remote && <><p role="status">服务器当前版本 v{remote.version}，这是当前状态观察，不是原操作回执。</p>
           <details><summary>查看服务器材料</summary>{creativeContentSchema.parse(remote.content).directions.map(item => <div key={item.directionId}><h3>{item.title}</h3><p>{item.synopsis}</p></div>)}</details>
