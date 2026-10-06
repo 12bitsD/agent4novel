@@ -33,6 +33,33 @@ async function edit(host: HTMLElement, value: string) {
 }
 
 describe('reading flow in the chapter workspace', () => {
+  it('keeps the same book workspace and identity while another chapter is being read', async () => {
+    let reads = 0
+    let resolveRead!: (response: Response) => void
+    const delayed = new Promise<Response>(resolve => { resolveRead = resolve })
+    const ui = await mount(async url => url === '/api/works/reading-work' && ++reads > 1 ? delayed : json(work()), { chapter: 1, wide: true })
+    try {
+      const shell = ui.host.querySelector('main')!
+      await act(async () => ui.host.querySelector<HTMLButtonElement>('[data-chapter="2"]')!.click())
+      expect(ui.host.querySelector('main')).toBe(shell)
+      expect(ui.host.textContent).toContain('阅读作品')
+      await act(async () => resolveRead(json(work())))
+      expect(ui.host.querySelector('.prose-preview')!.textContent).toBe('阅读正文 2。')
+    } finally { await ui.dispose() }
+  })
+
+  it('preserves the author opened directory when moving between chapters on a compact screen', async () => {
+    const ui = await mount(async () => json(work()), { chapter: 1, width: 375 })
+    try {
+      const directory = ui.host.querySelector<HTMLDetailsElement>('details')!
+      await act(async () => directory.querySelector('summary')!.click())
+      expect(directory.open).toBe(true)
+      await act(async () => ui.host.querySelector<HTMLButtonElement>('[data-chapter="2"]')!.click())
+      expect(ui.host.querySelector<HTMLDetailsElement>('details')!.open).toBe(true)
+      expect(ui.host.querySelector('.prose-preview')!.textContent).toBe('阅读正文 2。')
+    } finally { await ui.dispose() }
+  })
+
   it.each([768, 890, 900])('keeps the %ipx reading column available with a collapsed directory and preserves the author toggle on resize', async width => {
     const options = { width }
     const calls = vi.fn(async (_url: string, _init?: RequestInit) => json(work()))
