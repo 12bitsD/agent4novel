@@ -1,16 +1,16 @@
 ---
 wiki_id: "047"
 ticket: 47
-ticket_state: active
-context_state: current
+ticket_state: done
+context_state: mixed
 summary: "收敛正文阅读列、组件比例、短章自然高度与中屏布局"
 topics: ["frontend-design", "typography", "responsive-layout", "reading-flow"]
 code_paths: ["apps/web/src/styles.css", "apps/web/src/ui.ts", "apps/web/src/pages/Workspace.tsx", "apps/web/src/pages/Workspace.reading-flow.test.tsx"]
 symbols: ["WorkSession", "directoryExpanded", "prose-reading", "prose-page", "btnPrimary", "btnSecondary"]
 inherits: ["035"]
-changed_by: []
+changed_by: ["049"]
 read_when: ["refine-reading-layout", "review-medium-width", "review-component-density"]
-last_context_reviewed: "2026-10-03"
+last_context_reviewed: "2026-10-06"
 ---
 
 # 047 — 阅读排版与组件比例
@@ -24,6 +24,7 @@ last_context_reviewed: "2026-10-03"
 - **后续变化**：系统字体跨设备、200%缩放与用户间距覆写仍需单独验证；终止发布状态以GitHub回读为准。
 - **代码入口**：styles.css/ui.ts管理视觉，WorkSession只调整挂载时的目录断点；正文纯文本和状态机沿用原实现。
 
+- **当前后继入口**：[Wiki049](./049-author-workbench.md) 接入稳定作品壳、材料页头与恢复保护；本页原始意图、参数依据和冻结审核证据保留。
 ## 设计目的
 
 让长文保持连贯阅读，短文按实际内容占用空间；正文、标题与状态共用阅读轴，辅助信息和控件形成一致层级。
@@ -89,6 +90,14 @@ last_context_reviewed: "2026-10-03"
 不引入新阅读模式、字号持久化、字体下载/CDN、正文清洗、生成职责变化、后端协议或#46存储修复。状态表达仍使用文字与边框，不靠淡化隐藏异常。遵循用户明确黑白灰要求，保留对暖色建议的既有豁免。
 
 ## 上下文演进
+
+### 2026-10-06 — 作者编稿台接续
+
+- **触发证据**：用户认可交互方案并授权核查后直接开发，实施票 [#49](https://github.com/12bitsD/agent4novel/issues/49)。
+- **原假设**：现有视觉、阅读参数和关卡承担各自页面，跨材料体验尚未统一。
+- **决定**：显示层由稳定作品壳和材料框架组织；原业务控制器仍拥有命令和权限。大纲新增作者可见版本的条件通过，旧接口兼容。
+- **影响**：当前框架与 K01 入口转向 Wiki049，字体、阅读参数和既有关卡保留。
+- **上下文处理**：preserve 本页原目的、Human 决定、rationale 与冻结审核正文；replace 当前后继路由，后续工程从049读取。
 
 ### 2026-10-03 — 从独立参数转为一致的阅读比例
 

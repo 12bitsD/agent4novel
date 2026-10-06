@@ -2,6 +2,8 @@
 
 核查日期：2026-10-06（Asia/Shanghai）。代码基线：main `5ba9fe38062120231d42b8b64a8fc4b5e3cd1e23`；方案分支：`codex/author-workbench-design`。
 
+本文记录立项前核查；以下“本轮”指当时的方案交付。后续首期实施与验证由 [Wiki049](../wiki/049-author-workbench.md) 持有，原计划和未验证增强保留。
+
 本文承接[交互研究与路线比较](../research/author-workbench-interaction-plan.md)，是本轮详细改造清单的入口。用户认可方案方向并要求防遗漏核查；本轮交付方案，没有修改产品代码、开实施票、提交或发布。代码、测试定义、共享契约和公开路由已核查；未来验收场景没有写成已通过。
 
 ## 1. 目标、范围与读取方式

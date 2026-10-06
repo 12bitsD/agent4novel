@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。最后更新：2026-10-03。#1 及必需子票均已合并关闭，本机 MVP 已发布；整体验证见 [Wiki001](./wiki/001-mvp-acceptance.md)。复审修复 #43/PR44 与黑白灰界面 #35/PR45 已交付。当前推进 [Wiki047](./wiki/047-reading-layout-refinement.md) 的阅读排版与组件比例，候选已落地，实际界面与最终审核证据从本票继续；发布终态以 GitHub 回读为准。#46 存储初始化竞争独立跟踪，#28/#29 及长篇质量评估保持后置。
+> 用途：context compaction / 新会话接力。最后更新：2026-10-06。本机 MVP 已发布；#35/PR45 与 #47/PR48 已关闭/合并（本轮 GitHub 回读）。当前实施 [Wiki049](./wiki/049-author-workbench.md)：稳定作品框架、共用材料呈现、入口与编辑保护、K01 大纲可见版本。完整候选的发布/CI/合并/关闭以 #49 完成评论和 live GitHub 为准。#46 初始化竞争、#28/#29 与长篇质量评估保持后置。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -15,6 +15,8 @@
 2026-10-03 用户要求对外输出遵循其个人 Work Wiki 的中性精确风：事实直陈，一句表达一件事，首次解释必要术语，明确已验证与未验证范围；删除情绪、修辞和没有具体信息的过渡语。个人 Work Wiki 的输出要求与 #29 的书级设定库属于不同用途。本次应用和清点结果见 [复审记录](./wiki/001-mvp-acceptance.md#2026-10-03-清点与复审)。
 
 ## 当前里程碑与验证边界
+
+本轮 #49 的范围与工程证据从 [Wiki049](./wiki/049-author-workbench.md) 进入。计划 review 双轴 PASS 后用户授权开发；W0–W4 加 K01 按公开 UI/HTTP/Store/CLI 接缝实施。六种材料的保存差异、显式续章、原文/UTF-16、配置和坏例保护继续有效。新大纲通过绑定作者所见 ID/版本；旧通用通过命令仍读取服务端当前 head。创建幂等、详细书架摘要、日期、任意历史全文和浏览器历史协议未新增。
 
 **本机 MVP 已发布，整体验证与边界从 [Wiki001](./wiki/001-mvp-acceptance.md) 进入。** 2026-10-03 回读 #1 及 #6/#19/#9/#33/#7/#8 均已关闭，对应 PR 均已合并；[PR40](https://github.com/12bitsD/agent4novel/pull/40) 对应源提交的 CI 与 [main CI](https://github.com/12bitsD/agent4novel/actions/runs/36727036119) 均成功。文档 #41/PR42、修复 #43/PR44 与视觉 #35/PR45 也已关闭/合并；#47 从 main `e04b2be8f8d54a6c0b68a6f96395b9010185246f` 开始。#35 的 [main CI](https://github.com/12bitsD/agent4novel/actions/runs/37100590655/attempts/2) 最终成功；其首轮 SQLite 并发初始化失败由 #46 独立跟踪，重试通过不表示该竞争已修复。关闭记录证明交付状态，不能消除未来新发现。
 

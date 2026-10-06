@@ -155,7 +155,7 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [001 MVP 工程验收](./001-mvp-acceptance.md) | [#1](https://github.com/12bitsD/agent4novel/issues/1) | current | 本机单用户闭环、各验证面与后续拓展入口 |
 | [002 脚手架、存储、workflow 与书架](./002-scaffold-storage-runner-bookcase.md) | [#2](https://github.com/12bitsD/agent4novel/issues/2) | mixed | monorepo、store、基础 pipeline、书架 |
 | [003 统一入口与 idea 工作区](./003-unified-entry-idea-workspace.md) | [#3](https://github.com/12bitsD/agent4novel/issues/3) | mixed | 创建作品、文件导入、早期编辑链路 |
-| [004 大纲弧线与剧情点](./004-outline-arcs-segments.md) | [#4](https://github.com/12bitsD/agent4novel/issues/4) | current | outline 契约、关卡、编辑界面 |
+| [004 大纲弧线与剧情点](./004-outline-arcs-segments.md) | [#4](https://github.com/12bitsD/agent4novel/issues/4) | mixed | outline 契约、关卡、编辑界面 |
 | [005 第一章章纲生成与通过](./005-beat-generation-review.md) | [#5](https://github.com/12bitsD/agent4novel/issues/5) | mixed | 章纲编辑／再生／通过已接线；Agent 可观测协议、验证与交付证据 |
 | [006 后续章续写与跨章创作](./006-chapter-continuation.md) | [#6](https://github.com/12bitsD/agent4novel/issues/6) | mixed | 显式下一章、上一章承接、章节目录与历史编辑隔离 |
 | [007 作者 Agent 配置](./007-author-agent-config.md) | [#7](https://github.com/12bitsD/agent4novel/issues/7) | mixed | 三维偏好、默认与节点覆盖、版本文件及生成快照 |
@@ -173,4 +173,5 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [035 黑白灰写作工作台](./035-frontend-design.md) | [#35](https://github.com/12bitsD/agent4novel/issues/35) | mixed | 已交付的 B/C 视觉、主题选择与像素品牌；阅读比例与目录断点后续由 047 细化 |
 | [041 README 与 MVP 清点交接](./041-readme-mvp-handoff.md) | [#41](https://github.com/12bitsD/agent4novel/issues/41) | current | 用户入口、清点文档及三项待修复边界的发布 |
 | [043 MVP 复审边界修复](./043-mvp-review-boundary-fixes.md) | [#43](https://github.com/12bitsD/agent4novel/issues/43) | current | 配置导航、原起章基线和静态文件规范路径 |
-| [047 阅读排版与组件比例](./047-reading-layout-refinement.md) | [#47](https://github.com/12bitsD/agent4novel/issues/47) | current | 阅读列对齐、短章自然高度、控件密度及中屏单列；发布终态以 GitHub 为准 |
+| [047 阅读排版与组件比例](./047-reading-layout-refinement.md) | [#47](https://github.com/12bitsD/agent4novel/issues/47) | mixed | 阅读列对齐、短章自然高度、控件密度及中屏单列；发布终态以 GitHub 为准 |
+| [049 作者编稿台](./049-author-workbench.md) | [#49](https://github.com/12bitsD/agent4novel/issues/49) | current | 稳定作品壳、材料交接、导航恢复与大纲可见版本 |

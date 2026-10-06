@@ -5,7 +5,7 @@ description: 用命令行驱动 agent4novel 创作链路、独立运行节点和
 
 # 驱动 agent4novel
 
-本项目的创作链路用 CLI(`./apps/cli/bin/a4n`)驱动,**不要手搓 curl**。只有 `select`／`save-outline` 自动回填 `expectedHeadVersion`；Setting、Beat、Prose和start-chapter的专用写命令使用请求文件中的显式基线，不替换成最新head。正常结果的stdout是纯JSON，进度与错误走stderr。HTTP/传输错误会exit≠0，但`advance`/`start-chapter`即使HTTP200也可能返回`kind: "failed"`，必须同时检查JSON outcome。
+本项目的创作链路用 CLI(`./apps/cli/bin/a4n`)驱动,**不要手搓 curl**。只有 `select`／`save-outline` 自动回填 `expectedHeadVersion`；`approve-outline`、Setting、Beat、Prose和start-chapter的专用写命令使用请求文件中的显式基线，不替换成最新head。正常结果的stdout是纯JSON，进度与错误走stderr。HTTP/传输错误会exit≠0，但`advance`/`start-chapter`即使HTTP200也可能返回`kind: "failed"`，必须同时检查JSON outcome。
 
 模型与 provider 配置的唯一 HOW 是 [`docs/wiki/016-model-runtime-provider-config.md`](../../../docs/wiki/016-model-runtime-provider-config.md)；源码持久化与恢复见 [Wiki 009](../../../docs/wiki/009-sqlite-persistence.md)，本机容器、卷恢复与CI见 [Wiki 033](../../../docs/wiki/033-local-docker-ci.md)。本 skill 只保留运行时操作,不要在其他入口复制配置规则。
 
@@ -76,7 +76,8 @@ Beat和Prose都要求正安全整数chapter。Beat的upstream为`{outline, setti
 ./apps/cli/bin/a4n start-chapter <workId> --file chapter-request.json # 显式开始指定下一章
 ./apps/cli/bin/a4n select <workId> [directionId] # 选定创意方向(缺省取第一个)
 ./apps/cli/bin/a4n save-outline <workId> --file draft.json
-./apps/cli/bin/a4n approve <workId> outline      # 通过产物
+./apps/cli/bin/a4n approve-outline <workId> --file outline-approval.json # 原始可见 ID／版本
+./apps/cli/bin/a4n approve <workId> outline      # 旧兼容：通过服务器当前 head
 ./apps/cli/bin/a4n get <workId> --kind setting   # 读取 pending 基线及版本
 ./apps/cli/bin/a4n approve-setting <workId> --file request.json
 ./apps/cli/bin/a4n get <workId> --kind beat --chapter <chapter>
@@ -92,6 +93,8 @@ Beat和Prose都要求正安全整数chapter。Beat的upstream为`{outline, setti
 ```
 
 `pnpm -s cli ...` 等价(必须带`-s`，否则pnpm横幅污染stdout)。server地址用`--url`或`A4N_BASE_URL`覆盖；`--timeout-ms`或CLI进程环境变量`A4N_CLI_TIMEOUT_MS`覆盖全部请求等待上限。未覆盖时普通请求300s、advance1820s、start-chapter920s、Beat/Prose通过及Prose保存30s、Beat/Prose重写920s、恢复GET10s；期限包含响应body读取。
+
+通过大纲优先使用 `approve-outline`：从作者实际确认的大纲，或成功保存回执取得 `id/version`，写入 `{"expectedArtifactId":"<大纲ID>","expectedHeadVersion":1}` 后显式提交文件。命令只 POST 一次，不自动 GET、回填新基线或重发；失败／未知时保留文件，先手动 `get <workId> --kind outline` 核对原目标，再决定后续动作。匹配已通过目标只说明其状态，不追认原请求。旧 `approve <workId> outline` 保持服务器当前 head 语义，不提供作者可见版本保证。完整边界见[大纲可见版本通过](../../../docs/schema.md#大纲可见版本通过)，输入与副作用用 `approve-outline --help` 核对。
 
 `approve-setting` 的文件必须是完整 `{ "content": <整份设定>, "expectedHeadVersion": <读取时版本> }`。已有项保留 ID，新增项省略 ID；通过后同 id/version 只读，没有独立保存草稿命令。命令最多自动回读一次、不自动重写；失败保留输入文件，新进程见到 approved 只报告现状，不追认旧请求。恢复规则统一见 [Wiki 013](../../../docs/wiki/013-setting-generation-review.md#提交结果确认)。
 
@@ -121,6 +124,8 @@ Prose文件沿用章号/id/version基线，content为`{text}`；save额外必须
 - 日志响应包含 `telemetry`、`commands`、`window`；LLM 与命令各保留全局最近 1000 条，过滤不会扩大窗口。`processInstanceId` 随进程重启变化；截断和空结果都不是未执行证明。
 
 ## 前端页面
+
+创意保存/选定、大纲保存及可见版本通过的Web写等待30秒，核对作品读取10秒。超时只终止本页等待，不证明服务端未落库；保留原提交和本页内容，显式核对后再决定载入。外部版本变化或迟到读回不丢本页脏稿，载入服务器材料需确认放弃。
 
 web 是 React SPA:`curl http://localhost:5173/` 只能拿到 HTML 壳 + 脚本标签,**看不到渲染后内容**。要内容一律走 API(CLI 就是封装);只有需要确认页面结构/样式资源时才读 HTML。`/api/*` 由 vite 代理到 8787。
 
