@@ -8,9 +8,9 @@ topics: ["frontend-design", "monochrome", "typography", "accessibility"]
 code_paths: ["apps/web/src/styles.css", "apps/web/src/ui.ts", "apps/web/src/ThemeControl.tsx", "apps/web/src/App.tsx", "apps/web/src/pages/**"]
 symbols: ["App", "ThemeControl", "Bookcase", "Entry", "WorkSession", "AuthorConfigPanel", "ConfirmDialog"]
 inherits: ["006", "007", "043"]
-changed_by: ["047"]
+changed_by: ["047","049"]
 read_when: ["redesign-frontend", "review-typography", "test-theme", "review-mobile-layout"]
-last_context_reviewed: "2026-10-03"
+last_context_reviewed: "2026-10-06"
 ---
 
 # 035 — 黑白灰写作工作台
@@ -24,6 +24,7 @@ last_context_reviewed: "2026-10-03"
 - **后续变化**：[Wiki047](./047-reading-layout-refinement.md) 细化阅读列、字号比例、短章高度和中屏布局；本页 20px／1.85／36em 与 700px 目录初始断点属于 #35 交付历史。BC 方向、主题机制、字体家族及业务保护继续适用。
 - **代码入口**：styles.css 与 ui.ts 管视觉；App 管页面入口，WorkSession 管按章隔离与配置保护。
 
+- **当前后继入口**：[Wiki049](./049-author-workbench.md) 接入稳定作品壳、材料页头与恢复保护；本页原始意图、参数依据和冻结审核证据保留。
 ## 设计目的
 
 把现有彩色点缀与分散样式统一为黑白灰写作界面。短标签可以承担像素风格，中文长篇正文以阅读体验为先。不得靠颜色或动画单独表达保存、错误、禁用或未知状态。
@@ -117,6 +118,14 @@ last_context_reviewed: "2026-10-03"
 不改变后端协议、作品数据、模型/Prompt、关卡规则、正文自动保存、配置显式保存、原请求恢复、通过后编辑和章节隔离。不给未实现的检索/Wiki/统计编造入口，不自动生成或重写作品，不操作用户原服务、密钥或数据。新增导航不能绕过脏编辑/未知请求保护。
 
 ## 上下文演进
+
+### 2026-10-06 — 作者编稿台接续
+
+- **触发证据**：用户认可交互方案并授权核查后直接开发，实施票 [#49](https://github.com/12bitsD/agent4novel/issues/49)。
+- **原假设**：现有视觉、阅读参数和关卡承担各自页面，跨材料体验尚未统一。
+- **决定**：显示层由稳定作品壳和材料框架组织；原业务控制器仍拥有命令和权限。大纲新增作者可见版本的条件通过，旧接口兼容。
+- **影响**：当前框架与 K01 入口转向 Wiki049，字体、阅读参数和既有关卡保留。
+- **上下文处理**：preserve 本页原目的、Human 决定、rationale 与冻结审核正文；replace 当前后继路由，后续工程从049读取。
 
 ### 2026-10-03 — #47 细化阅读比例与中屏布局
 

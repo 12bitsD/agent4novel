@@ -10,6 +10,8 @@ export type ReviewState = {
   baseline: OutlineContent
   /** outline 产物最新版本号(save 的 expectedHeadVersion) */
   headVersion: number
+  /** Identity of the same author-visible baseline, supplied by its read or save receipt. */
+  headArtifactId?: string
   /** 本地编辑中的大纲树(新项无 id,见 OutlineDraft) */
   draft: OutlineDraft
   dirty: boolean
@@ -21,10 +23,11 @@ export type ReviewState = {
   notice: string | null
 }
 
-export function initReview(content: OutlineContent, headVersion: number): ReviewState {
+export function initReview(content: OutlineContent, headVersion: number, headArtifactId?: string): ReviewState {
   return {
     baseline: content,
     headVersion,
+    ...(headArtifactId !== undefined ? { headArtifactId } : {}),
     draft: content,
     dirty: false,
     saving: false,
@@ -178,12 +181,14 @@ export function saveSucceeded(
   s: ReviewState,
   content: OutlineContent,
   newHeadVersion: number,
+  headArtifactId?: string,
 ): ReviewState {
   return {
     ...s,
     baseline: content,
     draft: content,
     headVersion: newHeadVersion,
+    ...(headArtifactId !== undefined ? { headArtifactId } : {}),
     dirty: false,
     saving: false,
     notice: '已保存',

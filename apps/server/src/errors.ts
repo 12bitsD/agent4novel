@@ -2,6 +2,7 @@
 // retryable 供 web 决定要不要给「重试」;attemptId 串联日志(同一次步骤尝试)。
 import type { BeatInputBudget, ProseInputBudget } from '@agent4novel/contracts'
 export type KnownErrorCode =
+  | 'invalid-input'
   | 'bad-example-invalid'
   | 'bad-example-not-found'
   | 'config-invalid'

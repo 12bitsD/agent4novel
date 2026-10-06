@@ -5,6 +5,7 @@ import { proseLimits } from '@agent4novel/contracts'
 import type { ProseReviewState, ProseReviewAction } from '../prose-review.js'
 import { canLoadServerProse } from '../prose-review.js'
 import { ConfirmDialog } from '../ConfirmDialog.js'
+import MaterialFrame from '../MaterialFrame.js'
 import { btnPrimary, btnSecondary, cardStyle, fieldStyle } from '../ui.js'
 
 export default function ProseReview({ title, state, onAction, allowCommands, onApprove, onRegenerate, onConfirm, onRetry, onBadExampleGuard, primaryAction, contextLabel }: {
@@ -39,19 +40,17 @@ export default function ProseReview({ title, state, onAction, allowCommands, onA
     const before = range.cloneRange(); before.selectNodeContents(root); before.setEnd(range.startContainer, range.startOffset)
     const start = before.toString().length, text = range.toString(); select(start, start + text.length, text)
   }
-  return <section className="setting-review review-page prose-page" aria-label="正文关卡">
-    <header className="setting-review-header prose-header">
-      <div className="review-copy"><p className="setting-eyebrow eyebrow">{chapterLabel(state.baseline.chapter)}{approved ? '已完成' : ''} · 正文</p><h2 className="page-heading">{title}</h2>
-        <p className={`prose-meta save-status${unsettled ? ' setting-notice' : ''}`} role="status">{contextLabel && <>{contextLabel} · </>}{saveStatus}</p></div>
-      <div className="prose-header-actions">
+  return <MaterialFrame className="setting-review review-page prose-page" headerClassName="prose-header" actionsClassName="prose-header-actions" ariaLabel="正文关卡"
+    label={`${chapterLabel(state.baseline.chapter)}${approved ? '已完成' : ''} · 正文`} title={title}
+    status={<p className={`prose-meta save-status${unsettled ? ' setting-notice' : ''}`} role="status">{contextLabel && <>{contextLabel} · </>}{saveStatus}</p>}
+    actions={<>
         {primaryAction}
         {!approved && <button type="button" style={btnPrimary} disabled={locked || busy} onClick={() => {
           if (state.instructions.trim()) setConfirmation({ title: '通过当前可见正文？', description: '修改意见只用于整章重写。本次只通过当前文字，不会应用修改意见。', label: '仍然通过当前正文', run: onApprove })
           else onApprove()
         }}>通过正文</button>}
         <button type="button" style={btnSecondary} onClick={() => onAction({ type: 'mode', mode: editing ? 'preview' : 'edit' })}>{editing ? '预览正文' : '编辑正文'}</button>
-      </div>
-    </header>
+    </>}>
     {state.notice && !routineNotice && <p className={unsettled ? 'setting-notice' : 'setting-muted'} role="status">{state.notice}</p>}
     {busy && state.phase !== 'saving' && <p role="status">{state.phase === 'regenerating' ? '正在整章重写…' : '正在核对结果…'} 当前文字已保留。</p>}
     {!!state.issues.length && <p role="alert" className="setting-field-error">请填写非空正文并检查长度限制。</p>}
@@ -79,5 +78,5 @@ export default function ProseReview({ title, state, onAction, allowCommands, onA
     <BadExamplesPanel key={state.baseline.chapter} workId={state.baseline.workId} chapter={state.baseline.chapter} selection={selection} onClear={() => setSelection(null)} canMark={canMark} onGuard={onBadExampleGuard} />
     {confirmation && <ConfirmDialog title={confirmation.title} description={confirmation.description} cancelLabel="继续编辑" confirmLabel={confirmation.label}
       onCancel={() => setConfirmation(null)} onConfirm={() => { setConfirmation(null); confirmation.run() }} />}
-  </section>
+  </MaterialFrame>
 }

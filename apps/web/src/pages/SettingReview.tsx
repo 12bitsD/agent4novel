@@ -4,7 +4,8 @@ import { settingCardSections } from '@agent4novel/contracts'
 import { settingIssueTarget } from '../setting-review.js'
 import { SettingMarkdown } from '../setting-markdown.js'
 import { ConfirmDialog } from '../ConfirmDialog.js'
-import { btnPrimary, btnSecondary, cardStyle, fieldStyle, smallBtnStyle } from '../ui.js'
+import MaterialFrame from '../MaterialFrame.js'
+import { btnPrimary, btnSecondary, cardStyle, fieldStyle, smallBtnStyle, focusMaterialField } from '../ui.js'
 
 export type SettingReviewProps = {
   state: SettingReviewState; onAction: (action: SettingReviewAction) => void
@@ -22,8 +23,7 @@ export default function SettingReview({ state, onAction, onApprove, onConfirm, o
     if (!state.focusTarget || state.mode !== 'edit') return
     const target = Array.from(root.current?.querySelectorAll<HTMLElement>('[data-setting-field]') ?? [])
       .find((element) => element.dataset.settingField === state.focusTarget)
-    target?.focus()
-    target?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    focusMaterialField(target)
   }, [state.focusTarget, state.issues, state.mode])
   const errors = (target: string) => state.issues.filter((issue) => settingIssueTarget(state.draft, issue.path) === target)
   const errorNote = (target: string) => errors(target).length > 0
@@ -59,15 +59,15 @@ export default function SettingReview({ state, onAction, onApprove, onConfirm, o
     {editing && <><button type="button" style={smallBtnStyle} disabled={locked} data-setting-field={`${container.key}:add`} aria-describedby={errors(`${container.key}:add`).length ? `setting-error-${container.key}:add` : undefined}
       onClick={() => onAction({ type: 'add-item', target: container.key })}>＋ 新增卡片</button>{errorNote(`${container.key}:add`)}</>}
   </>
-  return <section ref={root} className="setting-review review-page" aria-label="设定关卡">
-    <header className="setting-review-header">
-      <div className="review-copy"><p className="setting-eyebrow eyebrow">作品基准 · 设定</p><h2 className="page-heading">让故事有据可循</h2>
-        <p className="setting-muted page-lede">{approved ? '这份设定已通过，后续创作将使用此版本。' : '读一遍，补充你的想法，然后通过。修改仅保留在当前页面。'}</p></div>
+  return <MaterialFrame rootRef={root} className="setting-review review-page" ariaLabel="设定关卡" label="全书 · 设定" title="让故事有据可循"
+    description={<p className="setting-muted page-lede">{approved ? '这份设定已通过，后续创作将使用此版本。' : '修改仅保留在本页。通过时提交全文，随后继续生成章纲。'}</p>}
+    status={<p className="setting-muted" role="status">{approved ? '已通过 · 只读参阅' : busy ? '正在处理提交结果。' : '本页修改尚未单独保存。'}</p>}
+    actions={<>
       <div className="setting-actions">
         {!approved && <button type="button" style={btnSecondary} onClick={() => onAction({ type: 'mode', mode: editing ? 'preview' : 'edit' })}>{editing ? '预览设定' : '编辑设定'}</button>}
         <button type="button" style={btnPrimary} disabled={approved || locked} onClick={onApprove}>{approved ? '已通过' : busy ? '正在确认…' : '通过设定'}</button>
       </div>
-    </header>
+    </>}>
     {(state.notice || state.issues.length > 0) && <div className="setting-notice" role="status">
       {state.notice || '请检查下方标出的内容，再通过设定。'}
       {state.issues.length > 0 && <ul>{state.issues.map((issue, index) => <li key={index}>{issue.message}</li>)}</ul>}
@@ -104,5 +104,5 @@ export default function SettingReview({ state, onAction, onApprove, onConfirm, o
     </section>
     {confirm && <ConfirmDialog title={confirm.title} description={confirm.description} cancelLabel="继续编辑" confirmLabel={confirm.label}
       onCancel={() => setConfirm(null)} onConfirm={() => { onAction(confirm.action); setConfirm(null) }} />}
-  </section>
+  </MaterialFrame>
 }

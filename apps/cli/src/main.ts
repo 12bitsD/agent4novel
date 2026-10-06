@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { artifactKinds, beatLimits, proseLimits, diagnosticQuerySchema, authorConfigLimits, authorConfigSaveSchema, agentFileUploadSchema } from '@agent4novel/contracts'
+import { artifactKinds, beatLimits, proseLimits, diagnosticQuerySchema, authorConfigLimits, authorConfigSaveSchema, agentFileUploadSchema, outlineApprovalRequestBytes } from '@agent4novel/contracts'
 import type { ArtifactKind } from '@agent4novel/contracts'
 import { CliError, createClient, parseCliTimeoutMs } from './client.js'
 import * as cmd from './commands.js'
@@ -91,6 +91,9 @@ async function main(): Promise<void> {
     }
     case 'approve':
       result = await cmd.approve(client, pos[0], requireKind(pos[1]))
+      break
+    case 'approve-outline':
+      result = await cmd.approveOutline(client, pos[0], readRequestJson(flags.file, outlineApprovalRequestBytes, 'Outline'))
       break
     case 'approve-setting': {
       let source: string

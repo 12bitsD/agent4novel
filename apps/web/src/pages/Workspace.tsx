@@ -18,6 +18,7 @@ import ProseReview from './ProseReview.js'
 import { initProseReview, isProseDirty, reduceProseReview, type ProseReviewState, type ProseReviewAction } from '../prose-review.js'
 import { postProseCommand } from '../prose-api.js'
 import AuthorConfigPanel from './AuthorConfigPanel.js'
+import WorkShell from '../WorkShell.js'
 
 // Workspace 只渲染 server 读模型(workflowState/allowedActions 来自 GET /works/:id 同快照),
 // 不在前端重建状态机。当前章生成/重试走 advance，开始下一章走独立条件请求。
@@ -27,15 +28,23 @@ export default function Workspace(props: WorkspaceProps) {
 }
 function WorkNavigation(props: WorkspaceProps) {
   const [selectedChapter, setSelectedChapter] = useState(props.initialChapter)
+  const [knownTitle, setKnownTitle] = useState('')
+  const rememberTitle = useCallback((title: string) => setKnownTitle(title), [])
+  // 2026-10-03 Human: “导航页和重复说明改进掉”；窄屏先显示当前章，目录仍由同一入口展开。
+  // 2026-10-03 Human: “字体，空间，各个组件排布和大小…更舒服一些”。
+  // 2026-10-06 已认可编稿台方案：显示偏好属于作品，resize 与章级命令不覆盖作者选择。
+  const [directoryExpanded, setDirectoryExpanded] = useState(() => typeof window.matchMedia !== 'function' || window.matchMedia('(min-width: 901px)').matches)
   const locationCallback = useRef(props.onChapterChange)
   locationCallback.current = props.onChapterChange
   const syncChapter = useCallback((chapter: number) => locationCallback.current?.(chapter), [])
   const selectChapter = useCallback((chapter: number) => { setSelectedChapter(chapter); syncChapter(chapter) }, [syncChapter])
-  return <WorkSession key={`${props.workId}:${selectedChapter ?? 'current'}`} workId={props.workId} onBack={props.onBack}
-    requestedChapter={selectedChapter} onSelectChapter={selectChapter} onResolvedChapter={syncChapter} />
+  return <WorkShell workId={props.workId}><WorkSession key={`${props.workId}:${selectedChapter ?? 'current'}`} workId={props.workId} onBack={props.onBack}
+    requestedChapter={selectedChapter} onSelectChapter={selectChapter} onResolvedChapter={syncChapter}
+    knownTitle={knownTitle} onTitle={rememberTitle} directoryExpanded={directoryExpanded} onDirectoryChange={setDirectoryExpanded} /></WorkShell>
 }
-function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onResolvedChapter }: {
+function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onResolvedChapter, knownTitle, onTitle, directoryExpanded, onDirectoryChange }: {
   workId: string; onBack: () => void; requestedChapter?: number; onSelectChapter: (chapter: number) => void; onResolvedChapter: (chapter: number) => void
+  knownTitle: string; onTitle: (title: string) => void; directoryExpanded: boolean; onDirectoryChange: (open: boolean) => void
 }) {
   const chapterRef = useRef<number | null>(null)
   const [switchingTo, setSwitchingTo] = useState<number | null>(null)
@@ -57,10 +66,11 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
   const [leaving, setLeaving] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
   const [configExpanded, setConfigExpanded] = useState(false)
-  // 2026-10-03 Human: “导航页和重复说明改进掉”；窄屏先显示当前章，目录仍由同一入口展开。
-  // 2026-10-03 Human: “字体，空间，各个组件排布和大小…更舒服一些”。
-  // 单列从中屏开始；只决定挂载默认值，resize 不覆盖作者的目录选择。
-  const [directoryExpanded, setDirectoryExpanded] = useState(() => typeof window.matchMedia !== 'function' || window.matchMedia('(min-width: 901px)').matches)
+  const materialGuardRef = useRef({ creative: { dirty: false, locked: false }, outline: { dirty: false, locked: false } })
+  const [creativeGuard, setCreativeGuard] = useState({ dirty: false, locked: false })
+  const [outlineGuard, setOutlineGuard] = useState({ dirty: false, locked: false })
+  const updateCreativeGuard = useCallback((guard: typeof creativeGuard) => { materialGuardRef.current.creative = guard; setCreativeGuard(previous => previous.dirty === guard.dirty && previous.locked === guard.locked ? previous : guard) }, [])
+  const updateOutlineGuard = useCallback((guard: typeof outlineGuard) => { materialGuardRef.current.outline = guard; setOutlineGuard(previous => previous.dirty === guard.dirty && previous.locked === guard.locked ? previous : guard) }, [])
   const [configGuard, setConfigGuard] = useState({ dirty: false, locked: false })
   const configGuardRef = useRef(configGuard)
   const updateConfigGuard = useCallback((guard: typeof configGuard) => {
@@ -103,6 +113,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
       && oldProse.humanStatus === 'approved' && newProse.humanStatus === 'pending'))) return false
     workRef.current = view
     setWork(view)
+    onTitle(view.title)
     const pendingGeneration = uncertainGeneration.current
     if (pendingGeneration && view.artifacts.some(artifact => artifact.kind === pendingGeneration.kind && artifact.chapter === pendingGeneration.chapter)) {
       uncertainGeneration.current = null
@@ -120,7 +131,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
     if (!currentProse && proseCandidate?.workId === view.id) setProse({ ...initProseReview(proseCandidate), observedWork: view })
     else if (currentProse && observe) setProse(reduceProseReview(currentProse, { type: 'observe', work: view }))
     return true
-  }, [setSetting, setBeat, setProse, requestedChapter, onResolvedChapter])
+  }, [setSetting, setBeat, setProse, requestedChapter, onResolvedChapter, onTitle])
 
   const refresh = useCallback(async () => {
     const sequence = ++readSequence.current
@@ -141,14 +152,14 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
     return () => { mounted.current = false; readSequence.current++; commandSequence.current++ }
   }, [refresh])
   const dirty = (setting !== null && (isSettingDirty(setting) || setting.hasUnknownWrite || ['submitting', 'reconciling'].includes(setting.phase)))
-    || (beat !== null && isBeatDirty(beat)) || (prose !== null && isProseDirty(prose)) || generating || generationUncertain || starting || startUncertain || configGuard.dirty || badExampleGuard.dirty
-  const navigationLocked = generating || generationUncertain || starting || startUncertain || configGuard.locked || badExampleGuard.locked
+    || (beat !== null && isBeatDirty(beat)) || (prose !== null && isProseDirty(prose)) || generating || generationUncertain || starting || startUncertain || configGuard.dirty || badExampleGuard.dirty || creativeGuard.dirty || outlineGuard.dirty || creativeGuard.locked || outlineGuard.locked
+  const navigationLocked = generating || generationUncertain || starting || startUncertain || configGuard.locked || badExampleGuard.locked || creativeGuard.locked || outlineGuard.locked
     || !!prose && (prose.hasUnknownWrite || ['saving', 'submitting', 'regenerating', 'reconciling'].includes(prose.phase))
     || !!beat && (beat.hasUnknownWrite || ['submitting', 'regenerating', 'reconciling'].includes(beat.phase))
     || !!setting && (setting.hasUnknownWrite || ['submitting', 'reconciling'].includes(setting.phase))
   const chooseChapter = (chapter: number) => {
-    if (navigationLocked || chapter === chapterRef.current) return
-    if (dirty) setSwitchingTo(chapter)
+    if (materialGuardRef.current.creative.locked || materialGuardRef.current.outline.locked || navigationLocked || chapter === chapterRef.current) return
+    if (dirty || materialGuardRef.current.creative.dirty || materialGuardRef.current.outline.dirty) setSwitchingTo(chapter)
     else onSelectChapter(chapter)
   }
   useEffect(() => {
@@ -159,7 +170,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
   }, [dirty])
 
   const generate = useCallback(async (stepId = workRef.current?.nextStepId ?? null) => {
-    if (generationBusy.current || uncertainGeneration.current || !stepId) return
+    if (generationBusy.current || uncertainGeneration.current || !stepId || materialGuardRef.current.creative.dirty || materialGuardRef.current.creative.locked || materialGuardRef.current.outline.dirty || materialGuardRef.current.outline.locked) return
     const target = { kind: stepId, ...(stepId === 'beat' || stepId === 'prose' ? { chapter: workRef.current?.currentChapter } : {}) }
     const markUnknown = () => {
       uncertainGeneration.current = target
@@ -364,17 +375,20 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
   const actions = chapterActions(work, chapter)
   const isCurrentChapter = chapter === work?.currentChapter
   const state = generating ? 'generating' : (work?.workflowState ?? 'ready-to-generate')
-  const showOutline =
-    (work?.workflowState === 'awaiting-outline-review' || work?.workflowState === 'outline-approved') &&
+  const retainedCreative = creativeGuard.dirty || creativeGuard.locked
+  const retainedOutline = outlineGuard.dirty || outlineGuard.locked
+  const retainLegacy = retainedCreative || retainedOutline
+  const showOutline = !retainedCreative &&
+    (retainedOutline || work?.workflowState === 'awaiting-outline-review' || work?.workflowState === 'outline-approved') &&
     outline !== null &&
     outlineArtifact !== undefined
 
-  const showSetting = setting !== null && (work?.workflowState === 'awaiting-setting-review' || work?.workflowState === 'setting-approved')
-  const showProse = prose !== null && (!!chapterSummary || work?.workflowState === 'awaiting-prose-review' || work?.workflowState === 'prose-approved')
-  const showBeat = beat !== null && !showProse && (!!chapterSummary || work?.workflowState === 'awaiting-beat-review' || work?.workflowState === 'beat-approved')
+  const showSetting = !retainLegacy && setting !== null && (work?.workflowState === 'awaiting-setting-review' || work?.workflowState === 'setting-approved')
+  const showProse = !retainLegacy && prose !== null && (!!chapterSummary || work?.workflowState === 'awaiting-prose-review' || work?.workflowState === 'prose-approved')
+  const showBeat = !retainLegacy && beat !== null && !showProse && (!!chapterSummary || work?.workflowState === 'awaiting-beat-review' || work?.workflowState === 'beat-approved')
   // 生成间隙保留已选定的创意稿；动作权限仍由服务器读模型决定。
-  const showPoster = creative !== null && creativeArtifact !== undefined && (
-    work?.workflowState === 'awaiting-selection' || (
+  const showPoster = !retainedOutline && creative !== null && creativeArtifact !== undefined && (
+    retainedCreative || work?.workflowState === 'awaiting-selection' || (
       creativeArtifact.humanStatus === 'approved' && !showOutline && !showSetting && !showBeat && !showProse &&
       (work?.workflowState === 'ready-to-generate' || work?.workflowState === 'failed')
     )
@@ -383,18 +397,19 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
   const stepLabel = nextStep === 'prose' ? `${chapterLabel(chapter)}正文` : nextStep === 'beat' ? `${chapterLabel(chapter)}章纲` : nextStep === 'setting' ? '设定' : nextStep === 'outline' ? '大纲' : '创意稿'
 
   return (
-    <main className="workbench">
+    <>
       <aside className="work-rail" aria-label="作品导航">
       <button
-        onClick={() => { if (dirty) setLeaving(true); else if (!navigated.current) { navigated.current = true; onBack() } }}
+        disabled={navigationLocked}
+        onClick={() => { if (materialGuardRef.current.creative.locked || materialGuardRef.current.outline.locked) return; if (dirty || materialGuardRef.current.creative.dirty || materialGuardRef.current.outline.dirty) setLeaving(true); else if (!navigated.current) { navigated.current = true; onBack() } }}
         style={{ ...btnSecondary, padding: '4px 10px', minHeight: 'var(--compact-control-height)', fontSize: 13, marginBottom: 16 }}
       >
         ← 返回书架
       </button>
       <p className="eyebrow">作品</p>
-      {work && <h1 className="work-title">{work.title}</h1>}
-      {!!work?.chapters.length && <details className="chapter-directory-shell" open={directoryExpanded} onToggle={event => setDirectoryExpanded(event.currentTarget.open)}>
-        <summary className="chapter-directory-summary"><span>章节目录</span><span className="chapter-directory-current">{chapterLabel(chapter)} · {chapterSummary?.title}</span></summary>
+      {(work?.title || knownTitle) && <h1 className="work-title">{work?.title || knownTitle}</h1>}
+      {!!work?.chapters.length && <details className="chapter-directory-shell" open={directoryExpanded} onToggle={event => onDirectoryChange(event.currentTarget.open)}>
+        <summary className="chapter-directory-summary" onClick={event => { event.preventDefault(); onDirectoryChange(!directoryExpanded) }}><span>章节目录</span><span className="chapter-directory-current">{chapterLabel(chapter)} · {chapterSummary?.title}</span></summary>
         <nav aria-label="章节目录" className="chapter-directory">
         <div className="setting-actions">{work.chapters.map(item => <button type="button" key={item.chapter}
           data-chapter={item.chapter} aria-current={item.chapter === chapter ? 'page' : undefined}
@@ -409,7 +424,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
       {work && !work.chapters.length && <p className="setting-muted">先完成创意稿、大纲与设定，再开始第一章。</p>}
       </aside>
       <section className={showProse ? 'work-stage prose-stage' : 'work-stage'} aria-label="当前创作内容">
-      {work && !showProse && <div className="stage-heading"><span className="eyebrow">{showBeat ? `${chapterLabel(chapter)} · 章纲` : showSetting ? '全书 · 设定' : showOutline ? '全书 · 大纲' : showPoster ? '全书 · 创意稿' : '创作起点'}</span><span className="stage-state">{generating ? '正在生成' : isCurrentChapter ? '当前创作' : '历史阅读'}</span></div>}
+      {work && !showPoster && !showOutline && !showSetting && !showBeat && !showProse && <div className="stage-heading"><span className="eyebrow">{showBeat ? `${chapterLabel(chapter)} · 章纲` : showSetting ? '全书 · 设定' : showOutline ? '全书 · 大纲' : showPoster ? '全书 · 创意稿' : '创作起点'}</span><span className="stage-state">{generating ? '正在生成' : isCurrentChapter ? '当前创作' : '历史阅读'}</span></div>}
       {chapterSummary?.needsContinuityReview && <p className="setting-notice" role="status">前章正文已修改，请检查本章衔接。后续章节已保留，不会自动重写。</p>}
       {error && <p className="setting-notice" role="alert">{error}</p>}
       {error && <button type="button" style={btnSecondary} onClick={() => void (startUncertain ? confirmStart() : refresh())}>刷新作品</button>}
@@ -422,7 +437,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
       )}
 
       {isCurrentChapter && (state === 'ready-to-generate' || state === 'failed') && work?.allowedActions.includes('generate') && (
-        <button onClick={() => void generate()} disabled={generating || generationUncertain} style={btnPrimary}>
+        <button onClick={() => void generate()} disabled={generating || generationUncertain || retainLegacy} style={btnPrimary}>
           {state === 'failed' ? `重试生成${stepLabel}` : `生成${stepLabel}`}
         </button>
       )}
@@ -432,12 +447,13 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
 
       {showPoster && creativeArtifact && (
         <CreativePoster
-          key={`${creativeArtifact.id}:${creativeArtifact.version}`}
+          key="creative"
           workId={workId}
           content={creative as CreativeContent}
           headVersion={creativeArtifact.version}
           caption={caption}
           readonly={generating || work?.workflowState !== 'awaiting-selection' || !work.allowedActions.includes('select')}
+          onGuard={updateCreativeGuard}
           onChanged={() => void refresh()}
           onSelected={() => void continueAfterApproval()}
         />
@@ -446,11 +462,13 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
       {showOutline && outlineArtifact && (
         <OutlineReview
           workId={workId}
+          artifactId={outlineArtifact.id}
           content={outline as OutlineContent}
           headVersion={outlineArtifact.version}
           pack={creative?.directions[0] ?? null}
-          readonly={work!.workflowState === 'outline-approved'}
+          readonly={generating || outlineArtifact.humanStatus === 'approved'}
           onChanged={() => void refresh()}
+          onGuard={updateOutlineGuard}
           onApproved={() => void continueAfterApproval()}
         />
       )}
@@ -503,6 +521,6 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
           setLeaving(false)
           if (!navigated.current) { navigated.current = true; onBack() }
         }} />}
-    </main>
+    </>
   )
 }

@@ -83,3 +83,11 @@ export function replaceAt<T>(items: T[], index: number, next: T): T[] {
 export function removeAt<T>(items: T[], index: number): T[] {
   return items.filter((_, j) => j !== index)
 }
+
+// Validation keeps its destination/focus while respecting the author's movement preference.
+export function focusMaterialField(target: HTMLElement | null | undefined): void {
+  if (!target) return
+  target.focus()
+  const reduced = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  target.scrollIntoView?.({ block: 'center', behavior: reduced ? 'auto' : 'smooth' })
+}

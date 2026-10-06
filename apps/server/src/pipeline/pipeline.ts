@@ -1,4 +1,4 @@
-import { runStep, perChapterKinds, beatContentSchema, beatRegenerateRequestSchema, proseContentSchema, proseRegenerateRequestSchema, startChapterRequestSchema } from '@agent4novel/contracts'
+import { runStep, perChapterKinds, beatContentSchema, beatRegenerateRequestSchema, proseContentSchema, proseRegenerateRequestSchema, startChapterRequestSchema, outlineApprovalRequestSchema, outlineApprovalResponseSchema } from '@agent4novel/contracts'
 import type {
   AgentConfig,
   Artifact,
@@ -11,6 +11,8 @@ import type {
   GateRef,
   StartChapterRequest,
   ArtifactInput,
+  OutlineApprovalRequest,
+  OutlineApprovalResponse,
 } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
 import type { ArtifactPrecondition, WorkStore } from '../store/work-store.js'
@@ -471,6 +473,24 @@ export class Pipeline {
         seedChars: work.seed.length,
       })
     return artifact
+  }
+
+  approveOutline(workId: string, request: OutlineApprovalRequest): OutlineApprovalResponse {
+    const parsed = outlineApprovalRequestSchema.safeParse(request)
+    if (!parsed.success) throw new KnownError('invalid-input', 'invalid outline approval request')
+    const work = this.store.getWork(workId)
+    if (!work) throw new KnownError('work-not-found', 'work not found')
+    const head = work.artifacts.find(artifact => artifact.kind === 'outline' && artifact.chapter === undefined)
+    if (!head) throw new KnownError('artifact-not-found', 'outline not found')
+    if (head.id !== parsed.data.expectedArtifactId || head.version !== parsed.data.expectedHeadVersion) {
+      throw new KnownError('version-conflict', 'outline head changed')
+    }
+    // Both Store adapters check this head and apply the status in their same atomic write.
+    // A matching approved replay is a no-op; it never grants approval to a newer head.
+    this.store.setStatus(workId, 'outline', 'approved', { preconditions: [{ kind: 'outline',
+      head: { artifactId: head.id, version: head.version, humanStatus: head.humanStatus } }] })
+    if (head.humanStatus === 'pending') this.lastFailure.delete(workId)
+    return outlineApprovalResponseSchema.parse({ ...head, humanStatus: 'approved' })
   }
 
   approve(workId: string, kind: ArtifactKind, chapter?: number): void {

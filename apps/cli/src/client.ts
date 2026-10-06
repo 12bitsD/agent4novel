@@ -1,6 +1,6 @@
 import { advanceOutcomeDtoSchema, httpErrorSchema, artifactSchema, workSchema, workListResponseSchema, pipelineStateSchema, settingApproveResponseSchema, workViewSchema, diagnosticResponseSchema, diagnosticQuerySchema } from '@agent4novel/contracts'
 import type { BeatSubmission, ProseSubmission, DiagnosticQuery, StartChapterRequest, WorkCreateRequest, SelectCreativeRequest, OutlineDraftRequest, ApproveRequest } from '@agent4novel/contracts'
-import { appConfigSchema, matchesStartChapterResponse } from '@agent4novel/contracts'
+import { appConfigSchema, matchesStartChapterResponse, outlineApprovalRequestSchema, outlineApprovalResponseSchema, matchesOutlineApprovalResponse, type OutlineApprovalRequest } from '@agent4novel/contracts'
 import { agentFileSchema, agentFileReadSchema, agentFileUploadSchema, authorConfigViewSchema, authorConfigReceiptSchema, authorConfigSaveSchema,
   managedAgentFileText, type AuthorConfigSave, type AgentFileUpload } from '@agent4novel/contracts'
 import { createHash } from 'node:crypto'
@@ -196,6 +196,13 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
       } satisfies OutlineDraftRequest), result => result.workId === workId && result.kind === 'outline' && result.chapter === undefined && result.humanStatus === 'pending', true),
     approve: async (workId: string, kind: ArtifactKind) =>
       validate(pipelineStateSchema, await call<unknown>('POST', `/api/works/${encodeURIComponent(workId)}/approve`, { kind } satisfies ApproveRequest), result => result.workId === workId, true),
+    approveOutline: async (workId: string, request: OutlineApprovalRequest) => {
+      const parsed = outlineApprovalRequestSchema.safeParse(request)
+      if (!parsed.success) throw new CliError('Invalid outline approval request', 'invalid-input')
+      const candidate = await configWrite(() => call<unknown>('POST', `/api/works/${encodeURIComponent(workId)}/artifacts/outline/approve`,
+        parsed.data, 30_000, false, error => !('command' in error)))
+      return validate(outlineApprovalResponseSchema, candidate, result => matchesOutlineApprovalResponse(workId, parsed.data, result), true)
+    },
     approveSetting: async (workId: string, request: SettingApproveRequest) => {
       const data = await call<unknown>('POST', `/api/works/${encodeURIComponent(workId)}/artifacts/setting/approve`, request)
       return validate(settingApproveResponseSchema, data, result => result.workId === workId, true)

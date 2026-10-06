@@ -1,3 +1,4 @@
+import { outlineApprovalRequestSchema, outlineApprovalResponseSchema, matchesOutlineApprovalResponse, type OutlineApprovalRequest, type OutlineApprovalResponse } from '@agent4novel/contracts'
 import type {
   Artifact, ArtifactKind, AdvanceOutcomeDto, CreativeContent, OutlineDraft,
   Work, WorkSummary, WorkView, StartChapterRequest, WorkCreateRequest,
@@ -117,9 +118,11 @@ export async function createWork(input: WorkCreateRequest): Promise<Work> {
 
 async function writeArtifact(workId: string, kind: 'creative' | 'outline', status: 'pending' | 'approved', path: string,
   method: 'PUT' | 'POST', body: unknown): Promise<Artifact> {
-  return validate(artifactSchema, await request(`/api/works/${encodeURIComponent(workId)}/artifacts/${kind}${path}`, {
-    method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-  }), result => result.workId === workId && result.kind === kind && result.chapter === undefined && result.humanStatus === status, true)
+  return withDeadline(30_000, async signal => validate(artifactSchema,
+    await request(`/api/works/${encodeURIComponent(workId)}/artifacts/${kind}${path}`, {
+      method, signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }, error => !('command' in error)),
+    result => result.workId === workId && result.kind === kind && result.chapter === undefined && result.humanStatus === status, true))
 }
 
 // 保存全部方向，保持 pending；409 时调用者保留编辑内容。
@@ -147,4 +150,12 @@ export function saveOutlineDraft(workId: string, content: OutlineDraft, expected
 export async function approveArtifact(workId: string, kind: ArtifactKind) {
   return validate(pipelineStateSchema, await post(`/api/works/${encodeURIComponent(workId)}/approve`, { kind } satisfies ApproveRequest),
     result => result.workId === workId, true)
+}
+
+export async function approveOutline(workId: string, input: OutlineApprovalRequest): Promise<OutlineApprovalResponse> {
+  const frozen = outlineApprovalRequestSchema.parse(input)
+  const body = await withDeadline(30_000, signal => request(`/api/works/${encodeURIComponent(workId)}/artifacts/outline/approve`, {
+    method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify(frozen),
+  }, error => !('command' in error)))
+  return validate(outlineApprovalResponseSchema, body, result => matchesOutlineApprovalResponse(workId, frozen, result), true)
 }

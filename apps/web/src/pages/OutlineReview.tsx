@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { outlineContentSchema } from '@agent4novel/contracts'
-import type { CreativePack, OutlineContent } from '@agent4novel/contracts'
-import { approveArtifact, saveOutlineDraft } from '../api.js'
+import type { Artifact, CreativePack, OutlineContent } from '@agent4novel/contracts'
+import { approveOutline, getWork, saveOutlineDraft } from '../api.js'
 import { ConfirmDialog } from '../ConfirmDialog.js'
+import MaterialFrame, { type MaterialGuard } from '../MaterialFrame.js'
+import { materialWriteUnconfirmed } from '../material-operation.js'
 import { btnPrimary, btnSecondary, cardStyle, chipStyle, fieldStyle, smallBtnStyle } from '../ui.js'
 import {
   addArc,
@@ -25,9 +27,10 @@ import {
 import type { ReviewState } from '../outline-review.js'
 
 // 大纲 review 视图(#4):弧线时间线卡片 + 剧情点行内列表。
-// 所有编辑走 outline-review 纯命令;保存 = 草稿 pending;「通过」= 通用 approve。
+// 所有编辑走 outline-review 纯命令;保存 = 草稿 pending;「通过」= 显式作者可见版本的专用命令。
 export default function OutlineReview(props: {
   workId: string
+  artifactId?: string
   content: OutlineContent
   headVersion: number
   /** 选定的方向包(顶部摘要,只读) */
@@ -36,56 +39,99 @@ export default function OutlineReview(props: {
   readonly: boolean
   onChanged: () => void
   onApproved?: () => void
+  onGuard?: (guard: MaterialGuard) => void
 }) {
-  const { workId, pack, readonly, onChanged } = props
-  const [s, setS] = useState<ReviewState>(() => initReview(props.content, props.headVersion))
+  const { workId, pack, readonly: viewReadonly, onChanged, onGuard } = props
+  const [s, setS] = useState<ReviewState>(() => initReview(props.content, props.headVersion, props.artifactId))
   const [error, setError] = useState<string | null>(null)
   const [packOpen, setPackOpen] = useState(false)
   const [approveCandidate, setApproveCandidate] = useState<ReviewState | null>(null)
+  const [unconfirmed, setUnconfirmed] = useState(false)
+  const [checking, setChecking] = useState(false)
+  const [remote, setRemote] = useState<Artifact | null>(null)
+  const [loadCandidate, setLoadCandidate] = useState<Artifact | null>(null)
+  const [observedApproved, setObservedApproved] = useState(false)
+  const active = useRef(false), operationSequence = useRef(0), commandBusy = useRef(false)
+  const frozenOperation = useRef<unknown>(null)
+  const observedReadonlyContent = useRef<string | null>(null)
+  const externalReadonlyDraft = viewReadonly && !observedApproved && isDirty(s)
+  const readonly = observedApproved || (viewReadonly && !externalReadonlyDraft)
+  const locked = s.saving || s.approving || unconfirmed || checking
+  useEffect(() => { active.current = true; return () => { active.current = false; operationSequence.current++ } }, [workId])
+  useEffect(() => { onGuard?.({ dirty: !observedApproved && isDirty(s), locked }) }, [s, observedApproved, locked, onGuard])
+  useEffect(() => () => onGuard?.({ dirty: false, locked: false }), [onGuard])
 
-  // 保存草稿;返回保存后的新状态(供「通过前保存」链路复用),失败返回 null。
-  // 保存期间 busy 会挡住编辑,故响应回来时本地状态一定还是 next,可直接推导。
+  useEffect(() => {
+    if (!viewReadonly || externalReadonlyDraft || locked || props.headVersion < s.headVersion) return
+    const identity = JSON.stringify({ content: props.content, version: props.headVersion, id: props.artifactId })
+    if (observedReadonlyContent.current === identity) return
+    observedReadonlyContent.current = identity
+    setS(initReview(props.content, props.headVersion, props.artifactId))
+  }, [viewReadonly, externalReadonlyDraft, locked, props.content, props.headVersion, props.artifactId, s.headVersion])
+
+  const failCommand = (error: unknown) => {
+    const unknown = materialWriteUnconfirmed(error)
+    setUnconfirmed(unknown)
+    setS(current => commandFailed(current, (error as { code?: string })?.code))
+    setError(unknown ? '操作结果尚未确认，编辑和原提交仍保留。请先核对服务器内容。' : '操作被拒或失败，你的编辑仍保留。')
+  }
+
   const doSave = async (state: ReviewState): Promise<ReviewState | null> => {
+    if (readonly || externalReadonlyDraft || unconfirmed || checking || commandBusy.current) return null
     const next = beginSave(state)
     if (next === state) return state
-    setS(next)
+    const sequence = ++operationSequence.current
+    commandBusy.current = true
+    frozenOperation.current = { operation: 'save-outline', expectedHeadVersion: next.headVersion, content: savePayload(next) }
+    onGuard?.({ dirty: isDirty(next), locked: true }); setS(next); setError(null)
     try {
-      const a = await saveOutlineDraft(workId, savePayload(next), next.headVersion)
-      const content = outlineContentSchema.parse(a.content)
-      const saved = saveSucceeded(next, content, a.version)
-      setS(saved)
+      const result = await saveOutlineDraft(workId, savePayload(next), next.headVersion)
+      if (!active.current || sequence !== operationSequence.current) return null
+      const saved = saveSucceeded(next, outlineContentSchema.parse(result.content), result.version, result.id)
+      setS(saved); frozenOperation.current = null
       return saved
-    } catch (err) {
-      const code = (err as { code?: string })?.code
-      setS((cur) => commandFailed(cur, code))
-      setError('保存失败,你的编辑还在原处,可重试。')
+    } catch (error) {
+      if (active.current && sequence === operationSequence.current) failCommand(error)
       return null
-    }
+    } finally { if (active.current && sequence === operationSequence.current) commandBusy.current = false }
   }
 
   const doApprove = async (candidate: ReviewState) => {
-    if (readonly || s.saving || s.approving) return
-    setError(null)
-    try {
-      // 有脏编辑先保存(让通过落在最新内容上),再 approve
-      let cur = candidate
-      if (isDirty(cur)) {
-        const saved = await doSave(cur)
-        if (!saved) return // doSave 已负责错误提示与状态复位
-        cur = saved
-      }
-      const next = beginApprove(cur)
-      if (next === cur) return
-      setS(next)
-      await approveArtifact(workId, 'outline')
-      setS((c) => approveSucceeded(c))
-      if (props.onApproved) props.onApproved()
-      else onChanged()
-    } catch (err) {
-      const code = (err as { code?: string })?.code
-      setS((c) => commandFailed(c, code))
-      setError('通过失败,你的编辑还在原处,可重试。')
+    if (readonly || externalReadonlyDraft || locked || commandBusy.current) return
+    let current = candidate
+    if (isDirty(current)) {
+      const saved = await doSave(current)
+      if (!saved || !active.current) return
+      current = saved
     }
+    if (!current.headArtifactId) { setError('无法核对当前大纲身份，请重新打开作品后再通过。'); return }
+    const next = beginApprove(current)
+    if (next === current) return
+    const sequence = ++operationSequence.current
+    commandBusy.current = true
+    const request = { expectedArtifactId: current.headArtifactId, expectedHeadVersion: current.headVersion }
+    frozenOperation.current = { operation: 'approve-outline', ...request }
+    onGuard?.({ dirty: isDirty(next), locked: true }); setS(next); setError(null)
+    try {
+      await approveOutline(workId, request)
+      if (!active.current || sequence !== operationSequence.current) return
+      frozenOperation.current = null; setS(state => approveSucceeded(state)); setObservedApproved(true)
+      onGuard?.({ dirty: false, locked: false })
+      if (props.onApproved) props.onApproved(); else onChanged()
+    } catch (error) { if (active.current && sequence === operationSequence.current) failCommand(error) }
+    finally { if (active.current && sequence === operationSequence.current) commandBusy.current = false }
+  }
+
+  const readCurrent = async () => {
+    if (commandBusy.current) return
+    const sequence = ++operationSequence.current; commandBusy.current = true; setChecking(true)
+    try {
+      const view = await getWork(workId)
+      if (!active.current || sequence !== operationSequence.current) return
+      const found = view.artifacts.find(item => item.kind === 'outline')
+      if (found) setRemote(found); else setError('暂未取得可核对的大纲，请保留本页。')
+    } catch { if (active.current && sequence === operationSequence.current) setError('核对读取失败，原提交和编辑仍保留。') }
+    finally { if (active.current && sequence === operationSequence.current) { commandBusy.current = false; setChecking(false) } }
   }
 
   const label = (text: string) => (
@@ -93,14 +139,30 @@ export default function OutlineReview(props: {
   )
 
   return (
-    <div className="outline-review">
-      <header className="page-heading">
-        <div>
-          <p className="eyebrow">全书大纲</p>
-          <h2>梳理故事的走向</h2>
-          <p className="page-lede">以弧线组织冲突，以剧情点安排变化。通过后作为设定与章纲的依据。</p>
-        </div>
-      </header>
+    <MaterialFrame className="outline-review" ariaLabel="大纲关卡" label="全书 · 大纲" title="梳理故事的走向"
+      description={<p className="page-lede">以弧线组织冲突，以剧情点安排变化。通过后继续生成设定。</p>}
+      status={externalReadonlyDraft ? <p role="status" className="setting-notice">服务器内容已变化，本页编辑已保留。请核对后决定是否载入。</p> : readonly ? <p className="setting-muted" role="status">这份大纲已通过，只读参阅。</p> : <>
+          <span className="review-save-state" role="status">
+            {s.saving ? '保存中……' : isDirty(s) ? '有未保存的修改' : s.notice === '已保存' ? '已保存' : '通过前可编辑大纲'}
+          </span>
+      </>} actions={!readonly && !externalReadonlyDraft && !unconfirmed && <>
+          {isDirty(s) && (
+            <button
+              onClick={() => void doSave(s)}
+              disabled={s.saving || s.approving}
+              style={btnSecondary}
+            >
+              {s.saving ? '保存中……' : '保存草稿'}
+            </button>
+          )}
+          <button
+            onClick={() => setApproveCandidate(s)}
+            disabled={s.saving || s.approving}
+            style={btnPrimary}
+          >
+            {s.approving ? '通过中……' : '通过大纲 →'}
+          </button>
+      </>}>
       {/* 顶部:选定方向速览窄条(可折叠) */}
       {pack && (
         <section style={{ ...cardStyle, marginBottom: 16, background: 'var(--bg-sunken)' }}>
@@ -132,9 +194,10 @@ export default function OutlineReview(props: {
         </p>
       )}
       {error && <p className="status-message status-error" role="alert">{error}</p>}
-      {s.notice && <p className="status-message" role="status">{s.notice}</p>}
+      {s.notice && s.notice !== '已保存' && <p className="status-message" role="status">{s.notice}</p>}
 
       {/* 弧线时间线 */}
+      <fieldset className="material-edit-fields" disabled={locked || externalReadonlyDraft}>
       {s.draft.arcs.map((arc, ai) => {
         return (
           <section
@@ -260,29 +323,18 @@ export default function OutlineReview(props: {
         </button>
       )}
 
-      {!readonly && (
-        <footer className="review-actions">
-          <span className="review-save-state" role="status">
-            {s.saving ? '保存中……' : isDirty(s) ? '有未保存的修改' : '通过前可编辑大纲'}
-          </span>
-          {isDirty(s) && (
-            <button
-              onClick={() => void doSave(s)}
-              disabled={s.saving || s.approving}
-              style={btnSecondary}
-            >
-              {s.saving ? '保存中……' : '保存草稿'}
-            </button>
-          )}
-          <button
-            onClick={() => setApproveCandidate(s)}
-            disabled={s.saving || s.approving}
-            style={btnPrimary}
-          >
-            {s.approving ? '通过中……' : '通过大纲 →'}
-          </button>
-        </footer>
-      )}
+      </fieldset>
+      {(unconfirmed || s.conflict || externalReadonlyDraft) && <section className="setting-recovery" aria-label="操作结果核对">
+        <button type="button" style={btnSecondary} disabled={checking} onClick={() => void readCurrent()}>核对服务器内容</button>
+        {remote && <><p role="status">服务器当前版本 v{remote.version}，这是当前状态观察，不是原操作回执。</p>
+          <details><summary>查看服务器材料</summary>{outlineContentSchema.parse(remote.content).arcs.map((item, index) => <div key={index}><h3>{item.title}</h3><p>{item.conflict}</p></div>)}</details>
+          <button type="button" style={btnSecondary} onClick={() => setLoadCandidate(remote)}>载入服务器内容</button></>}
+      </section>}
+      {loadCandidate && <ConfirmDialog title="载入服务器内容？" description="载入会放弃本页编辑，采用服务器当前版本。已经发出的操作可能继续处理，此操作不会撤销它。" cancelLabel="继续编辑" confirmLabel="放弃本页并载入" onCancel={() => setLoadCandidate(null)} onConfirm={() => {
+        operationSequence.current++; commandBusy.current = false; frozenOperation.current = null
+        setS(initReview(outlineContentSchema.parse(loadCandidate.content), loadCandidate.version, loadCandidate.id)); setObservedApproved(loadCandidate.humanStatus === 'approved')
+        setLoadCandidate(null); setUnconfirmed(false); setRemote(null); setError(null); onChanged()
+      }} />}
       {approveCandidate && (
         <ConfirmDialog
           title="通过大纲"
@@ -291,12 +343,12 @@ export default function OutlineReview(props: {
           confirmLabel="确认通过大纲"
           onCancel={() => setApproveCandidate(null)}
           onConfirm={() => {
-            // 先保存打开弹窗时的可见草稿，再沿用原审批接口；取消不执行任何命令。
+            // 先保存打开弹窗时的可见草稿，再按可见稿身份和版本通过；取消不执行任何命令。
             setApproveCandidate(null)
             void doApprove(approveCandidate)
           }}
         />
       )}
-    </div>
+    </MaterialFrame>
   )
 }

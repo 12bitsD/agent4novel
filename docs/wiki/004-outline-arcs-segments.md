@@ -2,15 +2,15 @@
 wiki_id: "004"
 ticket: 4
 ticket_state: done
-context_state: current
+context_state: mixed
 summary: "全书大纲采用弧线与剧情点两层结构，并在独立人工关卡中保存、审阅和通过。"
 topics: ["outline", "story-arcs", "story-segments", "workflow-gates", "outline-review"]
 code_paths: ["packages/contracts/src/outline.ts", "packages/contracts/src/artifacts.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/steps/outline-io.ts", "apps/server/src/steps/outline-step.ts", "apps/server/src/routes/works.ts", "apps/server/src/start.ts", "apps/server/test/pipeline.test.ts", "apps/web/src/outline-review.ts", "apps/web/src/pages/OutlineReview.tsx"]
 symbols: ["outlineContentSchema", "outlineDraftSchema", "createOutlineStep", "PipelineDefinitionEntry", "workflowOf", "normalizeOutlineIds", "ReviewState", "advance-in-progress", "version-conflict"]
 inherits: ["011"]
-changed_by: ["016", "013", "005", "041"]
+changed_by: ["016","013","005","041","049"]
 read_when: ["change-outline-schema", "change-outline-generation", "debug-outline-gate", "change-outline-editor"]
-last_context_reviewed: "2026-10-03"
+last_context_reviewed: "2026-10-06"
 ---
 
 # 004 — 大纲生成：弧线 + 剧情点两层结构
@@ -25,6 +25,7 @@ last_context_reviewed: "2026-10-03"
   [Wiki 005](./005-beat-generation-review.md) 已接入下游第一章章纲，消费完整已通过的大纲和设定；不改变本页的大纲契约。
 - **代码入口**：[outline contract](../../packages/contracts/src/outline.ts)、[pipeline](../../apps/server/src/pipeline/pipeline.ts)、[server assembly](../../apps/server/src/start.ts)、[works routes](../../apps/server/src/routes/works.ts)、[review state](../../apps/web/src/outline-review.ts)。
 
+- **当前后继入口**：[Wiki049](./049-author-workbench.md) 接入稳定作品壳、材料页头与恢复保护；本页原始意图、参数依据和冻结审核证据保留。
 ## 设计目的
 
 大纲层只回答“全书冲突如何推进与收束”，不提前决定章节数量。这样作者能在一屏级别审阅全书张力，下游也能按剧情点逐段规划章纲。
@@ -124,6 +125,14 @@ OutlineReview 采用纯状态映射加 React 视图：
 - outline fan-out 或多方案生成。
 
 ## 上下文演进
+
+### 2026-10-06 — 作者编稿台接续
+
+- **触发证据**：用户认可交互方案并授权核查后直接开发，实施票 [#49](https://github.com/12bitsD/agent4novel/issues/49)。
+- **原假设**：现有视觉、阅读参数和关卡承担各自页面，跨材料体验尚未统一。
+- **决定**：显示层由稳定作品壳和材料框架组织；原业务控制器仍拥有命令和权限。大纲新增作者可见版本的条件通过，旧接口兼容。
+- **影响**：当前框架与 K01 入口转向 Wiki049，字体、阅读参数和既有关卡保留。
+- **上下文处理**：preserve 本页原目的、Human 决定、rationale 与冻结审核正文；replace 当前后继路由，后续工程从049读取。
 
 ### 2026-10-03 — 修正当前工作流导航
 

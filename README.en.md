@@ -91,7 +91,7 @@ API keys are supplied at runtime, and Git ignores `.env.local`. Real-model calls
 
 ## How it works
 
-The system first prepares a story brief (Caption) from your input, then follows this workflow. **Approve** means accepting content as the basis for subsequent generation.
+The workbench keeps the work and chapter location on the left, the current material in the center, and references and configuration on the right. The system first prepares a story brief (Caption) from your input, then follows this workflow. **Approve** means accepting content as the basis for subsequent generation.
 
 | Stage | Generated content | Author action |
 | --- | --- | --- |
@@ -101,7 +101,11 @@ The system first prepares a story brief (Caption) from your input, then follows 
 | Chapter plan | This chapter's goal, content order and ending | Edit or regenerate, then approve |
 | Prose | Chapter text based on its plan and setting | Edit or rewrite the chapter, then approve |
 
-Prose approval completes the chapter. “Start next chapter” in the prose header generates the next chapter plan. Use the chapter directory to revisit earlier chapters. Approved prose opens in reading mode; select “编辑” (Edit) to change it, with autosave preserving approval. Editing an earlier chapter flags existing later chapters for a continuity check while keeping their text and status.
+Creative edits use “保存全部方向” (Save all directions); outline edits use “保存草稿” (Save draft). Setting and chapter-plan edits stay on the page until approval submits their full content. Prose edits autosave. Saving and approving remain separate actions; approved directions, outlines, settings and chapter plans are read-only.
+
+Prose approval completes the chapter. “Start next chapter” in the prose header generates the next chapter plan. Use the chapter directory to revisit earlier chapters. Approved prose opens in reading mode; select “编辑正文” (Edit prose) to change it, with autosave preserving approval. Editing an earlier chapter flags existing later chapters for a continuity check while keeping their text and status.
+
+If a save or approval result is unconfirmed, keep the page and inspect the server content first. Unsaved local edits also remain when another client updates or approves content. This inspection shows current state. Loading server content discards local edits and requires confirmation. An unconfirmed creation retains its input and never automatically creates another work.
 
 ### Reading and appearance
 

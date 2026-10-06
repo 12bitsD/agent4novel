@@ -73,7 +73,7 @@ Artifact = {
 
 - `appendArtifact` 追加新版本（version+1），旧版本保留；当前公开读模型只返回各地址的 head，尚无历史回看／回退入口
 - `humanStatus` 语义：`pending` = 待作者把关（关卡中）；`approved` = 已通过
-- 人工保存语义分节点：caption 落库即 `approved`（无关卡）；creative 保存草稿 = 新版本 + `pending`（`saveCreativeDraft`），显式选定方向 = 单方向新版本 + `approved`（`selectCreativeDirection`）；outline（#4）保存草稿 = 新版本 + `pending`（`saveOutlineDraft`，新增弧线/剧情点的 id 由 server 补注入），通过 = 通用 `/approve`；setting（#13）不保存中间草稿，专用完成命令将同 id／version 的内容和状态原子定稿，不追加 V2
+- 人工保存语义分节点：caption 落库即 `approved`（无关卡）；creative 保存草稿 = 新版本 + `pending`（`saveCreativeDraft`），显式选定方向 = 单方向新版本 + `approved`（`selectCreativeDirection`）；outline（#4）保存草稿 = 新版本 + `pending`（`saveOutlineDraft`，新增弧线/剧情点的 id 由 server 补注入），通过使用[大纲可见版本通过](#大纲可见版本通过)的专用条件命令，旧通用 `/approve` 保留当前 head 兼容语义；setting（#13）不保存中间草稿，专用完成命令将同 id／version 的内容和状态原子定稿，不追加 V2
 - Prose 保存追加新 ID／版本并保留匹配基线的 `humanStatus`；pending 草稿可为空，approved 内容必须非空。通过仍是同 ID／版本原子定稿。通过后可编辑是 Prose 的明确例外，不改变 Setting／Beat 通过后只读的语义。
 - 关卡在步骤边界：`gateAfter` 的步骤产出后置 `pending` 等 approve；`gateBefore` 的步骤要求目标产物已 `approved`；`consumes` 的上游产物读最新版且必须 `approved`
 
@@ -116,6 +116,34 @@ Web/CLI 在消费端解析公开响应并核对资源身份。错误体畸形、
 数据库版本使用 `PRAGMA user_version = 3`。初始化在取得写锁后重新读取版本和结构，只对真正无用户对象的 v0 空库建表；已有 v1/v2 必须精确匹配已知表与索引定义，再事务迁移到 v3；v3 同样严格核对结构。未来版本、未知旧结构或不匹配结构使启动失败，不删库、不降级、不悄悄退回内存。当前未提供历史库修复、导入或旧内存实例迁移工具。
 
 连接启用外键、WAL、`synchronous = FULL` 和 5 秒 busy timeout。默认数据目录与备份/恢复操作见 [Wiki 009](./wiki/009-sqlite-persistence.md)。同一数据目录中的已提交作品、产物版本、通过状态和 inputs 可在服务重启后读取；未保存页面草稿、进程内遥测、正在运行的模型调用不在该持久化范围。
+
+## 大纲可见版本通过
+
+#49 的专用命令绑定作者实际读取的大纲，或本页保存成功回执中的新产物身份；确认与重试沿用该基线。可执行定义与响应关联核对见 [`outline-approval.ts`](../packages/contracts/src/outline-approval.ts)。
+
+```ts
+// POST /api/works/:workId/artifacts/outline/approve
+type OutlineApprovalRequest = {
+  expectedArtifactId: string // 长度 1–200，保留原始产物身份
+  expectedHeadVersion: number // 正安全整数
+}
+type OutlineApprovalResponse = Artifact & {
+  kind: 'outline'
+  chapter?: undefined
+  content: OutlineContent
+  humanStatus: 'approved'
+}
+```
+
+请求严格拒绝额外字段，JSON 解析前检查 HTTP body 的 4096 字节上限；CLI 请求文件同为严格 UTF-8 JSON，最多 4096 字节。请求只携带身份与版本；本页大纲若有修改，应先保存，再使用保存回执的 ID／版本通过。
+
+Pipeline 校验显式 ID／版本，并把同一观察到的 ID、version、humanStatus 条件传给 `WorkStore.setStatus`。InMemoryStore 在同步写入中重核；SqliteStore 在同一写事务中重核并更新状态。条件变化拒绝整个操作，不能批准当前新 head。成功只把目标大纲置为 approved，id、version、createdAt、content 和 inputs 保持；不追加版本、不调用模型或推进下一节点。匹配当前已通过目标的重放返回同一产物，也不清除后续生成失败记录。并发条件冲突可以返回 409，不能为绕过冲突换成最新基线。
+
+成功响应是已通过大纲产物本身，没有 workflow、command 或操作流水账包装。`matchesOutlineApprovalResponse` 校验响应形态、作品、原始产物 ID／版本与 approved 状态；只确认目标状态，不证明更早的哪个 HTTP 请求赢得写入。
+
+请求格式非法为 400，作品／大纲不存在为 404，基线冲突为 409，body 超限为 413。意外失败或写入后的响应不可用返回安全 500；传输失败、5xx、畸形响应或身份不匹配均不能证明未落库。保留原请求，显式读取后可核对同一目标是否已通过，不认领历史操作回执或自动重发。
+
+旧 `POST /api/works/:workId/approve` 的 `{ kind: 'outline' }` 仍通过服务器处理时读取的当前 head，返回 `PipelineState`；已有服务端 CAS 继续保留，但该旧请求没有作者可见的 ID／版本条件，不能代替专用命令的保证。CLI `approve <workId> outline` 保留此兼容语义；`approve-outline <workId> --file request.json` 只发送文件中的显式基线一次，不自动 GET、回填版本或重发。此切片未新增 Store 接口、数据库迁移或操作回执表。
 
 ## Setting：#13 已确认设计
 

@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { WorkSummary } from '@agent4novel/contracts'
 import { listWorks } from '../api.js'
-import { btnPrimary } from '../ui.js'
+import { btnPrimary, btnSecondary } from '../ui.js'
 
 export default function Bookcase({
   onNew,
@@ -13,11 +13,25 @@ export default function Bookcase({
   const [works, setWorks] = useState<WorkSummary[]>([])
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    listWorks()
-      .then(setWorks)
-      .catch((e) => setError(String(e)))
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'failed'>('loading')
+  const active = useRef(false)
+  const readSequence = useRef(0)
+  const load = useCallback(async () => {
+    const sequence = ++readSequence.current
+    setPhase('loading'); setError(null)
+    try {
+      const result = await listWorks()
+      if (!active.current || sequence !== readSequence.current) return
+      setWorks(result); setPhase('ready')
+    } catch {
+      if (!active.current || sequence !== readSequence.current) return
+      setError('作品暂时无法读取，请稍后重试。'); setPhase('failed')
+    }
   }, [])
+  useEffect(() => {
+    active.current = true; void load()
+    return () => { active.current = false; readSequence.current++ }
+  }, [load])
 
   return (
     <main className="bookcase-page">
@@ -31,7 +45,8 @@ export default function Bookcase({
           ＋ 开始创作
         </button>
       </header>
-      {error && <p role="alert" className="status-message status-error">{error}</p>}
+      {phase === 'loading' && <p role="status" className="setting-muted">正在读取作品…</p>}
+      {error && <div><p role="alert" className="status-message status-error">{error}</p><button type="button" style={btnSecondary} onClick={() => void load()}>重新读取书架</button></div>}
       <div className="bookcase-grid">
         {works.map((w, i) => (
           <button
@@ -49,7 +64,7 @@ export default function Bookcase({
           </button>
         ))}
       </div>
-      {works.length === 0 && !error && (
+      {phase === 'ready' && works.length === 0 && (
         <section className="empty-state surface">
           <h2>暂无作品</h2>
           <p className="page-lede">一段脑洞、一份设定或一条故事主线，都可以成为起点。</p>

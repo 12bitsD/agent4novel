@@ -213,3 +213,20 @@ summary{cursor:pointer;font-size:13px;color:var(--ink)}
   .setting-modal{padding:24px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+
+/* 2026-10-06 作者编稿台：身份保持，材料交接。仅呈现已确认变化；原书级/章级控制器仍拥有动作。 */
+.material-frame{max-width:860px;margin:0 auto;min-width:0}
+.material-frame.prose-page{max-width:var(--reading-width)}
+.material-frame .material-header{border-bottom:1px solid var(--line);padding-bottom:16px;gap:16px}
+.material-title{font:600 28px/1.4 var(--font-ui);letter-spacing:-.02em;margin:8px 0}
+.material-status{font-size:13px;color:var(--ink-2);margin-top:8px}
+.material-status>p,.material-status .review-save-state{margin:0}
+.material-actions{display:flex;align-items:flex-start;justify-content:flex-end;gap:8px;flex-wrap:wrap;min-width:0}
+.material-actions>.setting-actions{gap:8px}
+.material-body{min-width:0}
+.work-stage>.material-frame{animation:material-arrive 180ms var(--ease)}
+@keyframes material-arrive{from{opacity:.4;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:700px){.material-title{font-size:26px}.material-actions{justify-content:flex-start}.material-frame .material-header{gap:12px}}
+@media(prefers-reduced-motion:reduce){.work-stage>.material-frame{animation:none}}
+
+.material-edit-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
