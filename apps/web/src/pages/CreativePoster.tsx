@@ -1,7 +1,9 @@
-import { useState } from 'react'
-import type { CaptionContent, CreativeContent } from '@agent4novel/contracts'
-import { saveCreativeDraft, selectCreativeDirection } from '../api.js'
+import { useEffect, useRef, useState } from 'react'
+import { creativeContentSchema, type Artifact, type CaptionContent, type CreativeContent } from '@agent4novel/contracts'
+import { getWork, saveCreativeDraft, selectCreativeDirection } from '../api.js'
 import { ConfirmDialog } from '../ConfirmDialog.js'
+import MaterialFrame, { type MaterialGuard } from '../MaterialFrame.js'
+import { materialWriteUnconfirmed } from '../material-operation.js'
 import {
   activePack,
   beginSave,
@@ -130,9 +132,10 @@ export default function CreativePoster({
   content,
   headVersion,
   caption,
-  readonly,
+  readonly: viewReadonly,
   onChanged,
   onSelected,
+  onGuard,
 }: {
   workId: string
   content: CreativeContent
@@ -143,63 +146,119 @@ export default function CreativePoster({
   onChanged: () => void
   /** 选定成功后调用(#4:Workspace 借此自动续跑 advance 生成大纲) */
   onSelected?: () => void
+  onGuard?: (guard: MaterialGuard) => void
 }) {
   const [s, setS] = useState<CompareState>(() => initCompare(content, headVersion))
   const [captionOpen, setCaptionOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectCandidate, setSelectCandidate] = useState<CompareState | null>(null)
+  const [unconfirmed, setUnconfirmed] = useState(false)
+  const [checking, setChecking] = useState(false)
+  const [remote, setRemote] = useState<Artifact | null>(null)
+  const [loadCandidate, setLoadCandidate] = useState<Artifact | null>(null)
+  const [observedApproved, setObservedApproved] = useState(false)
+  const active = useRef(false), operationSequence = useRef(0), commandBusy = useRef(false)
+  const frozenOperation = useRef<unknown>(null)
+  const observedReadonlyContent = useRef<string | null>(null)
+  const readonly = viewReadonly || observedApproved
+  const locked = s.saving || s.selecting || unconfirmed || checking
+  useEffect(() => { active.current = true; return () => { active.current = false; operationSequence.current++ } }, [workId])
+
+  // Approved head changes are read-only observations; saved editable drafts keep their mounted controls.
+  useEffect(() => {
+    if (!viewReadonly || unconfirmed || s.saving || s.selecting) return
+    const identity = JSON.stringify({ content, headVersion })
+    if (observedReadonlyContent.current === identity) return
+    observedReadonlyContent.current = identity
+    setS(initCompare(content, headVersion))
+  }, [viewReadonly, unconfirmed, s.saving, s.selecting, content, headVersion])
 
   const pack = activePack(s)
+  useEffect(() => { onGuard?.({ dirty: !viewReadonly && !observedApproved && isDirty(s), locked: s.saving || s.selecting || unconfirmed || checking }) }, [s, viewReadonly, observedApproved, unconfirmed, checking, onGuard])
+  useEffect(() => () => onGuard?.({ dirty: false, locked: false }), [onGuard])
 
   const doSave = async () => {
-    const next = beginSave(s)
-    if (next === s) return
-    setS(next)
-    setError(null)
+    if (readonly || unconfirmed || checking || commandBusy.current) return
+    const next = beginSave(s); if (next === s) return
+    const sequence = ++operationSequence.current
+    commandBusy.current = true; frozenOperation.current = { operation: 'save-creative', expectedHeadVersion: next.headVersion, content: savePayload(next) }
+    onGuard?.({ dirty: isDirty(next), locked: true }); setS(next); setError(null)
     try {
-      const a = await saveCreativeDraft(workId, savePayload(next), next.headVersion)
-      setS((cur) => saveSucceeded(cur, a.version))
-    } catch (err) {
-      const code = (err as { code?: string })?.code
-      setS((cur) => commandFailed(cur, code ?? String(err)))
-      setError('保存失败,你的编辑还在原处,可重试。')
-    }
+      const result = await saveCreativeDraft(workId, savePayload(next), next.headVersion)
+      if (!active.current || sequence !== operationSequence.current) return
+      setS(current => saveSucceeded(current, result.version)); frozenOperation.current = null
+    } catch (error) {
+      if (!active.current || sequence !== operationSequence.current) return
+      const unknown = materialWriteUnconfirmed(error); setUnconfirmed(unknown)
+      setS(current => commandFailed(current, (error as { code?: string }).code))
+      setError(unknown ? '操作结果尚未确认，编辑和原提交仍保留。请先核对服务器内容。' : '保存被拒或失败，你的编辑仍保留。')
+    } finally { if (active.current && sequence === operationSequence.current) commandBusy.current = false }
   }
 
   const doSelect = async (candidate: CompareState) => {
-    if (readonly || s.saving || s.selecting) return
-    const next = beginSelect(candidate)
-    if (next === candidate) return
-    setS(next)
-    setError(null)
+    if (readonly || unconfirmed || checking || commandBusy.current || s.saving || s.selecting) return
+    const next = beginSelect(candidate); if (next === candidate) return
+    const sequence = ++operationSequence.current
+    commandBusy.current = true; frozenOperation.current = { operation: 'select-creative', directionId: next.activeId, expectedHeadVersion: next.headVersion, content: savePayload(next) }
+    onGuard?.({ dirty: isDirty(next), locked: true }); setS(next); setError(null)
     try {
-      // 有未保存编辑时,先落草稿(全部方向,pending)再选定,保证选定的是最新编辑
       let head = next.headVersion
       if (isDirty(next)) {
-        const a = await saveCreativeDraft(workId, savePayload(next), head)
-        head = a.version
+        const result = await saveCreativeDraft(workId, savePayload(next), head)
+        if (!active.current || sequence !== operationSequence.current) return
+        head = result.version
       }
+      frozenOperation.current = { operation: 'select-creative', directionId: next.activeId, expectedHeadVersion: head }
       await selectCreativeDirection(workId, next.activeId, head)
-      setS((cur) => selectSucceeded(cur))
-      // #4 决策 10:选定后自动续跑 advance(由 Workspace 触发);无钩子则只刷新
-      if (onSelected) onSelected()
-      else onChanged()
-    } catch (err) {
-      const code = (err as { code?: string })?.code
-      setS((cur) => commandFailed(cur, code ?? String(err)))
-      setError('选定失败,你的编辑还在原处,可重试。')
-    }
+      if (!active.current || sequence !== operationSequence.current) return
+      frozenOperation.current = null; setS(current => selectSucceeded(current)); setObservedApproved(true)
+      if (onSelected) onSelected(); else onChanged()
+    } catch (error) {
+      if (!active.current || sequence !== operationSequence.current) return
+      const unknown = materialWriteUnconfirmed(error); setUnconfirmed(unknown)
+      setS(current => commandFailed(current, (error as { code?: string }).code))
+      setError(unknown ? '操作结果尚未确认，编辑和原提交仍保留。请先核对服务器内容。' : '选定被拒或失败，你的编辑仍保留。')
+    } finally { if (active.current && sequence === operationSequence.current) commandBusy.current = false }
+  }
+
+  const readCurrent = async () => {
+    if (commandBusy.current) return
+    const sequence = ++operationSequence.current; commandBusy.current = true; setChecking(true)
+    try {
+      const view = await getWork(workId)
+      if (!active.current || sequence !== operationSequence.current) return
+      const found = view.artifacts.find(item => item.kind === 'creative')
+      if (found) setRemote(found); else setError('暂未取得可核对的创意稿，请保留本页。')
+    } catch { if (active.current && sequence === operationSequence.current) setError('核对读取失败，原提交和编辑仍保留。') }
+    finally { if (active.current && sequence === operationSequence.current) { commandBusy.current = false; setChecking(false) } }
   }
 
   return (
-    <div className="creative-review">
-      <header className="page-heading">
-        <div>
-          <p className="eyebrow">创作方向</p>
-          <h2>找到故事的起点</h2>
-          <p className="page-lede">比较各个方向，调整内容，再选定要继续写的故事。</p>
-        </div>
-      </header>
+    <MaterialFrame className="creative-review" ariaLabel="创意稿关卡" label="全书 · 创意稿" title="找到故事的起点"
+      description={<p className="page-lede">比较方向、修改内容并选定。选定后继续生成大纲。</p>}
+      status={viewReadonly || observedApproved ? <p className="setting-muted" role="status">当前方向已选定，只读参阅。</p> : <>
+          <span className="review-save-state" role="status">
+            {s.saving ? '保存中……' : isDirty(s) ? '有未保存的修改' : s.notice === '已保存' ? '已保存' : '编辑当前方向后可保存'}
+          </span>
+      </>}
+      actions={!readonly && !unconfirmed && <>
+          {isDirty(s) && (
+            <button
+              onClick={doSave}
+              disabled={s.saving || s.selecting}
+              style={btnSecondary}
+            >
+              {s.saving ? '保存中……' : '保存全部方向'}
+            </button>
+          )}
+          <button
+            onClick={() => setSelectCandidate(s)}
+            disabled={s.saving || s.selecting}
+            style={btnPrimary}
+          >
+            {s.selecting ? '选定中……' : `就按「${pack.title}」这个方向写 →`}
+          </button>
+      </>}>
       {/* 2026-10-03：B+C 视觉对齐；方向选择保留普通按钮语义，不模拟缺少键盘协议的 tabs。 */}
       <div role="group" aria-label="创作方向" className="choice-row">
         {s.packs.map((p) => {
@@ -208,6 +267,7 @@ export default function CreativePoster({
             <button
               key={p.directionId}
               aria-pressed={active}
+              disabled={locked}
               onClick={() => setS((cur) => switchTab(cur, p.directionId))}
               style={tabStyle(active)}
             >
@@ -223,9 +283,10 @@ export default function CreativePoster({
         </p>
       )}
       {error && <p role="alert" className="status-message status-error">{error}</p>}
-      {s.notice && <p role="status" className="status-message">{s.notice}</p>}
+      {s.notice && s.notice !== '已保存' && <p role="status" className="status-message">{s.notice}</p>}
 
       {/* 海报主体 */}
+      <fieldset className="material-edit-fields" disabled={locked}>
       <section className="flow-section surface">
         <p className="field-label">方向标题</p>
         {readonly ? (
@@ -305,6 +366,7 @@ export default function CreativePoster({
           onChange={(outline) => setS((cur) => editActive(cur, { outline }))}
         />
       </section>
+      </fieldset>
 
       {/* 素材理解(caption 只读折叠区) */}
       {caption && (
@@ -337,29 +399,17 @@ export default function CreativePoster({
         </section>
       )}
 
-      {!readonly && (
-        <footer className="review-actions">
-          <span className="review-save-state" role="status">
-            {s.saving ? '保存中……' : isDirty(s) ? '有未保存的修改' : '编辑当前方向后可保存'}
-          </span>
-          {isDirty(s) && (
-            <button
-              onClick={doSave}
-              disabled={s.saving || s.selecting}
-              style={btnSecondary}
-            >
-              {s.saving ? '保存中……' : '保存全部方向'}
-            </button>
-          )}
-          <button
-            onClick={() => setSelectCandidate(s)}
-            disabled={s.saving || s.selecting}
-            style={btnPrimary}
-          >
-            {s.selecting ? '选定中……' : `就按「${pack.title}」这个方向写 →`}
-          </button>
-        </footer>
-      )}
+      {(unconfirmed || s.conflict) && <section className="setting-recovery" aria-label="操作结果核对">
+        <button type="button" style={btnSecondary} disabled={checking} onClick={() => void readCurrent()}>核对服务器内容</button>
+        {remote && <><p role="status">服务器当前版本 v{remote.version}，这是当前状态观察，不是原操作回执。</p>
+          <details><summary>查看服务器材料</summary>{creativeContentSchema.parse(remote.content).directions.map(item => <div key={item.directionId}><h3>{item.title}</h3><p>{item.synopsis}</p></div>)}</details>
+          <button type="button" style={btnSecondary} onClick={() => setLoadCandidate(remote)}>载入服务器内容</button></>}
+      </section>}
+      {loadCandidate && <ConfirmDialog title="载入服务器内容？" description="载入会放弃本页编辑，采用服务器当前版本。已经发出的操作可能继续处理，此操作不会撤销它。" cancelLabel="继续编辑" confirmLabel="放弃本页并载入" onCancel={() => setLoadCandidate(null)} onConfirm={() => {
+        operationSequence.current++; commandBusy.current = false; frozenOperation.current = null
+        setS(initCompare(creativeContentSchema.parse(loadCandidate.content), loadCandidate.version)); setObservedApproved(loadCandidate.humanStatus === 'approved')
+        setLoadCandidate(null); setUnconfirmed(false); setRemote(null); setError(null); onChanged()
+      }} />}
       {selectCandidate && (
         <ConfirmDialog
           title="选定创作方向"
@@ -374,6 +424,6 @@ export default function CreativePoster({
           }}
         />
       )}
-    </div>
+    </MaterialFrame>
   )
 }

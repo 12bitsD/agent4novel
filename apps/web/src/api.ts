@@ -1,3 +1,4 @@
+import { outlineApprovalRequestSchema, outlineApprovalResponseSchema, matchesOutlineApprovalResponse, type OutlineApprovalRequest, type OutlineApprovalResponse } from '@agent4novel/contracts'
 import type {
   Artifact, ArtifactKind, AdvanceOutcomeDto, CreativeContent, OutlineDraft,
   Work, WorkSummary, WorkView, StartChapterRequest, WorkCreateRequest,
@@ -147,4 +148,12 @@ export function saveOutlineDraft(workId: string, content: OutlineDraft, expected
 export async function approveArtifact(workId: string, kind: ArtifactKind) {
   return validate(pipelineStateSchema, await post(`/api/works/${encodeURIComponent(workId)}/approve`, { kind } satisfies ApproveRequest),
     result => result.workId === workId, true)
+}
+
+export async function approveOutline(workId: string, input: OutlineApprovalRequest): Promise<OutlineApprovalResponse> {
+  const frozen = outlineApprovalRequestSchema.parse(input)
+  const body = await withDeadline(30_000, signal => request(`/api/works/${encodeURIComponent(workId)}/artifacts/outline/approve`, {
+    method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify(frozen),
+  }, error => !('command' in error)))
+  return validate(outlineApprovalResponseSchema, body, result => matchesOutlineApprovalResponse(workId, frozen, result), true)
 }

@@ -66,6 +66,11 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
   const [leaving, setLeaving] = useState(false)
   const [configOpen, setConfigOpen] = useState(false)
   const [configExpanded, setConfigExpanded] = useState(false)
+  const materialGuardRef = useRef({ creative: { dirty: false, locked: false }, outline: { dirty: false, locked: false } })
+  const [creativeGuard, setCreativeGuard] = useState({ dirty: false, locked: false })
+  const [outlineGuard, setOutlineGuard] = useState({ dirty: false, locked: false })
+  const updateCreativeGuard = useCallback((guard: typeof creativeGuard) => { materialGuardRef.current.creative = guard; setCreativeGuard(previous => previous.dirty === guard.dirty && previous.locked === guard.locked ? previous : guard) }, [])
+  const updateOutlineGuard = useCallback((guard: typeof outlineGuard) => { materialGuardRef.current.outline = guard; setOutlineGuard(previous => previous.dirty === guard.dirty && previous.locked === guard.locked ? previous : guard) }, [])
   const [configGuard, setConfigGuard] = useState({ dirty: false, locked: false })
   const configGuardRef = useRef(configGuard)
   const updateConfigGuard = useCallback((guard: typeof configGuard) => {
@@ -147,14 +152,14 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
     return () => { mounted.current = false; readSequence.current++; commandSequence.current++ }
   }, [refresh])
   const dirty = (setting !== null && (isSettingDirty(setting) || setting.hasUnknownWrite || ['submitting', 'reconciling'].includes(setting.phase)))
-    || (beat !== null && isBeatDirty(beat)) || (prose !== null && isProseDirty(prose)) || generating || generationUncertain || starting || startUncertain || configGuard.dirty || badExampleGuard.dirty
-  const navigationLocked = generating || generationUncertain || starting || startUncertain || configGuard.locked || badExampleGuard.locked
+    || (beat !== null && isBeatDirty(beat)) || (prose !== null && isProseDirty(prose)) || generating || generationUncertain || starting || startUncertain || configGuard.dirty || badExampleGuard.dirty || creativeGuard.dirty || outlineGuard.dirty || creativeGuard.locked || outlineGuard.locked
+  const navigationLocked = generating || generationUncertain || starting || startUncertain || configGuard.locked || badExampleGuard.locked || creativeGuard.locked || outlineGuard.locked
     || !!prose && (prose.hasUnknownWrite || ['saving', 'submitting', 'regenerating', 'reconciling'].includes(prose.phase))
     || !!beat && (beat.hasUnknownWrite || ['submitting', 'regenerating', 'reconciling'].includes(beat.phase))
     || !!setting && (setting.hasUnknownWrite || ['submitting', 'reconciling'].includes(setting.phase))
   const chooseChapter = (chapter: number) => {
-    if (navigationLocked || chapter === chapterRef.current) return
-    if (dirty) setSwitchingTo(chapter)
+    if (materialGuardRef.current.creative.locked || materialGuardRef.current.outline.locked || navigationLocked || chapter === chapterRef.current) return
+    if (dirty || materialGuardRef.current.creative.dirty || materialGuardRef.current.outline.dirty) setSwitchingTo(chapter)
     else onSelectChapter(chapter)
   }
   useEffect(() => {
@@ -392,7 +397,8 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
     <>
       <aside className="work-rail" aria-label="作品导航">
       <button
-        onClick={() => { if (dirty) setLeaving(true); else if (!navigated.current) { navigated.current = true; onBack() } }}
+        disabled={navigationLocked}
+        onClick={() => { if (materialGuardRef.current.creative.locked || materialGuardRef.current.outline.locked) return; if (dirty || materialGuardRef.current.creative.dirty || materialGuardRef.current.outline.dirty) setLeaving(true); else if (!navigated.current) { navigated.current = true; onBack() } }}
         style={{ ...btnSecondary, padding: '4px 10px', minHeight: 'var(--compact-control-height)', fontSize: 13, marginBottom: 16 }}
       >
         ← 返回书架
@@ -415,7 +421,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
       {work && !work.chapters.length && <p className="setting-muted">先完成创意稿、大纲与设定，再开始第一章。</p>}
       </aside>
       <section className={showProse ? 'work-stage prose-stage' : 'work-stage'} aria-label="当前创作内容">
-      {work && !showProse && <div className="stage-heading"><span className="eyebrow">{showBeat ? `${chapterLabel(chapter)} · 章纲` : showSetting ? '全书 · 设定' : showOutline ? '全书 · 大纲' : showPoster ? '全书 · 创意稿' : '创作起点'}</span><span className="stage-state">{generating ? '正在生成' : isCurrentChapter ? '当前创作' : '历史阅读'}</span></div>}
+      {work && !showPoster && !showOutline && !showSetting && !showBeat && !showProse && <div className="stage-heading"><span className="eyebrow">{showBeat ? `${chapterLabel(chapter)} · 章纲` : showSetting ? '全书 · 设定' : showOutline ? '全书 · 大纲' : showPoster ? '全书 · 创意稿' : '创作起点'}</span><span className="stage-state">{generating ? '正在生成' : isCurrentChapter ? '当前创作' : '历史阅读'}</span></div>}
       {chapterSummary?.needsContinuityReview && <p className="setting-notice" role="status">前章正文已修改，请检查本章衔接。后续章节已保留，不会自动重写。</p>}
       {error && <p className="setting-notice" role="alert">{error}</p>}
       {error && <button type="button" style={btnSecondary} onClick={() => void (startUncertain ? confirmStart() : refresh())}>刷新作品</button>}
@@ -438,12 +444,13 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
 
       {showPoster && creativeArtifact && (
         <CreativePoster
-          key={`${creativeArtifact.id}:${creativeArtifact.version}`}
+          key="creative"
           workId={workId}
           content={creative as CreativeContent}
           headVersion={creativeArtifact.version}
           caption={caption}
           readonly={generating || work?.workflowState !== 'awaiting-selection' || !work.allowedActions.includes('select')}
+          onGuard={updateCreativeGuard}
           onChanged={() => void refresh()}
           onSelected={() => void continueAfterApproval()}
         />
@@ -452,11 +459,13 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
       {showOutline && outlineArtifact && (
         <OutlineReview
           workId={workId}
+          artifactId={outlineArtifact.id}
           content={outline as OutlineContent}
           headVersion={outlineArtifact.version}
           pack={creative?.directions[0] ?? null}
           readonly={work!.workflowState === 'outline-approved'}
           onChanged={() => void refresh()}
+          onGuard={updateOutlineGuard}
           onApproved={() => void continueAfterApproval()}
         />
       )}

@@ -5,7 +5,8 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { beatLimits } from '@agent4novel/contracts'
 import { FiniteMarkdown } from '../finite-markdown.js'
 import { ConfirmDialog } from '../ConfirmDialog.js'
-import { btnPrimary, btnSecondary, cardStyle, fieldStyle, smallBtnStyle } from '../ui.js'
+import MaterialFrame from '../MaterialFrame.js'
+import { btnPrimary, btnSecondary, cardStyle, fieldStyle, smallBtnStyle, focusMaterialField } from '../ui.js'
 export default function BeatReview({ state, onAction, allowCommands, onApprove, onRegenerate, onConfirm, onRetry }: {
   state: BeatReviewState; onAction: (action: BeatReviewAction) => void; allowCommands: boolean
   onApprove: () => void; onRegenerate: () => void; onConfirm: () => void; onRetry: () => void
@@ -21,8 +22,7 @@ export default function BeatReview({ state, onAction, allowCommands, onApprove, 
     if (!state.issues.length || state.mode !== 'edit') return
     const path = issuePath(state.issues[0]!.path)
     const element = Array.from(root.current?.querySelectorAll<HTMLElement>('[data-beat-path]') ?? []).find(e => e.dataset.beatPath === path)
-    element?.focus()
-    element?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+    focusMaterialField(element)
   }, [state.issues, state.mode])
   const markdown = (source: string) => <FiniteMarkdown source={source} maxChars={beatLimits.text} />
   const field = (path: string, label: string, value: string, multiline: boolean, change: (value: string) => void) => {
@@ -36,10 +36,11 @@ export default function BeatReview({ state, onAction, allowCommands, onApprove, 
       {errors.length > 0 && <span id={`beat-error-${path}`} className="setting-field-error" role="alert">{errors.map(e => e.message).join('；')}</span>}
     </label>
   }
-  return <section ref={root} className="setting-review review-page beat-page" aria-label="章纲关卡">
-    <header className="setting-review-header">
-      <div className="review-copy"><p className="setting-eyebrow eyebrow">{chapterLabel(state.baseline.chapter)} · 写作计划</p><h2 className="page-heading">{approved ? '章纲已通过' : '先看清这一章，再开始写作'}</h2>
-        <p className="setting-muted page-lede">{approved ? '后续正文使用这份章纲。' : '修改仅保存在当前页面；点击通过后，一次定稿。'}</p></div>
+  return <MaterialFrame rootRef={root} className="setting-review review-page beat-page" ariaLabel="章纲关卡"
+    label={`${chapterLabel(state.baseline.chapter)} · 写作计划`} title={approved ? '章纲已通过' : '先看清这一章，再开始写作'}
+    description={<p className="setting-muted page-lede">{approved ? '后续正文使用这份章纲。' : '修改保留在本页；通过当前章纲后继续生成正文。'}</p>}
+    status={<p className="setting-muted" role="status">{approved ? '已通过 · 只读参阅' : busy ? '操作处理中，当前内容已保留。' : '本页编辑在通过或重新生成时提交。'}</p>}
+    actions={<>
       {!approved && <div className="setting-actions">
         <button type="button" style={btnSecondary} onClick={() => onAction({ type: 'mode', mode: editing ? 'preview' : 'edit' })}>{editing ? '预览章纲' : '编辑章纲'}</button>
         <button type="button" disabled={locked} style={btnPrimary} onClick={() => {
@@ -47,7 +48,7 @@ export default function BeatReview({ state, onAction, allowCommands, onApprove, 
           else onApprove()
         }}>通过章纲并生成正文</button>
       </div>}
-    </header>
+    </>}>
     {state.notice && <p className="setting-notice" role="status">{state.notice}</p>}
     {busy && <p role="status">{state.phase === 'regenerating' ? '正在重新生成整份章纲…' : '正在确认结果…'} 当前内容已保留。</p>}
     {state.issues.length > 0 && <div className="setting-notice" role="alert">请检查标出的字段后再提交。<ul>{state.issues.map((issue, i) => <li key={i}>{issuePath(issue.path)}：{issue.message}</li>)}</ul></div>}
@@ -92,5 +93,5 @@ export default function BeatReview({ state, onAction, allowCommands, onApprove, 
     </section>}
     {confirmation && <ConfirmDialog title={confirmation.title} description={confirmation.description} cancelLabel="继续编辑" confirmLabel={confirmation.label}
       onCancel={() => setConfirmation(null)} onConfirm={() => { setConfirmation(null); confirmation.run() }} />}
-  </section>
+  </MaterialFrame>
 }

@@ -27,7 +27,7 @@ describe('collecting bad examples directly from saved prose', () => {
     try {
       await f.select()
       expect(button(f.host, '标记为坏例')).toBeDefined()
-      await act(async () => button(f.host, '标记为坏例')!.click())
+      await act(async () => { button(f.host, '标记为坏例')!.click(); await vi.waitFor(() => expect(calls).toHaveLength(1)) })
       expect(calls).toHaveLength(1)
       expect(calls[0]).toMatchObject({ chapter: 1, sourceArtifactId: baseline.id, sourceVersion: 2, sourceHash: createHash('sha256').update(baseline.content.text).digest('hex'), start: 1, end: 3, text: '😀', note: '' })
       expect(f.host.textContent).toContain('正文 v2'); expect(f.host.textContent).toContain('已保存坏例')
@@ -51,7 +51,7 @@ describe('collecting bad examples directly from saved prose', () => {
       return new Response(JSON.stringify({ workId: baseline.workId, chapter: 1, items: [] }))
     }))
     try {
-      await f.select(); await act(async () => button(f.host, '标记为坏例')!.click())
+      await f.select(); await act(async () => { button(f.host, '标记为坏例')!.click(); await vi.waitFor(() => expect(posts).toHaveLength(1)) })
       expect(posts).toHaveLength(1); expect(button(f.host, '重试标记原请求')).toBeDefined()
       await act(async () => button(f.host, '重试标记原请求')!.click())
       expect(posts).toHaveLength(2); expect(posts[1]).toEqual(posts[0]); expect(button(f.host, '重试标记原请求')).toBeDefined()

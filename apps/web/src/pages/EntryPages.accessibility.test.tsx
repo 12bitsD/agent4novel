@@ -3,7 +3,7 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Artifact, CreativeContent, OutlineContent } from '@agent4novel/contracts'
-import { approveArtifact, saveCreativeDraft, saveOutlineDraft, selectCreativeDirection } from '../api.js'
+import { approveOutline, saveCreativeDraft, saveOutlineDraft, selectCreativeDirection } from '../api.js'
 import Entry from './Entry.js'
 import CreativePoster from './CreativePoster.js'
 import OutlineReview from './OutlineReview.js'
@@ -14,7 +14,7 @@ vi.mock('../api.js', () => ({
   saveCreativeDraft: vi.fn(),
   selectCreativeDirection: vi.fn(),
   saveOutlineDraft: vi.fn(),
-  approveArtifact: vi.fn(),
+  approveOutline: vi.fn(),
 }))
 
 const directions: CreativeContent = {
@@ -55,6 +55,19 @@ async function edit(field: HTMLInputElement | HTMLTextAreaElement, value: string
 
 describe('entry pages accessible editing', () => {
   beforeEach(() => vi.clearAllMocks())
+  it.each(['creative', 'outline'] as const)('keeps the %s primary decision beside its material title and save state', async kind => {
+    const ui = await mount(kind === 'creative'
+      ? <CreativePoster workId="work-1" content={directions} headVersion={3} caption={null} readonly={false} onChanged={() => {}} />
+      : <OutlineReview workId="work-1" content={outline} headVersion={3} pack={null} readonly={false} onChanged={() => {}} />)
+    try {
+      const action = button(ui.host, kind === 'creative' ? '就按「方向一」这个方向写 →' : '通过大纲 →')
+      const header = ui.host.querySelector('header')!
+      expect(header.contains(action)).toBe(true)
+      expect(header.querySelector('[role="status"]')).not.toBeNull()
+      expect(ui.host.querySelectorAll('header')).toHaveLength(1)
+    } finally { await ui.cleanup() }
+  })
+
   it('keeps the entry material and optional title identifiable beyond their placeholders', async () => {
     const view = await mount(<Entry onBack={() => {}} onCreated={() => {}} />)
     try {
@@ -116,9 +129,9 @@ describe('entry pages accessible editing', () => {
     const nativeConfirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     const saved = { arcs: outline.arcs.map((arc, i) => i === 0 ? { ...arc, title: '修改后的开端' } : arc) }
     vi.mocked(saveOutlineDraft).mockResolvedValue(artifact('outline', 8, saved))
-    vi.mocked(approveArtifact).mockResolvedValue({ workId: 'work-1', stage: 'ready', nextStepId: 'setting' })
+    vi.mocked(approveOutline).mockResolvedValue({ ...artifact('outline', 8, outline), kind: 'outline', chapter: undefined, humanStatus: 'approved', content: outline })
     const approved = vi.fn()
-    const view = await mount(<OutlineReview workId="work-1" content={outline} headVersion={7} pack={null} readonly={false} onChanged={() => {}} onApproved={approved} />)
+    const view = await mount(<OutlineReview workId="work-1" artifactId="outline-7" content={outline} headVersion={7} pack={null} readonly={false} onChanged={() => {}} onApproved={approved} />)
     try {
       await edit(view.host.querySelector<HTMLInputElement>('[aria-label="弧线 1 标题"]')!, '修改后的开端')
       const trigger = button(view.host, '通过大纲 →')
@@ -133,13 +146,13 @@ describe('entry pages accessible editing', () => {
       expect(view.host.querySelector('[role="dialog"]')).toBeNull()
       expect(document.activeElement).toBe(trigger)
       expect(saveOutlineDraft).not.toHaveBeenCalled()
-      expect(approveArtifact).not.toHaveBeenCalled()
+      expect(approveOutline).not.toHaveBeenCalled()
       expect(view.host.querySelector<HTMLInputElement>('[aria-label="弧线 1 标题"]')?.value).toBe('修改后的开端')
       await act(async () => trigger.click())
       await act(async () => button(view.host, '确认通过大纲').click())
       expect(saveOutlineDraft).toHaveBeenCalledExactlyOnceWith('work-1', saved, 7)
-      expect(approveArtifact).toHaveBeenCalledExactlyOnceWith('work-1', 'outline')
-      expect(vi.mocked(saveOutlineDraft).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(approveArtifact).mock.invocationCallOrder[0]!)
+      expect(approveOutline).toHaveBeenCalledExactlyOnceWith('work-1', { expectedArtifactId: 'outline-8', expectedHeadVersion: 8 })
+      expect(vi.mocked(saveOutlineDraft).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(approveOutline).mock.invocationCallOrder[0]!)
       expect(approved).toHaveBeenCalledTimes(1)
       expect(nativeConfirm).not.toHaveBeenCalled()
     } finally { await view.cleanup(); nativeConfirm.mockRestore() }
