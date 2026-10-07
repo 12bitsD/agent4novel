@@ -186,6 +186,8 @@ README 提供使用入口。工程上下文和验证见 [项目 Wiki](./docs/wik
 
 优先级和排期由 [Project 看板](https://github.com/users/12bitsD/projects/3) 维护（访问需要权限）；[MVP 范围](https://github.com/12bitsD/agent4novel/issues/1) 保留初始目标与后续对齐。
 
+MVP 后的工程第二期路线、当前开发票和后置范围见 [第二期路线计划](./docs/plans/mvp-phase2-roadmap.md)。它是开发交接文档，不代表其中所有票据已经开始或已交付。
+
 ---
 
 [反馈问题或建议](https://github.com/12bitsD/agent4novel/issues) · [MIT 开源许可](./LICENSE)

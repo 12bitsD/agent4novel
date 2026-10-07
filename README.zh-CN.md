@@ -7,7 +7,7 @@
 - [创作流程](./README.md#创作流程)
 - [数据与限制](./README.md#数据与限制)
 - [工程文档](./README.md#文档)
-- [后续计划](./README.md#路线图)
+- [后续计划](./README.md#路线图) · [第二期路线计划](./docs/plans/mvp-phase2-roadmap.md)
 - [English](./README.en.md)
 
 本文件保留原中文文档路径。
