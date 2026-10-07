@@ -4,7 +4,7 @@
 
 核心读者是规划、实现、调试和评审本项目的 Agent。默认先按 `.claude/skills/agent4novel-wiki/SKILL.md` 检索并读取 `Agent Context`，只有任务需要时才展开技术方案或历史。
 
-恢复项目进度时，先读 [交接快照的当前里程碑与验证边界](../handoff.md#当前里程碑与验证边界)，再按本页索引进入相关 ticket。首章闭环、续章及完整 MVP 的完成状态分别核对 [#22](https://github.com/12bitsD/agent4novel/issues/22)、[#6](https://github.com/12bitsD/agent4novel/issues/6) 和 [#1](https://github.com/12bitsD/agent4novel/issues/1)。
+恢复项目进度时，先读 [交接快照的当前里程碑与验证边界](../handoff.md#当前里程碑与验证边界)，再按本页索引进入相关 ticket。首章闭环、续章及完整 MVP 的完成状态分别核对 [#22](https://github.com/12bitsD/agent4novel/issues/22)、[#6](https://github.com/12bitsD/agent4novel/issues/6) 和 [#1](https://github.com/12bitsD/agent4novel/issues/1)。MVP 后的当前排期见 [第二期路线](../plans/mvp-phase2-roadmap.md)，第一张开发票进入 [#51](https://github.com/12bitsD/agent4novel/issues/51) 与 [Wiki 051](./051-node-iteration-records.md)。
 
 ## 读者与内容边界
 
@@ -175,3 +175,4 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [043 MVP 复审边界修复](./043-mvp-review-boundary-fixes.md) | [#43](https://github.com/12bitsD/agent4novel/issues/43) | current | 配置导航、原起章基线和静态文件规范路径 |
 | [047 阅读排版与组件比例](./047-reading-layout-refinement.md) | [#47](https://github.com/12bitsD/agent4novel/issues/47) | mixed | 阅读列对齐、短章自然高度、控件密度及中屏单列；发布终态以 GitHub 为准 |
 | [049 作者编稿台](./049-author-workbench.md) | [#49](https://github.com/12bitsD/agent4novel/issues/49) | current | 稳定作品壳、材料交接、导航恢复与大纲可见版本 |
+| [051 节点实际输入输出记录与 Agent 迭代](./051-node-iteration-records.md) | [#51](https://github.com/12bitsD/agent4novel/issues/51) | current | `run-step` 实际调用记录、A/B 对照与 comment；当前开发票 |

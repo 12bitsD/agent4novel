@@ -1,7 +1,7 @@
 ---
 wiki_id: "049"
 ticket: 49
-ticket_state: active
+ticket_state: done
 context_state: current
 summary: "作者编稿台首期：稳定作品框架、真实材料交接与可见版本护栏"
 topics: ["frontend-design", "workbench", "material-handoff", "navigation-guards", "outline-approval"]
@@ -10,7 +10,7 @@ symbols: ["WorkShell", "MaterialFrame", "WorkSession", "approveOutline", "Outlin
 inherits: ["047", "043", "019", "004"]
 changed_by: []
 read_when: ["review-workbench", "change-material-handoff", "review-outline-approval", "debug-navigation-guards"]
-last_context_reviewed: "2026-10-06"
+last_context_reviewed: "2026-10-07"
 ---
 
 # 049 — 作者编稿台与材料交接
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-10-06"
 - **原始目的**：[#49](https://github.com/12bitsD/agent4novel/issues/49)落实已认可的作者编稿台方向。作者要求独立review无遗漏后直接开发。
 - **实际落地**：W0–W4与K01代码已落地，完整本地门禁和隔离浏览器两章验收通过；正式候选双轴与发布结果由审核证据及GitHub回读持有。
 - **当前价值**：作品身份持续、材料变化、作者把关；B框架＋适配＋CSS，沿用各节点控制器与真实权限。
-- **后续变化**：后置契约和工具/Wiki不联动；不据本地门禁推断CI、merge或issue关闭。
+- **后续变化**：PR50 已合并，#49 已按完成评论关闭；后置契约和工具/Wiki不联动，新增能力转入后续独立票。
 - **代码入口**：WorkShell/MaterialFrame组织呈现，Workspace/各Review执行原业务；新大纲条件请求涉及共享契约、Pipeline/Store和CLI。
 
 ## 设计目的
@@ -30,7 +30,7 @@ last_context_reviewed: "2026-10-06"
 
 ## 起始上下文
 
-固定点main `5ba9fe38062120231d42b8b64a8fc4b5e3cd1e23`；实施source `codex/49-author-workbench`→PR→main。main无保护、rulesets空，现有quality/container CI；沿用本会话已审核PR提交/合并授权。#49为新首期票，OPEN、ready-for-agent、assignee12bitsD、无Project/依赖，完成时保持元数据（Project N/A）。
+固定点main `5ba9fe38062120231d42b8b64a8fc4b5e3cd1e23`；实施source `codex/49-author-workbench`→[PR50](https://github.com/12bitsD/agent4novel/pull/50)→main `ce66affa3a0bf6ee76efde60dccb83c1ce396e46`。main无保护、rulesets空，quality/container CI 均成功；#49 以完成评论→关闭，保留 ready-for-agent、assignee12bitsD、无Project/依赖（Project N/A）。
 
 现有工作树供用户预览8795且保留三份自有方案草稿；新managed工作树 `/Users/user/.codex/worktrees/author-workbench/agent4novel`隔离实现与验收，复制三份已获准方案。原用户checkout/服务/数据和secret保留。仅复制本票资料，未把用户文件夹带。
 
@@ -110,6 +110,14 @@ K02–K06新增后端能力、丰富摘要/日期、创建幂等/精确回执、
 - **影响**：新实施票49、新隔离工作树与source；按已认可seams TDD，计划review与正式候选review分别记录。
 - **上下文处理**：preserve BC/Human/47参数/旧冻结审核与研究依据；replace 当前计划交接为本票实施入口，不修改权威归属。
 
+### 2026-10-07 — 发布状态回写
+
+- **触发证据**：GitHub 回读显示 [PR50](https://github.com/12bitsD/agent4novel/pull/50) 已合并到 main `ce66affa3a0bf6ee76efde60dccb83c1ce396e46`，#49 已发布完成评论并关闭。
+- **原假设**：实施阶段快照仍把本票写成 active，后续 Agent 需要从完成评论和远端状态判断是否交付。
+- **决定**：frontmatter 改为 `ticket_state: done`，起始上下文和交接结论补充实际 PR/CI/关闭状态；不改写既有审核证据和原始范围。
+- **影响**：后续开发从 Wiki051 与第二期路线进入，不把 #49 再当作当前实施入口。
+- **上下文处理**：`preserve`；保留原始目的、Human 决定、审计字段和失败实验，只替换已由远端事实改变的当前状态。
+
 ## 交接结论
 
-可继承稳定作品框架、材料呈现和各节点真实保存策略；K01不改变旧general approve语义。完整门禁及浏览器是本轮事实；发布/CI/合并/关闭由最后GitHub完成评论和live回读确认。后置创建幂等、历史全文/日期、长篇Wiki/tools和#46继续独立处理，不自动关闭。
+可继承稳定作品框架、材料呈现和各节点真实保存策略；K01不改变旧general approve语义。完整门禁、浏览器、PR50、CI 与关闭状态是本轮已回读事实。后置创建幂等、历史全文/日期、长篇Wiki/tools和#46继续独立处理，不自动关闭。

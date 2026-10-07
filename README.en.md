@@ -182,7 +182,7 @@ This README is the user entry point. The [project Wiki](./docs/wiki/README.md) h
 
 <a id="roadmap"></a>
 
-The [Project board](https://github.com/users/12bitsD/projects/3) manages priorities and scheduling (access requires permission). [MVP scope](https://github.com/12bitsD/agent4novel/issues/1) preserves the original goals and subsequent decisions.
+The [Project board](https://github.com/users/12bitsD/projects/3) manages priorities and scheduling (access requires permission). [MVP scope](https://github.com/12bitsD/agent4novel/issues/1) preserves the original goals and subsequent decisions. The [Phase 2 roadmap](./docs/plans/mvp-phase2-roadmap.md) records the current engineering queue, active ticket, and deferred scope; it does not mean every listed ticket has started or shipped.
 
 ---
 
