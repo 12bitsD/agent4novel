@@ -30,6 +30,16 @@ async function invokeRunStep(args: string[], providerUrl: string) {
   return { code, stdout, stderr }
 }
 
+async function invokeCli(args: string[], baseUrl: string) {
+  const child = spawn(cliBin, [...args, '--url', baseUrl], { env: cliTestEnv({ A4N_BASE_URL: baseUrl, A4N_CLI_TIMEOUT_MS: '10000' }), stdio: ['ignore', 'pipe', 'pipe'] })
+  let stdout = ''; let stderr = ''
+  child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8')
+  child.stdout.on('data', chunk => { stdout += chunk })
+  child.stderr.on('data', chunk => { stderr += chunk })
+  const [code] = await once(child, 'close')
+  return { code, stdout, stderr }
+}
+
 it('E6 runs creative regeneration through the executable and captures all four source files', async () => {
   const directory = mkdtempSync(join(realpathSync(tmpdir()), 'a4n-creative-record-'))
   const requests: string[] = []
@@ -61,6 +71,58 @@ it('E6 runs creative regeneration through the executable and captures all four s
     expect(readdirSync(recordDir).sort()).toEqual(['input.json', 'invocation.json', 'meta.json', 'result.json'])
     expect(statSync(recordDir).mode & 0o777).toBe(0o700)
     for (const file of ['input.json', 'invocation.json', 'meta.json', 'result.json']) expect(statSync(join(recordDir, file)).mode & 0o777).toBe(0o600)
+  } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
+}, 20000)
+
+it('E6 executes regenerate-creative as a one-POST process and never retries or reads after uncertainty', async () => {
+  const directory = mkdtempSync(join(realpathSync(tmpdir()), 'a4n-creative-cli-'))
+  const requestFile = join(directory, 'creative-request.json')
+  const malformedFile = join(directory, 'malformed-request.json')
+  writeFileSync(requestFile, JSON.stringify(request))
+  writeFileSync(malformedFile, JSON.stringify({ ...request, extra: true }))
+  const calls: Array<{ method: string; path: string; body: unknown }> = []
+  const responses: Array<{ status: number; body: unknown }> = [
+    { status: 200, body: generated },
+    { status: 200, body: { ...generated, id: request.expectedArtifactId } },
+    { status: 500, body: { code: 'internal-error', message: 'provider unavailable', retryable: false } },
+  ]
+  const server = createServer(async (req, res) => {
+    let source = ''; for await (const chunk of req) source += chunk
+    calls.push({ method: req.method ?? '', path: req.url ?? '', body: JSON.parse(source) })
+    const response = responses.shift()!
+    res.statusCode = response.status; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(response.body))
+  })
+  server.listen(0, '127.0.0.1'); await once(server, 'listening')
+  const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing service address')
+  const baseUrl = `http://127.0.0.1:${address.port}`
+  try {
+    const malformed = await invokeCli(['regenerate-creative', 'w1', '--file', malformedFile], baseUrl)
+    expect(malformed.code).toBe(1)
+    expect(JSON.parse(malformed.stderr)).toMatchObject({ code: 'invalid-input' })
+    expect(calls).toHaveLength(0)
+
+    const success = await invokeCli(['regenerate-creative', 'w1', '--file', requestFile], baseUrl)
+    expect(success.code, success.stderr).toBe(0)
+    expect(JSON.parse(success.stdout)).toMatchObject(generated)
+
+    const mismatch = await invokeCli(['regenerate-creative', 'w1', '--file', requestFile], baseUrl)
+    expect(mismatch.code).toBe(1)
+    expect(JSON.parse(mismatch.stderr)).toMatchObject({ code: 'invalid-response', writeOutcome: 'unknown' })
+
+    const unknown = await invokeCli(['regenerate-creative', 'w1', '--file', requestFile], baseUrl)
+    expect(unknown.code).toBe(1)
+    expect(JSON.parse(unknown.stderr)).toMatchObject({ code: 'creative-result-unknown', writeOutcome: 'unknown' })
+    expect(calls).toEqual([
+      { method: 'POST', path: '/api/works/w1/artifacts/creative/regenerate', body: request },
+      { method: 'POST', path: '/api/works/w1/artifacts/creative/regenerate', body: request },
+      { method: 'POST', path: '/api/works/w1/artifacts/creative/regenerate', body: request },
+    ])
+
+    const overlongFile = join(directory, 'overlong-step-input.json')
+    writeFileSync(overlongFile, JSON.stringify({ seed: 'CLI-OVERLONG-SEED', upstream: {}, regeneration: { content: null, instructions: 'x'.repeat(4001) } }))
+    const overlong = await invokeRunStep(['run-step', 'creative', '--input-file', overlongFile], baseUrl)
+    expect(overlong.code, overlong.stderr).not.toBe(0)
+    expect(calls).toHaveLength(3)
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
 }, 20000)
 describe('creative regeneration CLI', () => {

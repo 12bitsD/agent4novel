@@ -57,7 +57,7 @@ Web：未保存方向编辑先保存；本次补充想法单独保留。生成�
 
 反作弊：生产 Step canary 不接受 fake substring；失败断言同时核对当前 head；竞争用实际等待模型的 Promise；unknown 要有无回执或畸形 2xx 的记录并证明没有自动确认/重发。未跑的校准保持 pending。
 
-前置方法审查：Hume 只读 reviewer 首轮判 `FAIL`，指出原 v1 只有 E1 且 E2–E6 不可执行，尤其遗漏生产 prompt、竞争、unknown 和 creative 的 run-step 契约；上述 v2 已逐项补齐，后续需重新只读复核。受保护材料当前 SHA-256：server HTTP `41e8651ba9265abeea1e5f511bec33d8efdd3bd930f931738b92234ee43102b8`；HTTP+真实 Step `07a326aad444e802afc8093a300087ba7fd8c28fdd69cb8ff21b95cf7d85d6ac`；contracts `3b53a3263516a184c9ab177cb7c703bb361d9905eb54cc0f91f3eeec25c774d7`；Web `73c1b2dc524ee02eb9897e4948f8e8981cc2e4a7542738205c4bdd0d176d3c93`；CLI `aa026bf7d6781ab656acb4e7b642899951e167d3b1be82b23f721202ba4771b5`。
+前置方法审查：Hume 只读 reviewer 首轮判 `FAIL`，指出原 v1 只有 E1 且 E2–E6 不可执行，尤其遗漏生产 prompt、竞争、unknown 和 creative 的 run-step 契约；上述 v2 已逐项补齐，后续需重新只读复核。受保护材料当前 SHA-256：server HTTP `dc3aacd34f46f6a26bf1e0af51d8313612de7f922e229561f782d908121eeb97`；HTTP+真实 Step `07a326aad444e802afc8093a300087ba7fd8c28fdd69cb8ff21b95cf7d85d6ac`；contracts `3b53a3263516a184c9ab177cb7c703bb361d9905eb54cc0f91f3eeec25c774d7`；Web `f5a59fe6bad772c40afb1a6fcb40fe2a55a6ff360161b1eaf0515b0d07cb6e11`；CLI `bec8c84f071271ce488f888c4a32e758737c9c6f6d4c6a299e697a7569b92ce6`。
 
 ### TDD 切片与轮次
 
@@ -75,7 +75,7 @@ R0：Hume 方法审查 FAIL；补齐 v2 受保护 eval 后，目标端点公开 
 
 - **清单与候选**：fixed point 如上；清单 blob/T0/T1/manifest pending。
 - **逐项判定**：C1 初始对齐如上，余项 pending。
-- **验收与 TDD**：E1–E6 v1；R0 RED pending，验收方法审查 pending。
+- **验收与 TDD**：E1–E6 v2；R0 RED 已冻结，验收方法审查待复核。
 - **本地门禁**：pending。
 - **双轴 review**：pending。
 - **修复与回归**：pending。

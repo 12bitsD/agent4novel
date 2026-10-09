@@ -37,7 +37,7 @@ async function regenerate(app: ReturnType<typeof createApp>, workId: string, req
   })
 }
 
-describe('creative regeneration acceptance v1', () => {
+describe('creative regeneration acceptance v2', () => {
   it('E1 retries only creative against a null baseline, preserving seed and approved caption', async () => {
     const store = new InMemoryStore()
     const work = store.createWork({ seed: 'E1 unique immutable seed' })
@@ -84,6 +84,7 @@ describe('creative regeneration acceptance v1', () => {
     const work = store.createWork({ seed: 'E3 seed' })
     store.appendArtifact(work.id, 'caption', caption('E3 caption'), { humanStatus: 'approved' })
     const old = store.appendArtifact(work.id, 'creative', creative('E3 old'))
+    const before = JSON.parse(JSON.stringify(store.getWork(work.id)!.artifacts))
     const step = fakeArtifactStep('creative', creative('unused'))
     step.step.run = async () => {
       const value = result()
@@ -94,6 +95,7 @@ describe('creative regeneration acceptance v1', () => {
     const response = await regenerate(app, work.id, { expectedArtifactId: old.id, expectedHeadVersion: old.version, instructions: 'E3' })
     expect(response.status).toBe(expectedStatus)
     expect(await response.json()).toMatchObject({ code: expect.any(String), message: expect.not.stringContaining('E3 old') })
+    expect(store.getWork(work.id)!.artifacts).toEqual(before)
     expect(store.getWork(work.id)!.artifacts.find(a => a.kind === 'creative')).toMatchObject({ id: old.id, version: old.version, content: old.content, humanStatus: 'pending' })
   })
 
@@ -104,6 +106,9 @@ describe('creative regeneration acceptance v1', () => {
     const { app } = appFor(store, step)
 
     expect((await regenerate(app, work.id, { expectedArtifactId: 'only-id', expectedHeadVersion: null, instructions: '' })).status).toBe(400)
+    const noCreativeBefore = JSON.parse(JSON.stringify(store.getWork(work.id)!.artifacts))
+    expect((await regenerate(app, work.id, { expectedArtifactId: 'missing-creative', expectedHeadVersion: 1, instructions: '' })).status).toBe(409)
+    expect(store.getWork(work.id)!.artifacts).toEqual(noCreativeBefore)
     expect((await regenerate(app, work.id, { expectedArtifactId: null, expectedHeadVersion: null, instructions: '' })).status).toBe(409)
     expect(step.seen).toHaveLength(0)
 
@@ -111,6 +116,9 @@ describe('creative regeneration acceptance v1', () => {
     expect((await regenerate(app, work.id, { expectedArtifactId: null, expectedHeadVersion: null, instructions: '' })).status).toBe(409)
     const source = store.appendArtifact(work.id, 'caption', caption('E4 caption'), { humanStatus: 'approved' })
     const old = store.appendArtifact(work.id, 'creative', creative('E4 old'))
+    const pendingCreativeBefore = JSON.parse(JSON.stringify(store.getWork(work.id)!.artifacts))
+    expect((await regenerate(app, work.id, { expectedArtifactId: null, expectedHeadVersion: null, instructions: '' })).status).toBe(409)
+    expect(store.getWork(work.id)!.artifacts).toEqual(pendingCreativeBefore)
     expect((await regenerate(app, work.id, { expectedArtifactId: 'stale', expectedHeadVersion: old.version, instructions: '' })).status).toBe(409)
     expect((await regenerate(app, work.id, { expectedArtifactId: old.id, expectedHeadVersion: old.version + 1, instructions: '' })).status).toBe(409)
     expect(step.seen).toHaveLength(0)
@@ -138,8 +146,10 @@ describe('creative regeneration acceptance v1', () => {
     const pending = regenerate(app, work.id, { expectedArtifactId: old.id, expectedHeadVersion: old.version, instructions: '' })
     await started
     store.appendArtifact(work.id, 'creative', creative('E4 competing creative'))
+    const expectedAfterRace = JSON.parse(JSON.stringify(store.getWork(work.id)!.artifacts))
     release()
     expect((await pending).status).toBe(409)
+    expect(store.getWork(work.id)!.artifacts).toEqual(expectedAfterRace)
     expect(store.getWork(work.id)!.artifacts.find(a => a.kind === 'creative')?.content).toEqual(creative('E4 competing creative'))
   })
 
@@ -149,16 +159,21 @@ describe('creative regeneration acceptance v1', () => {
     const captionHead = store.appendArtifact(work.id, 'caption', caption('E4 caption race old'), { humanStatus: 'approved' })
     const old = store.appendArtifact(work.id, 'creative', creative('E4 caption race old creative'))
     let release!: () => void
+    let entered!: () => void
     const waiting = new Promise<void>(resolve => { release = resolve })
+    const started = new Promise<void>(resolve => { entered = resolve })
     const step = fakeArtifactStep('creative', creative('E4 caption race generated'))
-    step.step.run = async input => { step.seen.push(input); await waiting; return { content: creative('E4 caption race generated') } }
+    step.step.run = async input => { step.seen.push(input); entered(); await waiting; return { content: creative('E4 caption race generated') } }
     const { app } = appFor(store, step)
     const pending = regenerate(app, work.id, { expectedArtifactId: old.id, expectedHeadVersion: old.version, instructions: '' })
-    await new Promise(resolve => setTimeout(resolve, 0))
+    await started
     store.appendArtifact(work.id, 'caption', caption('E4 caption race competing'))
+    const expectedAfterRace = JSON.parse(JSON.stringify(store.getWork(work.id)!.artifacts))
     release()
     expect((await pending).status).toBe(409)
+    expect(store.getWork(work.id)!.artifacts).toEqual(expectedAfterRace)
     expect(store.getWork(work.id)!.artifacts.find(a => a.kind === 'caption')).toMatchObject({ version: captionHead.version + 1, content: caption('E4 caption race competing') })
+    expect(store.getWork(work.id)!.artifacts.find(a => a.kind === 'creative')).toMatchObject({ id: old.id, version: old.version, content: old.content })
     expect(step.seen).toHaveLength(1)
   })
 
