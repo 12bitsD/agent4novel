@@ -45,7 +45,7 @@ read_when:
 | E20.5 | failure/unknown 不追加半包、不自动选择，冻结请求/比较材料保留 | no new head + Web locked/recovery assertion |
 | E20.6 | Harness 可通过严格 CLI/HTTP 与 run-step 读取输入、输出、来源身份 | CLI contract + real Step/run-step record |
 
-固定点：`d6b529802811c48560f5de1107ffad3acff72aa8`。验收方法修订提交：`d3d2eda`（包含 `90d7776d`、`689c962d`）。四个受保护文件 SHA-256 为：contracts `cddcb53f7f4964ea69e984c4e97c98a474170850cb5cb24de14c23a9eaff3f2c`、server `d2b7d7c02589a08460e7c91dc69d9a8144c76bbaa8bbf8a7171fd020e2a6c64d`、web `9a0c57b46e77b4ac5444b6d1a06b21d71bcea87ea283875bcc590235edacdda7`、CLI `51fdadcb9ddb4c5ea710e694e5ba58813c3eec8c88206d3082787f088c69e507`。当前只冻结验收方法，尚未宣称实现完成；后续由实施 Agent 只改生产文件和非受保护测试，主 Agent独立运行本页验收、全量门禁与双轴 review。
+固定点：`d6b529802811c48560f5de1107ffad3acff72aa8`。验收方法修订提交：`b1c1b0e`（包含 `d3d2eda`、`90d7776d`、`689c962d`）。四个受保护文件 SHA-256 为：contracts `cddcb53f7f4964ea69e984c4e97c98a474170850cb5cb24de14c23a9eaff3f2c`、server `7a186edd3417ca3dff88e1ffd5b37e787f096308eab971370c54e0743ed6015d`、web `9a0c57b46e77b4ac5444b6d1a06b21d71bcea87ea283875bcc590235edacdda7`、CLI `51fdadcb9ddb4c5ea710e694e5ba58813c3eec8c88206d3082787f088c69e507`。当前只冻结验收方法，尚未宣称实现完成；后续由实施 Agent 只改生产文件和非受保护测试，主 Agent独立运行本页验收、全量门禁与双轴 review。
 
 ## 代码落点（候选）
 
