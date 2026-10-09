@@ -30,17 +30,19 @@ describe('E20 Web acceptance: compare/select beat variants', () => {
   it('keeps frozen A/B visible and locks approval after an unknown selection result', async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true); vi.stubGlobal('crypto', { randomUUID: () => 'local-key' })
     const host = document.createElement('div'); document.body.append(host); const root = createRoot(host)
-    const actions: string[] = []; const onAction = vi.fn((action: { type: string }) => actions.push(action.type))
+    const actions: string[] = []; const onAction = vi.fn((action: { type: string }) => actions.push(action.type)); const onRetry = vi.fn()
     const state = { ...initBeatReview(original), phase: 'uncertain', mode: 'preview', hasUnknownWrite: true,
-      comparison: { original, candidate }, notice: '选择结果尚未确认' } as BeatReviewState
+      comparison: { original, candidate }, notice: '选择结果尚未确认', recovery: { resolution: 'uncertain', nextActions: ['read-work', 'retry-frozen-request'], hasUnknownWrite: true } } as BeatReviewState
     try {
-      await act(async () => root.render(<BeatReview state={state} allowCommands onAction={onAction} onApprove={vi.fn()} onRegenerate={vi.fn()} onConfirm={vi.fn()} onRetry={vi.fn()}
+      await act(async () => root.render(<BeatReview state={state} allowCommands onAction={onAction} onApprove={vi.fn()} onRegenerate={vi.fn()} onConfirm={vi.fn()} onRetry={onRetry}
         onChooseVariant={vi.fn()} />))
       expect(host.textContent).toContain('旧章纲'); expect(host.textContent).toContain('新章纲'); expect(host.textContent).toContain('选择结果尚未确认')
       expect(Array.from(host.querySelectorAll('button')).some(button => button.textContent?.includes('采用新章纲'))).toBe(false)
       expect(Array.from(host.querySelectorAll('button')).find(button => button.textContent?.includes('通过章纲'))?.disabled ?? true).toBe(true)
       await act(async () => { Array.from(host.querySelectorAll('button')).find(button => button.textContent === '核对服务器结果')!.click() })
       expect(actions).toEqual(['confirm'])
+      await act(async () => { Array.from(host.querySelectorAll('button')).find(button => button.textContent === '重试同一份请求')!.click() })
+      expect(onRetry).toHaveBeenCalledTimes(1)
     } finally { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals() }
   })
 })

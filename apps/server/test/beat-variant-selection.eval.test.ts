@@ -7,6 +7,7 @@ import { fakeArtifactStep } from './fakes.js'
 import type { ArtifactStep, PipelineDefinitionEntry } from '../src/pipeline/pipeline.js'
 import type { AgentConfig } from '@agent4novel/contracts'
 import { beatCommandResponseSchema, beatVariantSelectionResponseSchema } from '@agent4novel/contracts'
+import { KnownError } from '../src/errors.js'
 
 const headers = { 'Content-Type': 'application/json' }
 const caption = { inputStage: '脑洞', summary: '摘要', elements: [{ kind: '冲突', content: '线索' }], gaps: [] }
@@ -51,11 +52,15 @@ describe('E20 server acceptance: compare/select beat variants', () => {
     expect(body.comparison.candidate.humanStatus).toBe('pending')
     expect(body.comparison.candidate.id).toBe(body.artifact.id)
     expect(body.comparison.candidate.version).toBe(2)
+    const current = await fx.app.request(`/api/works/${fx.work.id}`)
+    expect(current.status).toBe(200)
+    expect((await current.json() as any).artifacts.find((a: any) => a.kind === 'beat' && a.chapter === 1)).toMatchObject({ id: body.artifact.id, version: 2, humanStatus: 'pending' })
     const candidate = body.artifact
     const choose = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/select`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: candidate.id, expectedHeadVersion: candidate.version,
         originalArtifactId: fx.beat.id, originalVersion: fx.beat.version, originalContent: original, choice: 'new' }) })
     expect(choose.status).toBe(200); const selected = await choose.json() as any
+    expect(() => beatVariantSelectionResponseSchema.parse(selected)).not.toThrow()
     expect(selected.artifact).toEqual(candidate)
     expect(selected.comparison).toMatchObject({ original: fx.beat, candidate })
     expect(selected.selection).toMatchObject({ operation: 'select-beat-variant', choice: 'new', writeOutcome: 'not-committed', resultHead: { artifactId: candidate.id, version: 2, humanStatus: 'pending' } })
@@ -92,9 +97,6 @@ describe('E20 server acceptance: compare/select beat variants', () => {
     expect(fx.store.getArtifactVersion(fx.work.id, 'beat', 1, fx.beat.id, 1)?.content).toEqual(original)
     expect(fx.store.getArtifactVersion(fx.work.id, 'beat', 1, candidate.id, 2)?.content).toEqual(regenerated)
     expect(fx.store.getArtifactVersion(fx.work.id, 'beat', 1, selected.artifact.id, 3)?.content).toEqual(original)
-    const approve = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/approve`, { method: 'POST', headers,
-      body: JSON.stringify({ chapter: 1, expectedArtifactId: selected.artifact.id, expectedHeadVersion: 3, content: selected.artifact.content }) })
-    expect(approve.status).toBe(200); expect((await approve.json()).artifact.id).toBe(selected.artifact.id)
     for (const stale of [
       { expectedArtifactId: fx.beat.id, expectedHeadVersion: 1, content: original },
       { expectedArtifactId: candidate.id, expectedHeadVersion: 2, content: candidate.content },
@@ -103,6 +105,9 @@ describe('E20 server acceptance: compare/select beat variants', () => {
         body: JSON.stringify({ chapter: 1, ...stale }) })
       expect(rejected.status).toBe(409)
     }
+    const approve = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/approve`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: selected.artifact.id, expectedHeadVersion: 3, content: selected.artifact.content }) })
+    expect(approve.status).toBe(200); expect((await approve.json()).artifact.id).toBe(selected.artifact.id)
     expect(fx.store.getWork(fx.work.id)!.artifacts.filter(a => a.kind === 'beat' && a.chapter === 1).map(a => [a.id, a.version, a.humanStatus])).toEqual([[selected.artifact.id, 3, 'approved']])
   })
 
@@ -142,12 +147,16 @@ describe('E20 server acceptance: compare/select beat variants', () => {
     const first = await race.app.request(`/api/works/${race.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: race.beat.id, expectedHeadVersion: 1, content: original, instructions: '' }) })
     const firstB = (await first.json() as any).artifact
-    const second = await race.app.request(`/api/works/${race.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
-      body: JSON.stringify({ chapter: 1, expectedArtifactId: firstB.id, expectedHeadVersion: 2, content: regenerated, instructions: 'second' }) })
-    const secondC = (await second.json() as any).artifact
-    const lostRace = await race.app.request(`/api/works/${race.work.id}/artifacts/beat/select`, { method: 'POST', headers,
-      body: JSON.stringify({ chapter: 1, expectedArtifactId: firstB.id, expectedHeadVersion: 2, originalArtifactId: race.beat.id, originalVersion: 1, originalContent: original, choice: 'new' }) })
-    expect(lostRace.status).toBe(409)
-    expect(race.store.getArtifactVersion(race.work.id, 'beat', 1, secondC.id, 3)?.content).toEqual(regenerated)
+    const selectBody = { chapter: 1, expectedArtifactId: firstB.id, expectedHeadVersion: 2, originalArtifactId: race.beat.id, originalVersion: 1, originalContent: original, choice: 'original' }
+    const [winner, loser] = await Promise.all([1, 2].map(() => race.app.request(`/api/works/${race.work.id}/artifacts/beat/select`, { method: 'POST', headers, body: JSON.stringify(selectBody) })))
+    expect([winner.status, loser.status].sort()).toEqual([200, 409])
+    expect(race.store.getWork(race.work.id)!.artifacts.find(a => a.kind === 'beat' && a.chapter === 1)?.version).toBe(3)
+
+    const timeoutStep: ArtifactStep = { ...fakeArtifactStep('beat', regenerated).step, async run() { throw new KnownError('llm-timeout', 'synthetic timeout') } }
+    const timeoutFx = makeFixture(timeoutStep)
+    const timeout = await timeoutFx.app.request(`/api/works/${timeoutFx.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: timeoutFx.beat.id, expectedHeadVersion: 1, content: original, instructions: '' }) })
+    expect(timeout.status).toBe(504)
+    expect(timeoutFx.store.getWork(timeoutFx.work.id)!.artifacts.find(a => a.kind === 'beat' && a.chapter === 1)?.version).toBe(1)
   })
 })

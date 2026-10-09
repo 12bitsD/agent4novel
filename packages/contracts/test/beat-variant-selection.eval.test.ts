@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { beatContentSchema, beatVariantSelectionRequestSchema, beatVariantSelectionResponseSchema } from '../src/index.js'
+import { beatCommandResponseSchema, beatContentSchema, beatVariantSelectionRequestSchema, beatVariantSelectionResponseSchema } from '../src/index.js'
 
 const original = {
   title: '旧章纲', goal: '守住线索',
@@ -18,6 +18,7 @@ describe('E20 contract: beat variant compare/select', () => {
   })
 
   it('requires the complete compare receipt and rejects undocumented fields', () => {
+    expect(beatCommandResponseSchema.shape.comparison).toBeDefined()
     expect(beatVariantSelectionRequestSchema.safeParse({ chapter: 1, expectedArtifactId: 'beat-b', expectedHeadVersion: 2,
       originalArtifactId: artifact.id, originalVersion: 1, originalContent: original, choice: 'new', extra: true }).success).toBe(false)
     expect(beatVariantSelectionResponseSchema.safeParse({

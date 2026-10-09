@@ -83,4 +83,22 @@ describe('E20 CLI/Harness acceptance: beat variant selection', () => {
       expect(recordedInput.input.regeneration).toEqual({ content: artifactA.content, instructions: '保留旧线索并加快行动。' }); expect(recordedInput.sources.inputPath).toBe(inputFile); expect(recordedInput.sources.systemPromptPath).toBe(promptFile); expect(recordedInput.sources.configPath).toBe(configFile); expect(invocation.captured).toBe(true); expect(invocation.system).toContain('受保护的 Beat system prompt'); expect(invocation.prompt).toContain('保留旧线索并加快行动'); expect(invocation.effectiveConfig).toMatchObject({ model: 'longcat:LongCat-2.0', thinking: 'disabled', temperature: 0.4, topP: 0.6 }); expect(recordedResult).toMatchObject({ status: 'succeeded', content: { title: '模型新章纲' } }); expect(meta).toMatchObject({ complete: true, status: 'complete', stepId: 'beat' }); expect(statSync(join(recordDir, 'input.json')).mode & 0o777).toBe(0o600)
     } finally { provider.closeAllConnections(); await new Promise<void>(resolve => provider.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
   }, 30_000)
+
+  it('keeps the frozen selection file and never retries on malformed or timed-out selection results', async () => {
+    const directory = mkdtempSync(join(realpathSync(tmpdir()), 'a4n-beat-unknown-cli-')); const file = join(directory, 'selection.json')
+    const selection = { chapter: 1, expectedArtifactId: 'beat-b', expectedHeadVersion: 2, originalArtifactId: 'beat-a', originalVersion: 1, originalContent: artifactA.content, choice: 'new' }
+    writeFileSync(file, JSON.stringify(selection))
+    let malformedCalls = 0; const malformed = createServer((req, res) => { if (req.method === 'POST') malformedCalls++; res.setHeader('Content-Type', 'application/json'); res.end('{}') })
+    malformed.listen(0, '127.0.0.1'); await once(malformed, 'listening'); const malformedAddress = malformed.address(); if (!malformedAddress || typeof malformedAddress === 'string') throw new Error('missing malformed address')
+    try {
+      const result = await invoke(['select-beat-variant', 'work-test', '--file', file], `http://127.0.0.1:${malformedAddress.port}`)
+      expect(result.code).toBe(1); expect(JSON.parse(result.stderr)).toMatchObject({ code: 'invalid-response' }); expect(malformedCalls).toBe(1); expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(selection)
+    } finally { malformed.closeAllConnections(); await new Promise<void>(resolve => malformed.close(() => resolve())) }
+    let timeoutCalls = 0; const timeoutServer = createServer(async (req, res) => { if (req.method === 'POST') timeoutCalls++; await new Promise(resolve => setTimeout(resolve, 1500)); res.setHeader('Content-Type', 'application/json'); res.end('{}') })
+    timeoutServer.listen(0, '127.0.0.1'); await once(timeoutServer, 'listening'); const timeoutAddress = timeoutServer.address(); if (!timeoutAddress || typeof timeoutAddress === 'string') throw new Error('missing timeout address')
+    try {
+      const result = await invoke(['select-beat-variant', 'work-test', '--file', file, '--timeout-ms', '1000'], `http://127.0.0.1:${timeoutAddress.port}`)
+      expect(result.code).toBe(1); expect(JSON.parse(result.stderr)).toMatchObject({ code: 'network-error' }); expect(timeoutCalls).toBe(1); expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(selection)
+    } finally { timeoutServer.closeAllConnections(); await new Promise<void>(resolve => timeoutServer.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
+  }, 10_000)
 })
