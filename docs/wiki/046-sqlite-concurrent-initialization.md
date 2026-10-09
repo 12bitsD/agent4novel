@@ -85,14 +85,16 @@ pnpm build
 
 ### 完成审核证据
 
-- **清单与候选**：固定点为 `7a19b4378f9d8bb1ba22cc5ffba36c4b9184c037`；候选分支 `codex/sqlite-init-loop`。C1–C4 的 issue、Wiki、handoff、索引和范围证据已建立；最终 T2 hash 不写入本页。
-- **逐项判定**：C1–C4 待最终候选逐项记录；C5 双轴 review 已发现的 AC5 问题已在 R3 修复，需对最终文档/代码候选重新审查；C6.5–C6.7 及最终 C6 = PASS 留给 GitHub 完成评论。
+- **清单与候选**：清单 blob `42116082e8ca2804d826cc00f6578270077f60eb`；固定点 `7a19b4378f9d8bb1ba22cc5ffba36c4b9184c037`；候选 T0 commit `639200eefcae3f1853a87f83bb2feeab1230f8d5`、T0 tree `3d4424e316c9ba23d9e15216dbf2fecd0f74cfb4`，分支 `codex/sqlite-init-loop`。最终 T2 hash 不写入本页。
+- **逐项判定**：C1–C4 = PASS：issue #46 的 WHAT/范围/依赖与元数据已回读，Wiki009/领域/schema/运行边界已读，验收先于实施固定，交接和索引已同步；C5 = PASS：候选历史、diff、真实锁竞争、全量门禁和双轴 review 已独立核对。C6.5–C6.7 及最终 C6 = PASS 留给 GitHub 完成评论。
 - **验收与 TDD**：AC1–AC6 已有实际代码入口；可控 busy 是第二个 SQLite connection 的真实锁竞争，独立 worker 回归 seed、CAS、unknown schema 与强杀恢复。
-- **本地门禁**：定向门禁如上；`pnpm test`、`pnpm typecheck`、`pnpm build`、secret/links/完整历史审计将在冻结候选后执行并填入。
-- **双轴 review**：首轮 Standards review 曾因 AC5 阻塞，Spec review PASS；R3 后必须重新取得相互隔离的 Standards/Spec PASS。
+- **本地门禁**：最终 T0 执行 `pnpm test`，contracts `19 files/121 tests`、CLI `16 files/202 tests`、server `39 files/425 tests`、web `32 files/208 tests`，合计 `956 tests` PASS；`pnpm typecheck`、`pnpm build` PASS；build 保留既有 web chunk size warning；SQLite 五组定向测试 `102 tests` PASS；独立 process 回归重复10次，每次5 tests PASS；Markdown 相对链接 `503 checked/0 missing`；`git diff --check` PASS。未执行真实 Provider。
+- **双轴 review**：首轮 Standards review 发现并阻塞 AC5，R3 修复后重新取得相互隔离的 `Pasteur / Standards = PASS` 与 `Avicenna / Spec = PASS`；两者均未修改候选，均核对 R3 未扩票。
 - **修复与回归**：R2 修复 worker/timeout，R3 修复非 busy 初始化诊断；每次修复均重跑 SQLite 定向测试和 server typecheck。
 - **知识维护**：新增本页、Wiki 索引和 handoff；未改 `docs/schema.md`（不改变数据库 schema），未新增 ADR（沿用 Wiki009/ADR0002 的存储边界），未新增 README/运行 skill 能力说明。
-- **发布前裁决**：待独立 reviewer 对最终 T1 的 attestation；未执行真实 Provider 质量验证。
+- **C6.4 reviewer attestation**：独立 reviewer `Mendel` 对 `T0 tree=3d4424e316c9ba23d9e15216dbf2fecd0f74cfb4 → T1 tree=74d1d71f456647436ff8a0c5d4fd1f07281a6eca` 比对结论 `PASS`；确认仅修改本节保留字段，无代码、测试、README、handoff 或范围夹带；staged diff check PASS。
+- **C6.5 发布前裁决**：基于 C6.4 PASS，C1–C5、C6.1–C6.4、R0–R3、双轴 review、本地门禁与剩余风险已忠实收口；不在本页写最终 T2 hash 或 `C6 = PASS`；未执行真实 Provider 质量验证。
+- **C6.6 终止性核对**：待独立 reviewer 对 T1→T2 的受控字段差异做终止性比对。
 
 ## 边界与非目标
 
