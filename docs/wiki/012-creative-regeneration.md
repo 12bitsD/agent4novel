@@ -19,9 +19,9 @@ last_context_reviewed: "2026-10-10"
 
 - **读取时机**：修改创意稿失败重试、补充想法、再生和未知结果恢复时。
 - **原始目的**：[#12](https://github.com/12bitsD/agent4novel/issues/12) 中失败后缺入口、方向不满意缺补充想法；二期仅交付此核心子范围。
-- **实际落地**：尚未实施；下方冻结验收后派工。
+- **实际落地**：已实现独立 HTTP/CLI 再生入口、Pipeline 锁与 Store CAS、真实 Creative Step 输入装配、Web 补充想法与恢复锁定；当前候选待 PR/CI 与远端回读。
 - **当前价值**：沿用 011 的整步方向包和显式选定；不放开已选方向重生。
-- **后续变化**：渐进展示、分段提炼、历史回看仍后置，原始需求在 issue 保留。
+- **后续变化**：渐进展示、分段提炼、历史回看仍后置，原始需求在 issue 保留；连续再生的本地 artifact identity 漂移在 R2 修复。
 - **代码入口**：Pipeline/creative Step、CreativePoster（Workspace 内的比较关卡）、CLI 文件请求。
 
 ## 设计目的
@@ -57,7 +57,7 @@ Web：未保存方向编辑先保存；本次补充想法单独保留。生成�
 
 反作弊：生产 Step canary 不接受 fake substring；失败断言同时核对当前 head；竞争用实际等待模型的 Promise；unknown 要有无回执或畸形 2xx 的记录并证明没有自动确认/重发。未跑的校准保持 pending。
 
-前置方法审查：Hume 只读 reviewer 首轮判 `FAIL`，指出原 v1 只有 E1 且 E2–E6 不可执行，尤其遗漏生产 prompt、竞争、unknown 和 creative 的 run-step 契约；上述 v2 已逐项补齐，后续需重新只读复核。受保护材料当前 SHA-256：server HTTP `dc3aacd34f46f6a26bf1e0af51d8313612de7f922e229561f782d908121eeb97`；HTTP+真实 Step `07a326aad444e802afc8093a300087ba7fd8c28fdd69cb8ff21b95cf7d85d6ac`；contracts `3b53a3263516a184c9ab177cb7c703bb361d9905eb54cc0f91f3eeec25c774d7`；Web `f5a59fe6bad772c40afb1a6fcb40fe2a55a6ff360161b1eaf0515b0d07cb6e11`；CLI `bec8c84f071271ce488f888c4a32e758737c9c6f6d4c6a299e697a7569b92ce6`。
+前置方法审查：Hume 只读 reviewer 首轮判 `FAIL`，指出原 v1 只有 E1 且 E2–E6 不可执行；v2 补齐生产 prompt、竞争、unknown、CLI 进程与 run-step 契约，Lagrange 最终只读复核判 `PASS`。受保护材料当前 SHA-256：server HTTP `9b30b51a5ffba27c0395b0f6ef7941b2be6225f0d31d5d9be7764c53650d8189`；HTTP+真实 Step `285de5819773ef3e5eacce12eb684a5b3c3f9a8fa2b255cb9e3f8072065f7c4a`；contracts `3b53a3263516a184c9ab177cb7c703bb361d9905eb54cc0f91f3eeec25c774d7`；Web `90fbcd06cdce133a10485a06e727837adb3c8b033c4074adbc0c12fc59ad8dbb`；CLI `bec8c84f071271ce488f888c4a32e758737c9c6f6d4c6a299e697a7569b92ce6`。
 
 ### TDD 切片与轮次
 
@@ -69,18 +69,22 @@ R0：Hume 方法审查 FAIL；补齐 v2 受保护 eval 后，目标端点公开 
 
 ## 测试与验证
 
-待取得。
+- 定向 acceptance：contracts `2 passed`；server HTTP + real Step `9 passed`；Web `2 passed`；CLI `7 passed`；Web/CLI/worker 辅助测试通过。
+- 完整仓库：`pnpm test` 通过（contracts 123、CLI 209、server 435、web 213；最终 R2 后需重跑）；`pnpm typecheck` 通过；`pnpm build` 通过。
+- 质量：`git diff --check` 通过；构建保留既有 Vite 大 chunk warning；Web acceptance 保留 React `act(...)` warning，不影响测试退出码。
+- 观测：CLI `regenerate-creative` 只 POST 一次；`run-step --record-dir` 通过真实 creative Step 生成 `input.json`、`invocation.json`、`result.json`、`meta.json`，并捕获 system/user/model/effective config；生产日志只保留 hash/边界遥测，不写完整 prompt。
+- 未验证：真实供应商文学效果、真实 provider 质量和全书长篇稳定性；这些不属于本票工程 AC。
 
 ### 完成审核证据
 
-- **清单与候选**：fixed point 如上；清单 blob/T0/T1/manifest pending。
-- **逐项判定**：C1 初始对齐如上，余项 pending。
-- **验收与 TDD**：E1–E6 v2；R0 RED 已冻结，验收方法审查待复核。
-- **本地门禁**：pending。
-- **双轴 review**：pending。
-- **修复与回归**：pending。
-- **知识维护**：pending。
-- **发布前裁决**：pending。
+- **清单与候选**：固定点 `261b05e3347f7e12a328f8cea560ff0e5d395b2`；候选已在工作分支实现，T0/T1/manifest 待最终冻结。
+- **逐项判定**：C1.1–C1.8 已回读并记录在本页与 issue；C2.1 RED、C2.2 GREEN、C2.3 跨包/错误/竞争覆盖、C2.4 复用 Pipeline/Store 深接缝；C3/C4 已取得本地证据，C5/C6/C7 待候选冻结与发布。
+- **验收与 TDD**：Issue #12 AC1–AC6 对应 E1–E6 v2；R0 RED 已冻结；E1–E6 最终方法复核 PASS；R1 实现与 R2 artifact identity 修复均有定向 GREEN。
+- **本地门禁**：`pnpm test`、`pnpm typecheck`、`pnpm build` 已通过；Web acceptance 有既有 React `act(...)` 非致命警告；生产模型质量与真实 provider 未验证。
+- **双轴 review**：首次 Standards/Spec review 因 reviewer 固定在未包含未提交实现的旧 HEAD，结论不作为当前候选裁决；Spec 对当前 diff 发现 artifact identity 漂移，已在 R2 修复；新的双轴 review 待冻结候选后执行。
+- **修复与回归**：R2 增加当前 artifact identity 维护、父刷新旧快照保护、连续再生与显式回读测试；R2 GREEN 已取得，完整门禁待最终候选冻结后重跑。
+- **知识维护**：已更新本页、Wiki Index、`docs/handoff.md`、中英文 README；`docs/schema.md`/`CONTEXT.md`/ADR/research/运行 skill：N/A（未改变公共数据形状、领域词、不可逆架构或运行方式）。Project Status：N/A（gh token 缺少 `project` scope，未伪造更新）。
+- **发布前裁决**：待新的 T0→T1 attestation；不能以本页记录替代 GitHub PR/CI/远端回读。
 
 ## 边界与非目标
 
@@ -98,4 +102,4 @@ R0：Hume 方法审查 FAIL；补齐 v2 受保护 eval 后，目标端点公开 
 
 ## 交接结论
 
-本票未完成。后续从冻结方法与 RED 继续，不从候选输出反推验收。
+当前候选已完成实现、修复与本地门禁，仍需在精确冻结 tree 上完成新的 Standards/Spec 双轴 review、C6 attestation、PR/CI、远端回读和 issue 完成评论。后续从这张 Wiki 和 issue #12 继续；不要把未合并候选称为二期整体完成。

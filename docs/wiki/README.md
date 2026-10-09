@@ -163,6 +163,7 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [009 SQLite 持久化](./009-sqlite-persistence.md) | [#9](https://github.com/12bitsD/agent4novel/issues/9) | mixed | 作品与全部产物版本、事务条件写入、数据目录与重启恢复 |
 | [010 预处理 RealStep 与 interview](./010-preprocess-realstep-interview.md) | [#10](https://github.com/12bitsD/agent4novel/issues/10) | historical | 已被替代的 preprocess 方案及其遗留机制 |
 | [011 Caption 与 Creative 方向包](./011-caption-creative-directions.md) | [#11](https://github.com/12bitsD/agent4novel/issues/11) | mixed | 提炼稿、创意稿、选择关卡；R10 A SP 采用依据、对照迭代与逐版反思 |
+| [012 创意稿整步再生与失败重试](./012-creative-regeneration.md) | [#12](https://github.com/12bitsD/agent4novel/issues/12) | current | 补充想法、整步再生、固定版本条件与未知结果恢复 |
 | [013 完整设定生成与一次通过](./013-setting-generation-review.md) | [#13](https://github.com/12bitsD/agent4novel/issues/13) | mixed | 设定生成、页内编辑、同版本原子通过、失败对账 |
 | [014 Agent CLI 与遥测](./014-agent-cli-telemetry.md) | [#14](https://github.com/12bitsD/agent4novel/issues/14) | mixed | 作品 CLI、run-step 单节点 SP 对照、smoke、安全 telemetry |
 | [016 模型运行配置](./016-model-runtime-provider-config.md) | [#16](https://github.com/12bitsD/agent4novel/issues/16) | mixed | provider、凭据、timeout、生成参数默认与覆盖、ModelRuntime |

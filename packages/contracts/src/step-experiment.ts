@@ -4,6 +4,7 @@ import { agentConfigSchema } from './step.js'
 import { seedCharBudget } from './limits.js'
 import { proseEditDraftSchema, proseLimits } from './prose.js'
 import { beatEditDraftSchema, beatLimits } from './beat.js'
+import { creativeContentSchema, creativeLimits } from './creative.js'
 import { llmTelemetrySchema } from './telemetry.js'
 import { artifactContentSchemas } from './artifact-content.js'
 
@@ -30,6 +31,7 @@ export const stepExperimentInputSchema = z.object({
   upstream: z.record(jsonValueSchema).optional(),
   chapter: z.number().int().positive().safe().optional(),
   regeneration: z.union([
+    z.object({ content: creativeContentSchema.nullable(), instructions: z.string().max(creativeLimits.instructions) }).strict(),
     z.object({ content: beatEditDraftSchema, instructions: z.string().max(beatLimits.instructions) }).strict(),
     z.object({ content: proseEditDraftSchema, instructions: z.string().max(proseLimits.instructions) }).strict(),
   ]).optional(),
@@ -43,8 +45,16 @@ export const stepExperimentRequestSchema = z.object({
   record: stepExperimentRecordRequestSchema.optional(),
 }).strict().superRefine((request, ctx) => {
   const chapterStep = request.stepId === 'beat' || request.stepId === 'prose'
-  if (chapterStep ? request.input.chapter === undefined : request.input.chapter !== undefined || request.input.regeneration !== undefined) {
+  const regeneration = request.input.regeneration
+  const creativeRegeneration = request.stepId === 'creative' && regeneration !== undefined
+  if (chapterStep ? request.input.chapter === undefined : request.input.chapter !== undefined) {
     ctx.addIssue({ code: 'custom', path: ['input', 'chapter'], message: 'chapter and regeneration require a supported chapter step' })
+  }
+  if (!chapterStep && request.input.regeneration !== undefined && !creativeRegeneration) {
+    ctx.addIssue({ code: 'custom', path: ['input', 'regeneration'], message: 'regeneration requires the selected step' })
+  }
+  if (request.stepId === 'creative' && regeneration && !creativeContentSchema.nullable().safeParse(regeneration.content).success) {
+    ctx.addIssue({ code: 'custom', path: ['input', 'regeneration', 'content'], message: 'regeneration content must match the selected step' })
   }
   if (chapterStep && request.input.regeneration) {
     const content = request.stepId === 'beat' ? beatEditDraftSchema : proseEditDraftSchema

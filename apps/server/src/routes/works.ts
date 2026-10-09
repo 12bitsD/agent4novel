@@ -5,6 +5,7 @@ import type { Context } from 'hono'
 import { z } from 'zod'
 import {
   creativeContentSchema,
+  creativeLimits, creativeRegenerateRequestSchema,
   outlineContentSchema,
   settingApproveRequestSchema,
   settingLimits,
@@ -316,6 +317,34 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
     try {
       return contractJson(c, outlineApprovalResponseSchema, pipeline.approveOutline(c.req.param('id'), parsed.data))
     } catch (error) { return routeError(c, error) }
+  })
+
+  // creative 再生固定作者看到的 creative/caption 基线；成功只返回新 pending head。
+  app.use('/api/works/:id/artifacts/creative/regenerate', async (_c, next) => withRequest(crypto.randomUUID(), meta?.demo ?? true, next))
+  app.post('/api/works/:id/artifacts/creative/regenerate', bodyLimit({
+    maxSize: creativeLimits.bodyBytes,
+    onError: c => c.json(errorBody('payload-too-large', 'creative regeneration request exceeds body limit'), 413),
+  }), async c => {
+    const body = await readJsonBody(c)
+    if (!body.ok) return body.response
+    const parsed = creativeRegenerateRequestSchema.safeParse(body.data)
+    if (!parsed.success) {
+      return c.json({ ...errorBody('invalid-input', 'invalid creative regeneration request'),
+        issues: parsed.error.issues.map(({ path, code }) => ({ path, code, message: 'invalid field' })),
+      }, 400)
+    }
+    const workId = c.req.param('id')
+    try {
+      const artifact = await pipeline.regenerateCreative(workId, parsed.data)
+      safeLog({ event: 'pipeline.creative-regenerate', requestId: currentRequest()!.requestId, workId,
+        outcome: 'committed', version: artifact.version })
+      return contractJson(c, artifactSchema, artifact)
+    } catch (err) {
+      safeLog({ event: 'pipeline.creative-regenerate', requestId: currentRequest()!.requestId, workId,
+        outcome: 'failed' })
+      if (err instanceof z.ZodError) return c.json(errorBody('llm-invalid-output', 'creative output unavailable', true), 502)
+      return routeError(c, err)
+    }
   })
 
   app.post('/api/works/:id/artifacts/setting/approve', bodyLimit({

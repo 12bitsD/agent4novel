@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { artifactKinds, beatLimits, proseLimits, diagnosticQuerySchema, authorConfigLimits, authorConfigSaveSchema, agentFileUploadSchema, outlineApprovalRequestBytes } from '@agent4novel/contracts'
+import { artifactKinds, beatLimits, proseLimits, creativeLimits, diagnosticQuerySchema, authorConfigLimits, authorConfigSaveSchema, agentFileUploadSchema, outlineApprovalRequestBytes } from '@agent4novel/contracts'
 import type { ArtifactKind } from '@agent4novel/contracts'
 import { CliError, createClient, parseCliTimeoutMs } from './client.js'
 import * as cmd from './commands.js'
@@ -114,9 +114,14 @@ async function main(): Promise<void> {
     case 'start-chapter':
     case 'approve-beat':
     case 'regenerate-beat':
+    case 'regenerate-creative':
     case 'approve-prose':
     case 'save-prose':
     case 'regenerate-prose': {
+      if (command === 'regenerate-creative') {
+        result = await cmd.regenerateCreative(client, pos[0], readRequestJson(flags.file, creativeLimits.bodyBytes, 'Creative'))
+        break
+      }
       const isProse = command === 'approve-prose' || command === 'regenerate-prose' || command === 'save-prose'
       const limit = isProse ? proseLimits.bodyBytes : beatLimits.bodyBytes
       const label = command === 'start-chapter' ? 'Chapter' : isProse ? 'Prose' : 'Beat'

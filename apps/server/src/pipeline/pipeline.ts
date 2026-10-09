@@ -1,4 +1,4 @@
-import { runStep, perChapterKinds, beatContentSchema, beatRegenerateRequestSchema, proseContentSchema, proseRegenerateRequestSchema, startChapterRequestSchema, outlineApprovalRequestSchema, outlineApprovalResponseSchema } from '@agent4novel/contracts'
+import { runStep, perChapterKinds, beatContentSchema, beatRegenerateRequestSchema, proseContentSchema, proseRegenerateRequestSchema, creativeContentSchema, creativeRegenerateRequestSchema, startChapterRequestSchema, outlineApprovalRequestSchema, outlineApprovalResponseSchema } from '@agent4novel/contracts'
 import type {
   AgentConfig,
   Artifact,
@@ -13,6 +13,7 @@ import type {
   ArtifactInput,
   OutlineApprovalRequest,
   OutlineApprovalResponse,
+  CreativeRegenerateRequest,
 } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
 import type { ArtifactPrecondition, WorkStore } from '../store/work-store.js'
@@ -368,6 +369,48 @@ export class Pipeline {
         ] })
       } finally { this.advancing.delete(workId) }
     }, request.chapter)
+  }
+
+  // 创意再生是独立于 advance 的整步操作：caption 只读复用，目标 creative
+  // 与 caption 都以同一份快照条件提交，模型完成后才追加新的 pending 方向包。
+  async regenerateCreative(workId: string, request: CreativeRegenerateRequest) {
+    const parsed = creativeRegenerateRequestSchema.parse(request)
+    if (this.advancing.has(workId)) throw new KnownError('advance-in-progress', 'generation already running', { retryable: true })
+    this.advancing.add(workId)
+    try {
+      const work = this.store.getWork(workId)
+      if (!work) throw new KnownError('work-not-found', 'work not found')
+      const baseline = work.artifacts.find(artifact => artifact.kind === 'creative')
+      const hasExpectedTarget = parsed.expectedArtifactId !== null && parsed.expectedHeadVersion !== null
+      if (!baseline && hasExpectedTarget) throw new KnownError('version-conflict', 'creative target does not exist')
+      if (baseline && (!hasExpectedTarget || baseline.id !== parsed.expectedArtifactId || baseline.version !== parsed.expectedHeadVersion)) {
+        throw new KnownError('version-conflict', 'creative head changed')
+      }
+      if (baseline?.humanStatus === 'approved') throw new KnownError('artifact-already-approved', 'creative is already approved')
+
+      const entry = this.definitionFor(currentChapterOf(work)).find(item => item.outputKind === 'creative')
+      if (!entry) throw new KnownError('upstream-changed', 'creative step is not configured')
+      const input = this.inputsFor(work, entry)
+      const config = this.operationConfigs(workId)[entry.stepId]
+      if (!config) throw new KnownError('config-invalid', 'step configuration is unavailable')
+      const output = await runStep(this.steps.get(entry.stepId)!, {
+        workId,
+        seed: work.seed,
+        upstream: input.upstream,
+        regeneration: { content: baseline?.content ?? null, instructions: parsed.instructions },
+      }, config)
+      const candidate = creativeContentSchema.parse(output.content)
+      return this.store.appendArtifact(workId, 'creative', candidate, {
+        humanStatus: 'pending',
+        inputs: input.inputs,
+        preconditions: [
+          ...input.preconditions,
+          { kind: 'creative', head: baseline
+            ? { artifactId: baseline.id, version: baseline.version, humanStatus: 'pending' }
+            : null },
+        ],
+      })
+    } finally { this.advancing.delete(workId) }
   }
 
   get completionKind(): ArtifactKind | undefined {

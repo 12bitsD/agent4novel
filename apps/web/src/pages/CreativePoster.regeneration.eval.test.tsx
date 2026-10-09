@@ -68,6 +68,9 @@ describe('creative regeneration Web acceptance', () => {
       expect(host.textContent).toContain('旧方向')
       expect(calls.filter(call => call.url.endsWith('/artifacts/creative/regenerate'))).toHaveLength(1)
       expect(calls.filter(call => call.url.endsWith('/api/works/creative-ui-work') && (!call.init || call.init.method === undefined || call.init.method === 'GET'))).toHaveLength(1)
+      await act(async () => [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('核对服务器内容'))!.click())
+      expect(calls.filter(call => call.url.endsWith('/api/works/creative-ui-work') && (!call.init || call.init.method === undefined || call.init.method === 'GET'))).toHaveLength(2)
+      expect(host.textContent).toContain('服务器当前版本 v1')
     } finally {
       await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals()
     }
@@ -76,12 +79,13 @@ describe('creative regeneration Web acceptance', () => {
   it('E5 adopts a successful new pending head without selecting it and clears the thought', async () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     const generated = { ...creative(2), content: { directions: [pack('new-direction', '再生方向')] } }
+    const generatedAgain = { ...creative(3), content: { directions: [pack('newer-direction', '第二次再生方向')] } }
     const calls: Array<{ url: string; init?: RequestInit }> = []
     let postCount = 0
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url, init })
       if (url.endsWith('/api/works/creative-ui-work')) return new Response(JSON.stringify(view()))
-      if (url.endsWith('/artifacts/creative/regenerate')) { postCount++; return new Response(JSON.stringify(generated)) }
+      if (url.endsWith('/artifacts/creative/regenerate')) { postCount++; return new Response(JSON.stringify(postCount === 1 ? generated : generatedAgain)) }
       throw new Error(`unexpected ${url}`)
     })
     vi.stubGlobal('fetch', fetchMock)
@@ -99,6 +103,13 @@ describe('creative regeneration Web acceptance', () => {
       expect(calls.filter(call => call.init?.method === 'POST')).toHaveLength(1)
       expect(calls.find(call => call.init?.method === 'POST')?.url).toContain('/artifacts/creative/regenerate')
       expect(calls.some(call => call.url.includes('/select') || call.url.includes('/advance'))).toBe(false)
+      const thoughtAgain = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="补充想法"]')!
+      setValue(thoughtAgain, 'second success thought')
+      await act(async () => [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('重新生成创意稿'))!.click())
+      expect(postCount).toBe(2)
+      const regenerationRequests = calls.filter(call => call.url.endsWith('/artifacts/creative/regenerate'))
+      expect(JSON.parse(String(regenerationRequests[1]!.init?.body))).toMatchObject({ expectedArtifactId: 'creative-2', expectedHeadVersion: 2, instructions: 'second success thought' })
+      expect(host.textContent).toContain('第二次再生方向')
     } finally {
       await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals()
     }

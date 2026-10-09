@@ -51,7 +51,7 @@ describe('creative regeneration HTTP with the production Step', () => {
     })
 
     expect(response.status).toBe(200)
-    const result = await response.json()
+    const result = await response.json() as { id: string }
     expect(result).toMatchObject({ workId: work.id, kind: 'creative', version: 2, humanStatus: 'pending', id: expect.any(String) })
     expect(result.id).not.toBe(old.id)
     expect(mocks.generateObject).toHaveBeenCalledTimes(1)

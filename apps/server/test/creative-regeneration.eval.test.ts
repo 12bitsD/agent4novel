@@ -48,8 +48,8 @@ describe('creative regeneration acceptance v2', () => {
     const response = await regenerate(app, work.id, { expectedArtifactId: null, expectedHeadVersion: null, instructions: 'E1 retry' })
 
     expect(response.status).toBe(200)
-    const result = await response.json()
-    expect(result).toMatchObject({ workId: work.id, kind: 'creative', version: 1, humanStatus: 'pending', content: creative('E1 complete direction') })
+    const result = await response.json() as { id: string; version: number }
+    expect(result).toMatchObject({ workId: work.id, kind: 'creative', version: 1, humanStatus: 'pending', content: creative('E1 complete direction'), inputs: [{ kind: 'caption', artifactId: source.id, version: source.version }] })
     expect(captionStep.seen).toEqual([])
     expect(step.seen).toHaveLength(1)
     expect(step.seen[0]).toMatchObject({ workId: work.id, seed: work.seed, upstream: { caption: source.content }, regeneration: { content: null, instructions: 'E1 retry' } })
@@ -69,7 +69,7 @@ describe('creative regeneration acceptance v2', () => {
     const response = await regenerate(app, work.id, { expectedArtifactId: old.id, expectedHeadVersion: old.version, instructions: 'E2 unique author thought' })
 
     expect(response.status).toBe(200)
-    const result = await response.json()
+    const result = await response.json() as { id: string; version: number }
     expect(result).toMatchObject({ id: expect.any(String), version: 2, humanStatus: 'pending', content: creative('E2 unique new package') })
     expect(result.id).not.toBe(old.id)
     expect(store.getWork(work.id)!.artifacts.find(a => a.kind === 'creative')).toMatchObject({ id: result.id, version: 2, humanStatus: 'pending' })
@@ -87,7 +87,7 @@ describe('creative regeneration acceptance v2', () => {
     const before = JSON.parse(JSON.stringify(store.getWork(work.id)!.artifacts))
     const step = fakeArtifactStep('creative', creative('unused'))
     step.step.run = async () => {
-      const value = result()
+      const value = (result as () => unknown)()
       if (value instanceof Error) throw value
       return value as { content: never }
     }
@@ -125,7 +125,7 @@ describe('creative regeneration acceptance v2', () => {
 
     const select = await app.request(`/api/works/${work.id}/artifacts/creative/select`, { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ directionId: 'direction-1', expectedHeadVersion: old.version }) })
     expect(select.status).toBe(200)
-    const selected = await select.json()
+    const selected = await select.json() as { id: string; version: number }
     expect((await regenerate(app, work.id, { expectedArtifactId: selected.id, expectedHeadVersion: selected.version, instructions: '' })).status).toBe(409)
     expect(step.seen).toHaveLength(0)
     expect(source.humanStatus).toBe('approved')
