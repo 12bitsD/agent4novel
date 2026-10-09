@@ -139,6 +139,25 @@ describe('creative regeneration acceptance v1', () => {
     expect(store.getWork(work.id)!.artifacts.find(a => a.kind === 'creative')?.content).toEqual(creative('E4 competing creative'))
   })
 
+  it('E4 rejects an approved-caption race at commit, preserving the competing caption', async () => {
+    const store = new InMemoryStore()
+    const work = store.createWork({ seed: 'E4 caption race seed' })
+    const captionHead = store.appendArtifact(work.id, 'caption', caption('E4 caption race old'), { humanStatus: 'approved' })
+    const old = store.appendArtifact(work.id, 'creative', creative('E4 caption race old creative'))
+    let release!: () => void
+    const waiting = new Promise<void>(resolve => { release = resolve })
+    const step = fakeArtifactStep('creative', creative('E4 caption race generated'))
+    step.step.run = async input => { step.seen.push(input); await waiting; return { content: creative('E4 caption race generated') } }
+    const { app } = appFor(store, step)
+    const pending = regenerate(app, work.id, { expectedArtifactId: old.id, expectedHeadVersion: old.version, instructions: '' })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    store.appendArtifact(work.id, 'caption', caption('E4 caption race competing'))
+    release()
+    expect((await pending).status).toBe(409)
+    expect(store.getWork(work.id)!.artifacts.find(a => a.kind === 'caption')).toMatchObject({ version: captionHead.version + 1, content: caption('E4 caption race competing') })
+    expect(step.seen).toHaveLength(1)
+  })
+
   it('E4 shares the per-work generation lock and does not call the model twice', async () => {
     const store = new InMemoryStore()
     const work = store.createWork({ seed: 'E4 lock seed' })
