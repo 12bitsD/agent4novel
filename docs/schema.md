@@ -71,11 +71,15 @@ Artifact = {
 
 ## 版本与关卡
 
-- `appendArtifact` 追加新版本（version+1），旧版本保留；当前公开读模型只返回各地址的 head，尚无历史回看／回退入口
+- `appendArtifact` 追加新版本（version+1），旧版本保留；当前公开读模型仍只返回各地址的 head。#20 为当前 pending beat 增加受限的 A/B 比较与选择入口：再生响应返回本次 A/B 完整快照，服务端可按 beat 的 id/version 精确读取历史 A 供选择核对；这不是通用历史浏览或回退入口
 - `humanStatus` 语义：`pending` = 待作者把关（关卡中）；`approved` = 已通过
 - 人工保存语义分节点：caption 落库即 `approved`（无关卡）；creative 保存草稿 = 新版本 + `pending`（`saveCreativeDraft`），显式选定方向 = 单方向新版本 + `approved`（`selectCreativeDirection`）；outline（#4）保存草稿 = 新版本 + `pending`（`saveOutlineDraft`，新增弧线/剧情点的 id 由 server 补注入），通过使用[大纲可见版本通过](#大纲可见版本通过)的专用条件命令，旧通用 `/approve` 保留当前 head 兼容语义；setting（#13）不保存中间草稿，专用完成命令将同 id／version 的内容和状态原子定稿，不追加 V2
 - Prose 保存追加新 ID／版本并保留匹配基线的 `humanStatus`；pending 草稿可为空，approved 内容必须非空。通过仍是同 ID／版本原子定稿。通过后可编辑是 Prose 的明确例外，不改变 Setting／Beat 通过后只读的语义。
 - 关卡在步骤边界：`gateAfter` 的步骤产出后置 `pending` 等 approve；`gateBefore` 的步骤要求目标产物已 `approved`；`consumes` 的上游产物读最新版且必须 `approved`
+
+### Beat 版本比较与选择（#20）
+
+当前章节的 `pending` beat 再生成功后追加新的 pending head B，并在命令响应的可选 `comparison` 中返回再生前快照 A 与 B；A 不被覆盖。选择 `new` 只确认 B 仍为当前 pending，不自动通过。选择 `original` 由服务端核对 A 的 artifact id、version 和完整 content 后追加新的 pending A-copy C；A、B、C 均保留，后续通过仍需绑定当前 head 的 id/version。已通过 beat、非当前章节、缺少历史身份、head 变化和 A 内容不匹配均拒绝并返回冲突；选择动作不调用模型。选择响应包含 `expectedHead`、`originalHead`、`choice`、`writeOutcome` 和 `resultHead`，供 CLI、Web 与 Harness 读取动作结果。
 
 ## 共享验证边界：#19
 
