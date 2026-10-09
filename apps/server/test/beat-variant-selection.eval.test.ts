@@ -6,6 +6,7 @@ import { consumeGuards } from '../src/pipeline/consume-guards.js'
 import { fakeArtifactStep } from './fakes.js'
 import type { ArtifactStep, PipelineDefinitionEntry } from '../src/pipeline/pipeline.js'
 import type { AgentConfig } from '@agent4novel/contracts'
+import { beatCommandResponseSchema, beatVariantSelectionResponseSchema } from '@agent4novel/contracts'
 
 const headers = { 'Content-Type': 'application/json' }
 const caption = { inputStage: '脑洞', summary: '摘要', elements: [{ kind: '冲突', content: '线索' }], gaps: [] }
@@ -43,6 +44,7 @@ describe('E20 server acceptance: compare/select beat variants', () => {
     const regen = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: fx.beat.id, expectedHeadVersion: 1, content: original, instructions: '更紧张' }) })
     expect(regen.status).toBe(200); const body = await regen.json() as any
+    expect(() => beatCommandResponseSchema.parse(body)).not.toThrow()
     expect(body.comparison).toMatchObject({ original: fx.beat, candidate: body.artifact })
     expect(body.comparison.original.content).toEqual(original)
     expect(body.comparison.candidate.content).toEqual(regenerated)
@@ -60,6 +62,9 @@ describe('E20 server acceptance: compare/select beat variants', () => {
     const approve = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/approve`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: selected.artifact.id, expectedHeadVersion: 3, content: selected.artifact.content }) })
     expect(approve.status).toBe(409)
+    const wrongApprove = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/approve`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: fx.beat.id, expectedHeadVersion: 1, content: original }) })
+    expect(wrongApprove.status).toBe(409)
     const approveNew = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/approve`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: selected.artifact.id, expectedHeadVersion: 2, content: selected.artifact.content }) })
     expect(approveNew.status).toBe(200); expect((await approveNew.json()).artifact.humanStatus).toBe('approved')
@@ -77,6 +82,7 @@ describe('E20 server acceptance: compare/select beat variants', () => {
       body: JSON.stringify({ chapter: 1, expectedArtifactId: candidate.id, expectedHeadVersion: candidate.version,
         originalArtifactId: fx.beat.id, originalVersion: fx.beat.version, originalContent: original, choice: 'original' }) })
     expect(chooseOld.status).toBe(200); const selected = await chooseOld.json() as any
+    expect(() => beatVariantSelectionResponseSchema.parse(selected)).not.toThrow()
     expect(selected.artifact.version).toBe(3)
     expect(selected.artifact.id).not.toBe(fx.beat.id)
     expect(selected.artifact.id).not.toBe(candidate.id)
@@ -89,6 +95,14 @@ describe('E20 server acceptance: compare/select beat variants', () => {
     const approve = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/approve`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: selected.artifact.id, expectedHeadVersion: 3, content: selected.artifact.content }) })
     expect(approve.status).toBe(200); expect((await approve.json()).artifact.id).toBe(selected.artifact.id)
+    for (const stale of [
+      { expectedArtifactId: fx.beat.id, expectedHeadVersion: 1, content: original },
+      { expectedArtifactId: candidate.id, expectedHeadVersion: 2, content: candidate.content },
+    ]) {
+      const rejected = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/approve`, { method: 'POST', headers,
+        body: JSON.stringify({ chapter: 1, ...stale }) })
+      expect(rejected.status).toBe(409)
+    }
     expect(fx.store.getWork(fx.work.id)!.artifacts.filter(a => a.kind === 'beat' && a.chapter === 1).map(a => [a.id, a.version, a.humanStatus])).toEqual([[selected.artifact.id, 3, 'approved']])
   })
 
@@ -102,24 +116,38 @@ describe('E20 server acceptance: compare/select beat variants', () => {
       body: JSON.stringify({ chapter: 1, expectedArtifactId: fx.beat.id, expectedHeadVersion: 1, content: original, instructions: '' }) })
     expect(failed.status).toBe(500); expect(seen).toHaveLength(1); expect(fx.store.getWork(fx.work.id)!.artifacts.find(a => a.kind === 'beat' && a.chapter === 1)?.version).toBe(1)
 
-    const healthy = makeFixture()
+    const healthySeen: unknown[] = []
+    const healthyStep: ArtifactStep = { ...fakeArtifactStep('beat', regenerated).step, async run(input) { healthySeen.push(input); return { content: regenerated } } }
+    const healthy = makeFixture(healthyStep)
     const generated = await healthy.app.request(`/api/works/${healthy.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: healthy.beat.id, expectedHeadVersion: 1, content: original, instructions: '' }) })
     const b = (await generated.json() as any).artifact
     const missing = await healthy.app.request(`/api/works/${healthy.work.id}/artifacts/beat/select`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: b.id, expectedHeadVersion: 2, originalArtifactId: 'missing', originalVersion: 1, originalContent: original, choice: 'new' }) })
-    expect(missing.status).toBe(409)
+    expect(missing.status).toBe(409); expect(healthySeen).toHaveLength(1)
     const nonCurrent = await healthy.app.request(`/api/works/${healthy.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 2, expectedArtifactId: healthy.beat.id, expectedHeadVersion: 1, content: original, instructions: '' }) })
-    expect(nonCurrent.status).toBe(409)
+    expect(nonCurrent.status).toBe(409); expect(healthySeen).toHaveLength(1)
     const stale = await healthy.app.request(`/api/works/${healthy.work.id}/artifacts/beat/select`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: healthy.beat.id, expectedHeadVersion: 1, originalArtifactId: healthy.beat.id, originalVersion: 1, originalContent: original, choice: 'new' }) })
-    expect(stale.status).toBe(409)
+    expect(stale.status).toBe(409); expect(healthySeen).toHaveLength(1)
     const approved = await healthy.app.request(`/api/works/${healthy.work.id}/artifacts/beat/approve`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: b.id, expectedHeadVersion: 2, content: b.content }) })
     expect(approved.status).toBe(200)
     const afterApprove = await healthy.app.request(`/api/works/${healthy.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: b.id, expectedHeadVersion: 2, content: b.content, instructions: '' }) })
-    expect(afterApprove.status).toBe(409)
+    expect(afterApprove.status).toBe(409); expect(healthySeen).toHaveLength(1)
+
+    const race = makeFixture(healthyStep)
+    const first = await race.app.request(`/api/works/${race.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: race.beat.id, expectedHeadVersion: 1, content: original, instructions: '' }) })
+    const firstB = (await first.json() as any).artifact
+    const second = await race.app.request(`/api/works/${race.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: firstB.id, expectedHeadVersion: 2, content: regenerated, instructions: 'second' }) })
+    const secondC = (await second.json() as any).artifact
+    const lostRace = await race.app.request(`/api/works/${race.work.id}/artifacts/beat/select`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: firstB.id, expectedHeadVersion: 2, originalArtifactId: race.beat.id, originalVersion: 1, originalContent: original, choice: 'new' }) })
+    expect(lostRace.status).toBe(409)
+    expect(race.store.getArtifactVersion(race.work.id, 'beat', 1, secondC.id, 3)?.content).toEqual(regenerated)
   })
 })
