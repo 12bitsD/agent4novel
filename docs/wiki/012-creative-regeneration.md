@@ -70,21 +70,22 @@ R0：Hume 方法审查 FAIL；补齐 v2 受保护 eval 后，目标端点公开 
 ## 测试与验证
 
 - 定向 acceptance：contracts `2 passed`；server HTTP + real Step `9 passed`；Web `2 passed`；CLI `7 passed`；Web/CLI/worker 辅助测试通过。
-- 完整仓库：`pnpm test` 通过（contracts 123、CLI 209、server 435、web 213；最终 R2 后需重跑）；`pnpm typecheck` 通过；`pnpm build` 通过。
+- 完整仓库：`pnpm test` 通过（contracts 123、CLI 209、server 435、web 214）；`pnpm typecheck` 通过；`pnpm build` 通过。
 - 质量：`git diff --check` 通过；构建保留既有 Vite 大 chunk warning；Web acceptance 保留 React `act(...)` warning，不影响测试退出码。
 - 观测：CLI `regenerate-creative` 只 POST 一次；`run-step --record-dir` 通过真实 creative Step 生成 `input.json`、`invocation.json`、`result.json`、`meta.json`，并捕获 system/user/model/effective config；生产日志只保留 hash/边界遥测，不写完整 prompt。
 - 未验证：真实供应商文学效果、真实 provider 质量和全书长篇稳定性；这些不属于本票工程 AC。
 
 ### 完成审核证据
 
-- **清单与候选**：固定点 `261b05e3347f7e12a328f8cea560ff0e5d395b2`；候选已在工作分支实现，T0/T1/manifest 待最终冻结。
-- **逐项判定**：C1.1–C1.8 已回读并记录在本页与 issue；C2.1 RED、C2.2 GREEN、C2.3 跨包/错误/竞争覆盖、C2.4 复用 Pipeline/Store 深接缝；C3/C4 已取得本地证据，C5/C6/C7 待候选冻结与发布。
+- **清单与候选**：固定点 `261b05e3347f7e12a328f8cea560ff0e05a395b2`；代码与测试候选已在工作分支实现；本次文档证据修正后的 pre-attestation 候选 tree 为 T0 `f997efd3a3c3770fc770c1e1d1b615224f5a6a24`。
+- **C6.5 预发布 attestation**：清单 `docs/agents/ticket-completion-checklist.md` blob `42116082e8ca2804d826cc00f6578270077f60eb`；固定点与 T0 如上，pre-attestation tree 为 T1 `92e43f0fde0096629362a346b26cdc0fa22b8f8b`。C1–C4、C5.1–C5.7、C6.1–C6.2 均有本页/issue/本地证据且通过；C6.3 已将证据写入预留字段；C6.4 由未参与实现的 Noether 只读比较 T0→T1，确认仅修改本节预留字段并 PASS；C6.5 字段已写入并生成最终交付 tree（按清单不在本页记录 T2）。C6.6/C6.7、PR/CI/远端回读仍 pending。
+- **逐项判定**：C1.1–C1.8 已回读并记录在本页与 issue；C2.1 RED、C2.2 GREEN、C2.3 跨包/错误/竞争覆盖、C2.4 复用 Pipeline/Store 深接缝；C3/C4 已取得本地证据；C5.1–C5.7 通过，C6.1/C6.2 已完成，C6.3–C6.7 按本票发布流程执行。
 - **验收与 TDD**：Issue #12 AC1–AC6 对应 E1–E6 v2；R0 RED 已冻结；E1–E6 最终方法复核 PASS；R1 实现与 R2 artifact identity 修复均有定向 GREEN。
 - **本地门禁**：`pnpm test`、`pnpm typecheck`、`pnpm build` 已通过；Web acceptance 有既有 React `act(...)` 非致命警告；生产模型质量与真实 provider 未验证。
-- **双轴 review**：首次 Standards/Spec review 因 reviewer 固定在未包含未提交实现的旧 HEAD，结论不作为当前候选裁决；Spec 对当前 diff 发现 artifact identity 漂移，已在 R2 修复；新的双轴 review 待冻结候选后执行。
-- **修复与回归**：R2 增加当前 artifact identity 维护、父刷新旧快照保护、连续再生与显式回读测试；R2 GREEN 已取得，完整门禁待最终候选冻结后重跑。
+- **双轴 review**：首次 Standards/Spec review 因 reviewer 固定在未包含未提交实现的旧 HEAD，结论不作为当前候选裁决；Spec 对当前 diff 发现 artifact identity 漂移，已在 R2 修复；当前候选复审中 Standards 与 Spec 均 PASS，无未满足 AC 或安全/逻辑阻断。
+- **修复与回归**：R2 增加当前 artifact identity 维护、父刷新旧快照保护、连续再生与显式回读测试；R2 GREEN 与最终完整门禁均已取得。C6.1 修正 Wiki 固定点 SHA 与 web 测试计数，C6.2 已复核 `git diff --check`、固定点可解析及既有全量门禁证据。
 - **知识维护**：已更新本页、Wiki Index、`docs/handoff.md`、中英文 README；`docs/schema.md`/`CONTEXT.md`/ADR/research/运行 skill：N/A（未改变公共数据形状、领域词、不可逆架构或运行方式）。Project Status：N/A（gh token 缺少 `project` scope，未伪造更新）。
-- **发布前裁决**：待新的 T0→T1 attestation；不能以本页记录替代 GitHub PR/CI/远端回读。
+- **发布前裁决**：C6.6/C6.7、PR/CI/远端回读均 pending；不能以本页记录替代 GitHub PR/CI/远端回读。
 
 ## 边界与非目标
 
