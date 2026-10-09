@@ -6,9 +6,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { SqliteStore } from '../src/store/sqlite-store.js'
+import Database from 'better-sqlite3'
 
 const children: ChildProcess[] = []
 const stores: SqliteStore[] = []
+const databases: Database.Database[] = []
 const directories: string[] = []
 afterEach(async () => {
   for (const child of children.splice(0)) {
@@ -19,6 +21,7 @@ afterEach(async () => {
     }
   }
   for (const store of stores.splice(0)) store.close()
+  for (const db of databases.splice(0)) if (db.open) db.close()
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true })
 })
 
@@ -52,6 +55,33 @@ async function send(child: ChildProcess, request: unknown): Promise<unknown> {
   child.send(request as object)
   return (await response)[0]
 }
+
+it('reports bounded safe initialization diagnostics from an independent process', async () => {
+  const path = databasePath()
+  const holder = new Database(path, { timeout: 1 })
+  databases.push(holder)
+  holder.exec('BEGIN IMMEDIATE')
+  const child = await worker(path)
+
+  const result = await send(child, { action: 'seed' })
+  expect(result).toMatchObject({ type: 'result', outcome: 'initialization-error', stage: 'schema',
+    sqliteCode: 'SQLITE_BUSY', attempts: 8, retryable: true })
+  expect(JSON.stringify(result)).not.toContain(path)
+})
+
+it('reports unsupported schema diagnostics from an independent process', async () => {
+  const path = databasePath()
+  const database = new Database(path)
+  databases.push(database)
+  database.exec("CREATE TABLE sentinel (value TEXT); INSERT INTO sentinel VALUES ('preserved'); PRAGMA user_version = 99")
+  database.close()
+
+  const child = await worker(path)
+  const result = await send(child, { action: 'seed' })
+  expect(result).toMatchObject({ type: 'result', outcome: 'initialization-error', diagnosticCode: 'unsupported-schema',
+    stage: 'schema', sqliteCode: null, attempts: 1, retryable: false })
+  expect(JSON.stringify(result)).not.toContain(path)
+})
 
 it('serializes independent processes saving the same baseline into one success and one conflict', async () => {
   const path = databasePath()
