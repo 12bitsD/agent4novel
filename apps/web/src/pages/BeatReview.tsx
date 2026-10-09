@@ -69,7 +69,7 @@ export default function BeatReview({ state, onAction, allowCommands, onApprove, 
       </div>}
     </section>}
     {(state.phase === 'uncertain' || state.phase === 'conflict') && <div className="setting-actions setting-recovery">
-      <button type="button" style={btnSecondary} onClick={() => { onAction({ type: 'confirm' }); onConfirm() }}>核对服务器结果</button>
+      <button type="button" style={btnSecondary} onClick={onConfirm}>核对服务器结果</button>
       {state.recovery?.nextActions.includes('retry-frozen-request') && <button type="button" style={btnSecondary} onClick={onRetry}>重试同一份请求</button>}
       {state.canResume && <button type="button" style={btnPrimary} onClick={() => onAction({ type: 'resume' })}>继续编辑</button>}
       {canLoadServerBeat(state) && <button type="button" style={btnSecondary} onClick={() => setConfirmation({ title: '载入服务器版本？', description: '载入将放弃本页修改和意见；已发送的请求可能继续处理。', label: '放弃并载入', run: () => onAction({ type: 'load-server' }) })}>载入服务器章纲</button>}
