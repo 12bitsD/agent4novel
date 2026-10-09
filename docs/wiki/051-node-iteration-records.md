@@ -108,15 +108,19 @@ AC映射：AC1/5→S2；AC2→S1；AC3/4/6→S1+S2；AC7→S3；AC8→三片公�
 
 ### 完成审核证据
 
-- **固定点与候选**：固定点 `d2669132c8598a1368f43e2b7fe66225211f09be`；候选分支 `feat/node-observation-loop`，当前保留在隔离worktree，尚未提交、发布或合并。
-- **loop 轮次**：R0 基线在 `/tmp/a4n-loop-start-20261010/baseline.json` 确认旧 CLI 对 `--record-dir` 返回安全 usage 且未创建目录；R1 实现记录四文件；R2 修复父级 symlink、六节点边界测试并同步使用文档；R3 补齐 `effectiveConfig` 与独占落盘回归。没有开启第4轮。
-- **主 Agent 验收**：E1（六节点 SDK mock 逐字对比及 `effectiveConfig`）、E3（预调用失败/provider拒绝/CLI timeout）、E4（碰撞、目标/父级 symlink、权限）、E5（公共输出不带全文）、E7/E8（loopback CLI/worker 正文 A/B、四文件读取、comment、复跑和权限）通过；E2（四文件目录作为一次 Harness 读取资源）、E6（记录保存输入/调用/版本快照）有实现、文档和联验依据。真实 provider 文学质量未验证。
-- **E7/E8 联验原始摘要**：`pnpm --filter @agent4novel/cli exec vitest run test/step-transport.test.ts` 中的 `supports one complete prose A/B/comment loop through the CLI worker and files` 启动 loopback OpenAI-compatible provider，分别执行 `run-step prose --record-dir A` 与 `--record-dir B`，读取 `meta.json`、`invocation.json`、`result.json` 并写入旁置 `comments.md`；该定向命令输出 `1 test file passed; 12 tests passed; A/B/comment test 559ms`。该证据证明 Harness 文件动作，不证明真实模型文学质量。
-- **未宣称项**：没有新增独立读取 CLI；读取动作按已确认范围复用本地四文件。未做进程崩溃级归档恢复和真实 provider 质量验证；这些不被包装成已通过。前置 Standards/Spec reviewer 已指出并核对 AC7/AC8 联验缺口；正式 C5/C6 发布审查保持 pending。
-- **本地门禁**：`pnpm test`、`pnpm typecheck`、`pnpm build` 均通过，build保留既有 web chunk size warning；受影响包定向 tests/typecheck/build 也通过。`git diff --check d2669132c8598a1368f43e2b7fe66225211f09be`、skill validator 和 Markdown 相对链接检查通过。
-- **修复与回归**：`safePathChain` 对任一父级 symlink 直接拒绝；server 独占落盘不覆盖已有文件；新增公开 CLI/runner 回归证明不调用 provider 且不改变真实目录。六节点记录测试证明 `invocation.system/prompt` 与 `generateObject` 入参逐字一致，`effectiveConfig`和省略选项保持预期/null。C6.1 review 发现 CLI deadline/worker-failure fallback 的 `invocation.json` 缺失 `effectiveConfig` 会违反共享 schema，已补为 `null`；A/B 联验同时读取四个文件，timeout 测试用共享 schema 复核记录。
-- **知识维护**：本页、`.claude/skills/agent4novel-drive/SKILL.md`、`README.md`、`README.en.md` 和 `agent4novel-iterate` 已同步记录资源/动作边界；`docs/schema.md` N/A（新增的是独立实验文件契约，不是作品领域数据模型）；`CONTEXT.md`/ADR 不受影响，未新增不可逆架构决策。
-- **loop 结论**：本轮“主 Agent 定义验收 → 子 Agent 实现 → 主 Agent独立验收 → 定向修复 → 再验收”已完成到 R3；#51 的正式双轴 review、提交/PR/CI/merge/issue关闭仍不是本轮已发生事实。
+- **清单与候选**：清单 blob `42116082e8ca2804d826cc00f6578270077f60eb`；固定点 `d2669132c8598a1368f43e2b7fe66225211f09be`；候选分支 `feat/node-observation-loop`，候选 T0 tree `46c95bd61dd6776b1f5774437dae0a6b8b9ab2f5`。交付模式为 `source branch → PR → main`，base 为 `main`；当前 main 未保护、rulesets 为 0，CI workflow `CI` 含 quality/container 两 job；T0 尚未推送或合并。
+- **C1 锁定票面**：C1.1 PASS：`gh issue view 51 --json ...` 回读 WHAT/AC、非目标、评论、`OPEN`、`ready-for-agent`、assignee `12bitsD`、无 Project；依赖 API 回读 blocked-by 数量为 0。C1.2 PASS：候选分支/base/CI/保护状态已实际回读，未按仓库习惯猜测。C1.3 PASS：用户“源信息优先、无值为 None、文件 + run-step、主Agent定义验收后派工、最多3轮”已写入验收计划和 iterate skill。C1.4–C1.8 PASS：Wiki051、CONTEXT、schema、相关运行 skill 已读；范围、非目标、依赖、风险、终态标签与 Project 预期均有记录。
+- **C2 TDD 与实现**：C2.1 PASS：基线 RED `/tmp/a4n-loop-start-20261010/baseline.json` 为旧 CLI `--record-dir` 返回 `usage`、不创建目录；C6.1 review 暴露的旧 unknown invocation shape 另以 schema 命令复现 RED：`{"red":true,"missing":["effectiveConfig"]}`。C2.2–C2.6 PASS：S1 SDK 边界、S2 CLI/worker、S3 Harness 联验均先有失败目标再最小实现；成功/边界/错误/隐私/并发和六节点覆盖均有测试；候选反查 AC1–AC9，无静默扩票。
+- **C3 本地门禁**：C3.1 PASS：当前候选执行 `pnpm test`、`pnpm typecheck`、`pnpm build`，contracts 121、CLI 202、server 416、web 208 tests 全部通过；build 保留既有 web chunk size warning。C3.2 PASS：定向 CLI 12 tests、diff check、109 个 Markdown 相对链接、skill 结构/等价 symlink 校验通过，新增/未跟踪文件均纳入候选。C3.3–C3.5 PASS：公共输出/telemetry 不含全文或 provider 原文，凭据/请求头不进入记录；采用共同 `callLlm` seam，无新增平台抽象或重复存储。C3.6 PASS：命令和关键警告已在本记录及 acceptance plan 留证。
+- **C4 知识维护**：C4.1–C4.2 PASS：Wiki051 当前章节、完成审核证据和交接结论同步。C4.3 `N/A`：实验记录是独立私有文件契约，不改变作品领域 `docs/schema.md`；C4.4 `N/A`：沿用现有接缝，无不可逆跨票架构决定。C4.5–C4.8 PASS：中英文 README、handoff、drive skill、iterate skill、索引/链接均同步并校验。C4.9 PASS：代码↔测试、代码↔Wiki/领域词、候选↔issue AC 三轮自校准均完成。
+- **C5 双轴 review**：C5.1–C5.3 PASS：精确 manifest 与 `fixed-point..HEAD` 完整 patch/逐笔 commit/secret scan 已审计，T0 如上。C5.4 Standards reviewer `PASS`、无候选阻塞；C5.5 Spec reviewer 对 AC1–AC8 `PASS`，AC9 的 CI/PR/merge/远端回读属于 C7 待收口事实，不是候选行为缺陷；原始报告指出的 AC7/AC8 证据缺口已由版本化 A/B/comment 测试补齐。C5.6 PASS：接受并修复了父级 symlink、`effectiveConfig`、四文件读取证据问题；未采纳“必须新增读取 CLI”的建议，因为 issue/用户决定明确允许文件 + run-step。C5.7 PASS：最终 T0 未再发生行为或契约变化。
+- **C6.1–C6.2 修复与回归**：C6.1 PASS：review 发现 `markStepRecordUnknown` 生成的 `invocation.json` 缺少 schema 必需的 `effectiveConfig`；实施 Agent 在 `d17e677` 补为 `null`，并在 `b305a05` 为 timeout 记录加入共享 schema 复核及四文件读取断言。C6.2 PASS：定向 CLI 12 tests、typecheck，以及最终候选的全量 test/typecheck/build 均通过；修复不改变 AC/范围。
+- **C6.3 证据收口**：本次写入的是预留完成审核字段；T0、C1–C5、C6.1–C6.2 及其证据如上，T1 与发布前裁决在本次变更后待独立 reviewer 核对；不在此字段记录最终 T2。
+- **C6.4 reviewer attestation**：独立 reviewer 对 `T0=46c95bd61dd6776b1f5774437dae0a6b8b9ab2f5 → T1=2bf72e1998022a0f90ede0600f1f22ab896e04de` 精确比较，结论 `PASS`；确认唯一变化是本节预留证据字段，`git diff --cached --check` 通过，无代码/README/范围夹带、无 T2 自引用。reviewer 未运行真实 provider。
+- **C6.5 发布前 attestation**：基于 C6.4 `PASS`，逐项证据、原始 Standards/Spec 报告、修复记录和剩余风险已忠实收口；C1–C5、C6.1–C6.4 的终态证据均已写入本节。此时只生成 T2 供 C6.6 核对，不在 Wiki 中写入最终 T2 或 `C6 = PASS`。
+- **C6.6 终止性核对**：`T1 → T2` reviewer 比较待完成；在其 `PASS`、PR/CI/merge 和远端回读完成前，ticket 不进入完成结论。
+- **未宣称项与剩余风险**：没有新增独立读取 CLI、评阅平台、UI、数据库或作品数据写入；未做真实 provider 文学质量、付费实验、进程崩溃级归档恢复；这些不被包装成已通过。正式 C6.4–C6.6、PR/CI/merge、issue 完成评论与关闭仍待执行。
+- **loop 结论**：开发 loop 按 R0 → R1 → R2 → R3 完成；C6.1 是候选 review 后的定向缺陷修复，不重置 loop 轮次。当前仍不能宣称 #51 或二期完成。
 
 ## 边界与非目标
 
