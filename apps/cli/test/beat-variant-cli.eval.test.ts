@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module'
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -61,7 +61,7 @@ describe('E20 CLI/Harness acceptance: beat variant selection', () => {
   }, 30_000)
 
   it('exposes the regeneration source and actual transport in run-step records', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'a4n-beat-record-cli-')); const recordDir = join(directory, 'beat-run'); const provider = createServer(async (_req, res) => {
+    const directory = mkdtempSync(join(realpathSync(tmpdir()), 'a4n-beat-record-cli-')); const recordDir = join(directory, 'beat-run'); const provider = createServer(async (_req, res) => {
       res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ id: 'mock-beat-record', model: 'LongCat-2.0', choices: [{ index: 0, message: { role: 'assistant', content: JSON.stringify({ title: '模型新章纲', goal: '推进', writingPlan: [{ title: '行动', content: '继续追踪' }], ending: '留下线索' }) }, finish_reason: 'stop' }] }))
     })
     provider.listen(0, '127.0.0.1'); await once(provider, 'listening'); const address = provider.address(); if (!address || typeof address === 'string') throw new Error('missing provider address')
