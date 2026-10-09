@@ -2,7 +2,7 @@ import { outlineApprovalRequestSchema, outlineApprovalResponseSchema, matchesOut
 import type {
   Artifact, ArtifactKind, AdvanceOutcomeDto, CreativeContent, OutlineDraft,
   Work, WorkSummary, WorkView, StartChapterRequest, WorkCreateRequest,
-  CreativeDraftRequest, SelectCreativeRequest, OutlineDraftRequest, ApproveRequest, HttpError,
+  CreativeDraftRequest, SelectCreativeRequest, OutlineDraftRequest, ApproveRequest, CreativeRegenerateRequest, HttpError,
 } from '@agent4novel/contracts'
 import {
   advanceOutcomeDtoSchema, workViewSchema, workSchema, workListResponseSchema,
@@ -13,6 +13,7 @@ import { badExampleRequestSchema, badExampleSchema, badExamplePageSchema, badExa
   type BadExampleRequest, type BadExampleQuery } from '@agent4novel/contracts'
 import { authorConfigViewSchema, authorConfigReceiptSchema, authorConfigSaveSchema, agentFileSchema, agentFileReadSchema, agentFileUploadSchema,
   managedAgentFileText, type AuthorConfigSave, type AgentFileUpload } from '@agent4novel/contracts'
+import { creativeRegenerateRequestSchema } from '@agent4novel/contracts'
 export type { AdvanceOutcomeDto, StartChapterRequest, AppConfig } from '@agent4novel/contracts'
 
 function invalidResponse(write: boolean): Error {
@@ -131,6 +132,16 @@ export function saveCreativeDraft(workId: string, content: CreativeContent, expe
 }
 export function selectCreativeDirection(workId: string, directionId: string, expectedHeadVersion: number): Promise<Artifact> {
   return writeArtifact(workId, 'creative', 'approved', '/select', 'POST', { directionId, expectedHeadVersion } satisfies SelectCreativeRequest)
+}
+export async function regenerateCreative(workId: string, input: CreativeRegenerateRequest): Promise<Artifact> {
+  const frozen = creativeRegenerateRequestSchema.parse(input)
+  const expectedVersion = (frozen.expectedHeadVersion ?? 0) + 1
+  return withDeadline(920_000, async signal => validate(artifactSchema,
+    await request(`${configBase(workId)}/artifacts/creative/regenerate`, {
+      method: 'POST', signal, headers: { 'content-type': 'application/json' }, body: JSON.stringify(frozen),
+    }), result => result.workId === workId && result.kind === 'creative' && result.chapter === undefined
+      && result.humanStatus === 'pending' && result.version === expectedVersion
+      && (frozen.expectedArtifactId === null || result.id !== frozen.expectedArtifactId), true))
 }
 export async function advance(workId: string): Promise<AdvanceOutcomeDto> {
   return withDeadline(1_820_000, async signal => validate(advanceOutcomeDtoSchema,

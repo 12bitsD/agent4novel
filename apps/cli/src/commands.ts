@@ -1,5 +1,6 @@
-import type { ArtifactKind, CreativeContent, OutlineDraft, WorkView } from '@agent4novel/contracts'
+import type { ArtifactKind, CreativeContent, OutlineDraft, WorkView, CreativeRegenerateRequest } from '@agent4novel/contracts'
 import {
+  artifactSchema, creativeRegenerateRequestSchema, httpErrorSchema,
   matchesSettingSubmission, settingApproveRequestSchema, settingApproveResponseSchema, settingArtifactSchema,
   startChapterRequestSchema, outlineApprovalRequestSchema,
   perChapterKinds,
@@ -63,6 +64,40 @@ export async function select(client: Client, workId: string, directionId?: strin
     dir = first.directionId
   }
   return client.select(workId, dir, headOf(work, 'creative'))
+}
+
+// 创意再生的请求文件就是冻结基线；此命令只 POST 一次，不先 GET、自动重发或追认响应未知。
+export async function regenerateCreative(client: Client, workId: string, input: unknown) {
+  const parsed = creativeRegenerateRequestSchema.safeParse(input)
+  if (!parsed.success) throw new CliError('Invalid creative regeneration request file', 'invalid-input', undefined, false, undefined,
+    parsed.error.issues.map(({ path, code }) => ({ path, code, message: 'invalid field' })))
+  const request: CreativeRegenerateRequest = parsed.data
+  let response: { status: number; body: unknown }
+  try {
+    response = await client.creativeRegenerate(workId, request)
+  } catch (error) {
+    if (error instanceof CliError) throw new CliError(error.message, error.code, error.status, error.retryable, error.attemptId, error.issues,
+      { ...error.details, writeOutcome: 'unknown' })
+    throw new CliError('Creative regeneration result is unknown; keep the request file and inspect the work', 'creative-result-unknown', undefined, false, undefined, undefined,
+      { writeOutcome: 'unknown' })
+  }
+  if (response.status >= 200 && response.status < 300) {
+    const artifact = artifactSchema.safeParse(response.body)
+    const expectedVersion = (request.expectedHeadVersion ?? 0) + 1
+    if (!artifact.success || artifact.data.workId !== workId || artifact.data.kind !== 'creative' || artifact.data.chapter !== undefined
+      || artifact.data.humanStatus !== 'pending' || artifact.data.version !== expectedVersion
+      || (request.expectedArtifactId !== null && artifact.data.id === request.expectedArtifactId)) {
+      throw new CliError('Creative regeneration response is invalid; keep the request file and inspect the work', 'invalid-response', undefined, false, undefined, undefined,
+        { writeOutcome: 'unknown' })
+    }
+    return artifact.data
+  }
+  const error = httpErrorSchema.safeParse(response.body)
+  if (!error.success) throw new CliError('Creative regeneration response is invalid; keep the request file and inspect the work', 'invalid-response', undefined, false, undefined, undefined,
+    { writeOutcome: 'unknown' })
+  if (response.status >= 500) throw new CliError('Creative regeneration result is unknown; keep the request file and inspect the work', 'creative-result-unknown', undefined, false, undefined, undefined,
+    { writeOutcome: 'unknown' })
+  throw new CliError(error.data.message, error.data.code, response.status, error.data.retryable, error.data.attemptId, error.data.issues)
 }
 
 export async function saveOutline(client: Client, workId: string, content: OutlineDraft) {

@@ -3,7 +3,7 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Artifact, CreativeContent, OutlineContent } from '@agent4novel/contracts'
-import { approveOutline, saveCreativeDraft, saveOutlineDraft, selectCreativeDirection } from '../api.js'
+import { approveOutline, regenerateCreative, saveCreativeDraft, saveOutlineDraft, selectCreativeDirection } from '../api.js'
 import Entry from './Entry.js'
 import CreativePoster from './CreativePoster.js'
 import OutlineReview from './OutlineReview.js'
@@ -12,6 +12,7 @@ vi.mock('../api.js', () => ({
   getConfig: vi.fn(async () => ({ demo: true })),
   createWork: vi.fn(async () => ({ id: 'created-work' })),
   saveCreativeDraft: vi.fn(),
+  regenerateCreative: vi.fn(),
   selectCreativeDirection: vi.fn(),
   saveOutlineDraft: vi.fn(),
   approveOutline: vi.fn(),
@@ -44,7 +45,7 @@ async function mount(view: React.ReactNode) {
   document.body.append(host)
   const root = createRoot(host)
   await act(async () => root.render(view))
-  return { host, async cleanup() { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals() } }
+  return { host, root, async cleanup() { await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals() } }
 }
 
 async function edit(field: HTMLInputElement | HTMLTextAreaElement, value: string) {
@@ -123,6 +124,67 @@ describe('entry pages accessible editing', () => {
       expect(view.host.querySelector('[role="dialog"]')).toBeNull()
       expect(nativeConfirm).not.toHaveBeenCalled()
     } finally { await view.cleanup(); nativeConfirm.mockRestore() }
+  })
+
+  it('saves dirty creative edits before regenerating once and keeps the supplemental idea in the request', async () => {
+    const saved = { directions: directions.directions.map((p, i) => i === 0 ? { ...p, hook: '先保存的钩子' } : p) }
+    const regenerated = { directions: directions.directions.map((p, i) => i === 0 ? { ...p, title: '新方向' } : p) }
+    vi.mocked(saveCreativeDraft).mockResolvedValue(artifact('creative', 4, saved))
+    vi.mocked(regenerateCreative).mockResolvedValue(artifact('creative', 5, regenerated))
+    const view = await mount(<CreativePoster workId="work-1" artifactId="creative-3" content={directions} headVersion={3} caption={null} readonly={false} onChanged={() => {}} />)
+    try {
+      await edit(view.host.querySelector<HTMLTextAreaElement>('[aria-label="钩子"]')!, '先保存的钩子')
+      await edit(view.host.querySelector<HTMLTextAreaElement>('[aria-label="补充想法"]')!, '补充一个更快的冲突')
+      await act(async () => button(view.host, '重新生成创意稿').click())
+      expect(saveCreativeDraft).toHaveBeenCalledExactlyOnceWith('work-1', saved, 3)
+      expect(regenerateCreative).toHaveBeenCalledExactlyOnceWith('work-1', {
+        expectedArtifactId: 'creative-4', expectedHeadVersion: 4, instructions: '补充一个更快的冲突',
+      })
+      expect(vi.mocked(saveCreativeDraft).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(regenerateCreative).mock.invocationCallOrder[0]!)
+      expect(view.host.querySelector<HTMLInputElement>('[aria-label="方向标题"]')?.value).toBe('新方向')
+      expect(view.host.querySelector<HTMLTextAreaElement>('[aria-label="补充想法"]')?.value).toBe('')
+      expect(view.host.textContent).not.toContain('确认选定')
+    } finally { await view.cleanup() }
+  })
+
+  it('keeps the supplemental idea visible after a known failure and freezes it after an unknown write', async () => {
+    vi.mocked(regenerateCreative).mockRejectedValueOnce(Object.assign(new Error('rejected'), { status: 409, code: 'version-conflict' }))
+    const view = await mount(<CreativePoster workId="work-1" artifactId="creative-3" content={directions} headVersion={3} caption={null} readonly={false} onChanged={() => {}} />)
+    try {
+      await edit(view.host.querySelector<HTMLTextAreaElement>('[aria-label="补充想法"]')!, '保留这条想法')
+      await act(async () => button(view.host, '重新生成创意稿').click())
+      expect(view.host.querySelector<HTMLTextAreaElement>('[aria-label="补充想法"]')?.value).toBe('保留这条想法')
+      expect(view.host.textContent).toContain('再生被拒或失败')
+    } finally { await view.cleanup() }
+  })
+
+  it('freezes an unknown regeneration and exposes explicit readback without dropping the idea', async () => {
+    vi.mocked(regenerateCreative).mockRejectedValueOnce(Object.assign(new Error('lost response'), { writeOutcome: 'unknown' }))
+    const view = await mount(<CreativePoster workId="work-1" artifactId="creative-3" content={directions} headVersion={3} caption={null} readonly={false} onChanged={() => {}} />)
+    try {
+      await edit(view.host.querySelector<HTMLTextAreaElement>('[aria-label="补充想法"]')!, '未知结果也要保留')
+      await act(async () => button(view.host, '重新生成创意稿').click())
+      expect(view.host.querySelector<HTMLTextAreaElement>('[aria-label="补充想法"]')?.value).toBe('未知结果也要保留')
+      expect(view.host.textContent).toContain('操作结果尚未确认')
+      expect(view.host.textContent).toContain('核对服务器内容')
+    } finally { await view.cleanup() }
+  })
+
+  it('keeps the locally committed artifact identity when a stale parent refresh arrives', async () => {
+    const first = artifact('creative', 4, { directions: directions.directions.map(p => ({ ...p, title: '第一次再生' })) })
+    const second = artifact('creative', 5, { directions: directions.directions.map(p => ({ ...p, title: '第二次再生' })) })
+    vi.mocked(regenerateCreative).mockResolvedValueOnce(first).mockResolvedValueOnce(second)
+    const view = await mount(<CreativePoster workId="work-1" artifactId="creative-3" content={directions} headVersion={3} caption={null} readonly={false} onChanged={() => {}} />)
+    try {
+      await edit(view.host.querySelector<HTMLTextAreaElement>('[aria-label="补充想法"]')!, '第一次')
+      await act(async () => button(view.host, '重新生成创意稿').click())
+      expect(regenerateCreative).toHaveBeenLastCalledWith('work-1', { expectedArtifactId: 'creative-3', expectedHeadVersion: 3, instructions: '第一次' })
+
+      await act(async () => view.root.render(<CreativePoster workId="work-1" artifactId="creative-3" content={directions} headVersion={3} caption={null} readonly={false} onChanged={() => {}} />))
+      await edit(view.host.querySelector<HTMLTextAreaElement>('[aria-label="补充想法"]')!, '第二次')
+      await act(async () => button(view.host, '重新生成创意稿').click())
+      expect(regenerateCreative).toHaveBeenLastCalledWith('work-1', { expectedArtifactId: 'creative-4', expectedHeadVersion: 4, instructions: '第二次' })
+    } finally { await view.cleanup() }
   })
 
   it('cancels outline approval by default and confirms only after saving the visible outline version', async () => {

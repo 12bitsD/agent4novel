@@ -30,6 +30,22 @@ it('rejects absent credentials instead of using demo output', async () => {
   expect(await runIsolatedStep({ stepId: 'caption', input: { seed: '合成素材' } })).toMatchObject({ kind: 'failed', code: 'llm-unavailable' })
   expect(mocks.generateObject).not.toHaveBeenCalled()
 })
+it('forwards creative regeneration through the run-step worker into the production prompt', async () => {
+  const f = await fixtures()
+  const regenerated = { directions: f.creative.directions.map(({ directionId, ...value }) => value) }
+  mocks.generateObject.mockResolvedValue({ object: regenerated, usage: {}, finishReason: 'stop' })
+  const result = await runIsolatedStep({
+    stepId: 'creative',
+    input: { seed: '合成素材', upstream: { caption: f.caption }, regeneration: { content: f.creative, instructions: '把冲突推进得更快' } },
+    config: { directionCount: 1 },
+  })
+  expect(result.kind).toBe('succeeded')
+  expect(mocks.generateObject).toHaveBeenCalledTimes(1)
+  const call = mocks.generateObject.mock.calls[0]![0]
+  expect(call.prompt).toContain('当前已保存方向包(仅供本次再生参考):')
+  expect(call.prompt).toContain(JSON.stringify(f.creative, null, 2))
+  expect(call.prompt).toContain('作者补充想法:\n把冲突推进得更快')
+})
 it('does not expose provider errors', async () => {
   mocks.generateObject.mockRejectedValue(new Error('PRIVATE_PROVIDER_RESPONSE'))
   const result = await runIsolatedStep({ stepId: 'caption', input: { seed: '合成素材' } })

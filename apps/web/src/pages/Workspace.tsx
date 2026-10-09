@@ -449,6 +449,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
         <CreativePoster
           key="creative"
           workId={workId}
+          artifactId={creativeArtifact.id}
           content={creative as CreativeContent}
           headVersion={creativeArtifact.version}
           caption={caption}

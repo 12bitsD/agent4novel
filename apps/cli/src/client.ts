@@ -1,5 +1,5 @@
 import { advanceOutcomeDtoSchema, httpErrorSchema, artifactSchema, workSchema, workListResponseSchema, pipelineStateSchema, settingApproveResponseSchema, workViewSchema, diagnosticResponseSchema, diagnosticQuerySchema } from '@agent4novel/contracts'
-import type { BeatSubmission, ProseSubmission, DiagnosticQuery, StartChapterRequest, WorkCreateRequest, SelectCreativeRequest, OutlineDraftRequest, ApproveRequest } from '@agent4novel/contracts'
+import type { BeatSubmission, ProseSubmission, DiagnosticQuery, StartChapterRequest, WorkCreateRequest, SelectCreativeRequest, OutlineDraftRequest, ApproveRequest, CreativeRegenerateRequest } from '@agent4novel/contracts'
 import { appConfigSchema, matchesStartChapterResponse, outlineApprovalRequestSchema, outlineApprovalResponseSchema, matchesOutlineApprovalResponse, type OutlineApprovalRequest } from '@agent4novel/contracts'
 import { agentFileSchema, agentFileReadSchema, agentFileUploadSchema, authorConfigViewSchema, authorConfigReceiptSchema, authorConfigSaveSchema,
   managedAgentFileText, type AuthorConfigSave, type AgentFileUpload } from '@agent4novel/contracts'
@@ -190,6 +190,8 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
       validate(artifactSchema, await call<unknown>('POST', `/api/works/${encodeURIComponent(workId)}/artifacts/creative/select`, {
         directionId, expectedHeadVersion,
       } satisfies SelectCreativeRequest), result => result.workId === workId && result.kind === 'creative' && result.chapter === undefined && result.humanStatus === 'approved', true),
+    creativeRegenerate: (workId: string, request: CreativeRegenerateRequest) => call<{ status: number; body: unknown }>('POST',
+      `/api/works/${encodeURIComponent(workId)}/artifacts/creative/regenerate`, request, 920_000, true),
     saveOutline: async (workId: string, content: OutlineDraft, expectedHeadVersion: number) =>
       validate(artifactSchema, await call<unknown>('PUT', `/api/works/${encodeURIComponent(workId)}/artifacts/outline`, {
         content, expectedHeadVersion,

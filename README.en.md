@@ -112,7 +112,7 @@ The workbench keeps the work and chapter location on the left, the current mater
 | Chapter plan | This chapter's goal, content order and ending | Edit or regenerate, then approve |
 | Prose | Chapter text based on its plan and setting | Edit or rewrite the chapter, then approve |
 
-Creative edits use “保存全部方向” (Save all directions); outline edits use “保存草稿” (Save draft). Setting and chapter-plan edits stay on the page until approval submits their full content. Prose edits autosave. Saving and approving remain separate actions; approved directions, outlines, settings and chapter plans are read-only.
+Creative edits use “保存全部方向” (Save all directions). If a direction needs another pass, enter “补充想法” (Additional thought) and choose “重新生成创意稿” (Regenerate creative); the current version is retained, a new pending candidate is appended, and nothing is selected automatically. Outline edits use “保存草稿” (Save draft). Setting and chapter-plan edits stay on the page until approval submits their full content. Prose edits autosave. Saving and approving remain separate actions; approved directions, outlines, settings and chapter plans are read-only.
 
 Prose approval completes the chapter. “Start next chapter” in the prose header generates the next chapter plan. Use the chapter directory to revisit earlier chapters. Approved prose opens in reading mode; select “编辑正文” (Edit prose) to change it, with autosave preserving approval. Editing an earlier chapter flags existing later chapters for a continuity check while keeping their text and status.
 

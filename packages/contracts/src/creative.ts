@@ -1,5 +1,10 @@
 import { z } from 'zod'
 
+export const creativeLimits = {
+  instructions: 4_000,
+  bodyBytes: 1024 * 1024,
+} as const
+
 // creative(创意稿,#3c):creative 步骤产物——一个方向包 = 一份完整的创作方向,全 hint 级。
 // N 个方向包(N=directionCount,默认 2,严格 1~3)进比较视图,作者选定其一。
 // 领域词见 CONTEXT.md「创意稿」;形状单源同步 docs/schema.md。
@@ -47,3 +52,18 @@ export const creativeContentSchema = z
   })
   .strict()
 export type CreativeContent = z.infer<typeof creativeContentSchema>
+
+// 再生请求固定作者实际看到的 creative head；首次重试用 null/null。
+export const creativeRegenerateRequestSchema = z
+  .object({
+    expectedArtifactId: z.string().trim().min(1).max(200).nullable(),
+    expectedHeadVersion: z.number().int().positive().safe().nullable(),
+    instructions: z.string().max(creativeLimits.instructions),
+  })
+  .strict()
+  .superRefine((request, ctx) => {
+    if ((request.expectedArtifactId === null) !== (request.expectedHeadVersion === null)) {
+      ctx.addIssue({ code: 'custom', path: ['expectedArtifactId'], message: '目标产物 ID 与版本必须同时为空或同时提供' })
+    }
+  })
+export type CreativeRegenerateRequest = z.infer<typeof creativeRegenerateRequestSchema>

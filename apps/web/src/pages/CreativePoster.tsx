@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { creativeContentSchema, type Artifact, type CaptionContent, type CreativeContent } from '@agent4novel/contracts'
-import { getWork, saveCreativeDraft, selectCreativeDirection } from '../api.js'
+import { getWork, regenerateCreative, saveCreativeDraft, selectCreativeDirection } from '../api.js'
 import { ConfirmDialog } from '../ConfirmDialog.js'
 import MaterialFrame, { type MaterialGuard } from '../MaterialFrame.js'
 import { materialWriteUnconfirmed } from '../material-operation.js'
@@ -129,6 +129,7 @@ function HintListEditor({
 
 export default function CreativePoster({
   workId,
+  artifactId,
   content,
   headVersion,
   caption,
@@ -138,6 +139,8 @@ export default function CreativePoster({
   onGuard,
 }: {
   workId: string
+  /** The exact pending creative head being regenerated. Optional for read-only/recovery mounts. */
+  artifactId?: string
   content: CreativeContent
   headVersion: number
   caption: CaptionContent | null
@@ -149,6 +152,12 @@ export default function CreativePoster({
   onGuard?: (guard: MaterialGuard) => void
 }) {
   const [s, setS] = useState<CompareState>(() => initCompare(content, headVersion))
+  type CreativeIdentity = { artifactId?: string; version: number }
+  // The parent refresh is asynchronous and can briefly return the pre-command
+  // snapshot. Keep the committed head locally so the next command cannot
+  // accidentally reuse that stale artifact identity.
+  const currentIdentity = useRef<CreativeIdentity>({ artifactId, version: headVersion })
+  const localIdentity = useRef<CreativeIdentity | null>(null)
   const [captionOpen, setCaptionOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectCandidate, setSelectCandidate] = useState<CompareState | null>(null)
@@ -157,13 +166,33 @@ export default function CreativePoster({
   const [remote, setRemote] = useState<Artifact | null>(null)
   const [loadCandidate, setLoadCandidate] = useState<Artifact | null>(null)
   const [observedApproved, setObservedApproved] = useState(false)
+  const [instructions, setInstructions] = useState('')
+  const [regenerating, setRegenerating] = useState(false)
   const active = useRef(false), operationSequence = useRef(0), commandBusy = useRef(false)
   const frozenOperation = useRef<unknown>(null)
   const observedReadonlyContent = useRef<string | null>(null)
   const externalReadonlyDraft = viewReadonly && !observedApproved && isDirty(s)
   const readonly = observedApproved || (viewReadonly && !externalReadonlyDraft)
-  const locked = s.saving || s.selecting || unconfirmed || checking
+  const locked = s.saving || s.selecting || regenerating || unconfirmed || checking
   useEffect(() => { active.current = true; return () => { active.current = false; operationSequence.current++ } }, [workId])
+
+  const setCurrentIdentity = (next: CreativeIdentity) => {
+    currentIdentity.current = next
+    localIdentity.current = next
+  }
+
+  // Accept a newer parent head, but never let an older refresh replace a head
+  // committed by this mounted poster. Initial mounts also learn an artifact ID
+  // when older callers only supplied content/version.
+  useEffect(() => {
+    const incoming: CreativeIdentity = { artifactId, version: headVersion }
+    const current = currentIdentity.current
+    if (incoming.version < current.version) return
+    if (incoming.version === current.version && incoming.artifactId !== current.artifactId
+      && localIdentity.current?.version === current.version && localIdentity.current.artifactId === current.artifactId) return
+    currentIdentity.current = incoming
+    if (incoming.version > current.version || incoming.artifactId === current.artifactId) localIdentity.current = null
+  }, [artifactId, headVersion])
 
   // Approved head changes are read-only observations; saved editable drafts keep their mounted controls.
   useEffect(() => {
@@ -175,18 +204,21 @@ export default function CreativePoster({
   }, [viewReadonly, externalReadonlyDraft, unconfirmed, s.saving, s.selecting, content, headVersion])
 
   const pack = activePack(s)
-  useEffect(() => { onGuard?.({ dirty: !observedApproved && isDirty(s), locked: s.saving || s.selecting || unconfirmed || checking }) }, [s, viewReadonly, observedApproved, unconfirmed, checking, onGuard])
+  useEffect(() => { onGuard?.({ dirty: !observedApproved && (isDirty(s) || instructions.length > 0), locked: s.saving || s.selecting || regenerating || unconfirmed || checking }) }, [s, instructions, viewReadonly, observedApproved, unconfirmed, regenerating, checking, onGuard])
   useEffect(() => () => onGuard?.({ dirty: false, locked: false }), [onGuard])
 
   const doSave = async () => {
     if (readonly || externalReadonlyDraft || unconfirmed || checking || commandBusy.current) return
-    const next = beginSave(s); if (next === s) return
+    if (!isDirty(s)) return
+    const expectedHeadVersion = currentIdentity.current.version
+    const next = beginSave({ ...s, headVersion: expectedHeadVersion })
     const sequence = ++operationSequence.current
     commandBusy.current = true; frozenOperation.current = { operation: 'save-creative', expectedHeadVersion: next.headVersion, content: savePayload(next) }
     onGuard?.({ dirty: isDirty(next), locked: true }); setS(next); setError(null)
     try {
       const result = await saveCreativeDraft(workId, savePayload(next), next.headVersion)
       if (!active.current || sequence !== operationSequence.current) return
+      setCurrentIdentity({ artifactId: result.id, version: result.version })
       setS(current => saveSucceeded(current, result.version)); frozenOperation.current = null
     } catch (error) {
       if (!active.current || sequence !== operationSequence.current) return
@@ -198,7 +230,7 @@ export default function CreativePoster({
 
   const doSelect = async (candidate: CompareState) => {
     if (readonly || externalReadonlyDraft || unconfirmed || checking || commandBusy.current || s.saving || s.selecting) return
-    const next = beginSelect(candidate); if (next === candidate) return
+    const next = beginSelect({ ...candidate, headVersion: currentIdentity.current.version }); if (next === candidate) return
     const sequence = ++operationSequence.current
     commandBusy.current = true; frozenOperation.current = { operation: 'select-creative', directionId: next.activeId, expectedHeadVersion: next.headVersion, content: savePayload(next) }
     onGuard?.({ dirty: isDirty(next), locked: true }); setS(next); setError(null)
@@ -208,6 +240,7 @@ export default function CreativePoster({
         const result = await saveCreativeDraft(workId, savePayload(next), head)
         if (!active.current || sequence !== operationSequence.current) return
         head = result.version
+        setCurrentIdentity({ artifactId: result.id, version: result.version })
       }
       frozenOperation.current = { operation: 'select-creative', directionId: next.activeId, expectedHeadVersion: head }
       await selectCreativeDirection(workId, next.activeId, head)
@@ -221,6 +254,48 @@ export default function CreativePoster({
       setS(current => commandFailed(current, (error as { code?: string }).code))
       setError(unknown ? '操作结果尚未确认，编辑和原提交仍保留。请先核对服务器内容。' : '选定被拒或失败，你的编辑仍保留。')
     } finally { if (active.current && sequence === operationSequence.current) commandBusy.current = false }
+  }
+
+  const doRegenerate = async () => {
+    if (readonly || externalReadonlyDraft || unconfirmed || checking || commandBusy.current || regenerating || !currentIdentity.current.artifactId) {
+      if (!currentIdentity.current.artifactId && !readonly) setError('当前创意稿缺少可核对的版本身份，不能发起再生。')
+      return
+    }
+    const sequence = ++operationSequence.current
+    commandBusy.current = true; setRegenerating(true); setError(null)
+    const frozenIdentity = { ...currentIdentity.current }
+    let expectedArtifactId = frozenIdentity.artifactId
+    let expectedHeadVersion = frozenIdentity.version
+    if (!expectedArtifactId) {
+      commandBusy.current = false; setRegenerating(false); setError('当前创意稿缺少可核对的版本身份，不能发起再生。')
+      return
+    }
+    frozenOperation.current = { operation: 'regenerate-creative', expectedArtifactId, expectedHeadVersion, instructions }
+    try {
+      let next = s
+      if (isDirty(next)) {
+        next = beginSave({ ...next, headVersion: expectedHeadVersion })
+        setS(next)
+        const saved = await saveCreativeDraft(workId, savePayload(next), next.headVersion)
+        if (!active.current || sequence !== operationSequence.current) return
+        expectedArtifactId = saved.id
+        expectedHeadVersion = saved.version
+        setCurrentIdentity({ artifactId: expectedArtifactId, version: expectedHeadVersion })
+        setS(current => saveSucceeded(current, saved.version))
+        frozenOperation.current = { operation: 'regenerate-creative', expectedArtifactId, expectedHeadVersion, instructions }
+      }
+      const result = await regenerateCreative(workId, { expectedArtifactId, expectedHeadVersion, instructions })
+      if (!active.current || sequence !== operationSequence.current) return
+      setCurrentIdentity({ artifactId: result.id, version: result.version })
+      setS(initCompare(creativeContentSchema.parse(result.content), result.version))
+      setInstructions(''); setUnconfirmed(false); setRemote(null); frozenOperation.current = null
+      onChanged()
+    } catch (error) {
+      if (!active.current || sequence !== operationSequence.current) return
+      const unknown = materialWriteUnconfirmed(error); setUnconfirmed(unknown)
+      setS(current => commandFailed(current, (error as { code?: string }).code))
+      setError(unknown ? '操作结果尚未确认，补充想法和编辑仍保留。请先核对服务器内容。' : '再生被拒或失败，补充想法和编辑仍保留。')
+    } finally { if (active.current && sequence === operationSequence.current) { commandBusy.current = false; setRegenerating(false) } }
   }
 
   const readCurrent = async () => {
@@ -247,15 +322,22 @@ export default function CreativePoster({
           {isDirty(s) && (
             <button
               onClick={doSave}
-              disabled={s.saving || s.selecting}
+              disabled={s.saving || s.selecting || regenerating}
               style={btnSecondary}
             >
               {s.saving ? '保存中……' : '保存全部方向'}
             </button>
           )}
           <button
+            onClick={() => void doRegenerate()}
+            disabled={s.saving || s.selecting || regenerating}
+            style={btnSecondary}
+          >
+            {regenerating ? '生成中……' : '重新生成创意稿'}
+          </button>
+          <button
             onClick={() => setSelectCandidate(s)}
-            disabled={s.saving || s.selecting}
+            disabled={s.saving || s.selecting || regenerating}
             style={btnPrimary}
           >
             {s.selecting ? '选定中……' : `就按「${pack.title}」这个方向写 →`}
@@ -286,6 +368,24 @@ export default function CreativePoster({
       )}
       {error && <p role="alert" className="status-message status-error">{error}</p>}
       {s.notice && s.notice !== '已保存' && <p role="status" className="status-message">{s.notice}</p>}
+
+      {!readonly && !externalReadonlyDraft && (
+        <section className="flow-section surface" aria-label="创意再生">
+          <label className="field-label" htmlFor="creative-regeneration-instructions">补充想法</label>
+          <textarea
+            id="creative-regeneration-instructions"
+            aria-label="补充想法"
+            rows={3}
+            maxLength={4000}
+            value={instructions}
+            onChange={(event) => setInstructions(event.target.value)}
+            placeholder="告诉模型这次想换一个方向，或补充必须保留的想法（最多 4000 字）"
+            disabled={locked}
+            style={fieldStyle}
+          />
+          <p className="setting-muted" role="status">{instructions.length}/4000；再生会追加新的 pending 创意稿，不会自动选定。</p>
+        </section>
+      )}
 
       {/* 海报主体 */}
       <fieldset className="material-edit-fields" disabled={locked || externalReadonlyDraft}>
@@ -409,6 +509,7 @@ export default function CreativePoster({
       </section>}
       {loadCandidate && <ConfirmDialog title="载入服务器内容？" description="载入会放弃本页编辑，采用服务器当前版本。已经发出的操作可能继续处理，此操作不会撤销它。" cancelLabel="继续编辑" confirmLabel="放弃本页并载入" onCancel={() => setLoadCandidate(null)} onConfirm={() => {
         operationSequence.current++; commandBusy.current = false; frozenOperation.current = null
+        setCurrentIdentity({ artifactId: loadCandidate.id, version: loadCandidate.version })
         setS(initCompare(creativeContentSchema.parse(loadCandidate.content), loadCandidate.version)); setObservedApproved(loadCandidate.humanStatus === 'approved')
         setLoadCandidate(null); setUnconfirmed(false); setRemote(null); setError(null); onChanged()
       }} />}
