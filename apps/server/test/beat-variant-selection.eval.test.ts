@@ -38,26 +38,61 @@ function makeFixture(step: ArtifactStep = fakeArtifactStep('beat', regenerated).
 }
 
 describe('E20 server acceptance: compare/select beat variants', () => {
-  it('returns A/B, keeps B pending, copies A as C, and approves only the selected head', async () => {
+  it('returns complete A/B receipts, keeps B pending, and lets explicit new choice approve only B', async () => {
     const fx = makeFixture();
     const regen = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: fx.beat.id, expectedHeadVersion: 1, content: original, instructions: '更紧张' }) })
     expect(regen.status).toBe(200); const body = await regen.json() as any
-    expect(body.comparison.original.id).toBe(fx.beat.id); expect(body.comparison.candidate.humanStatus).toBe('pending'); expect(body.artifact.version).toBe(2)
+    expect(body.comparison).toMatchObject({ original: fx.beat, candidate: body.artifact })
+    expect(body.comparison.original.content).toEqual(original)
+    expect(body.comparison.candidate.content).toEqual(regenerated)
+    expect(body.comparison.candidate.humanStatus).toBe('pending')
+    expect(body.comparison.candidate.id).toBe(body.artifact.id)
+    expect(body.comparison.candidate.version).toBe(2)
     const candidate = body.artifact
+    const choose = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/select`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: candidate.id, expectedHeadVersion: candidate.version,
+        originalArtifactId: fx.beat.id, originalVersion: fx.beat.version, originalContent: original, choice: 'new' }) })
+    expect(choose.status).toBe(200); const selected = await choose.json() as any
+    expect(selected.artifact).toEqual(candidate)
+    expect(selected.comparison).toMatchObject({ original: fx.beat, candidate })
+    expect(selected.selection).toMatchObject({ operation: 'select-beat-variant', choice: 'new', writeOutcome: 'not-committed', resultHead: { artifactId: candidate.id, version: 2, humanStatus: 'pending' } })
+    const approve = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/approve`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: selected.artifact.id, expectedHeadVersion: 3, content: selected.artifact.content }) })
+    expect(approve.status).toBe(409)
+    const approveNew = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/approve`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: selected.artifact.id, expectedHeadVersion: 2, content: selected.artifact.content }) })
+    expect(approveNew.status).toBe(200); expect((await approveNew.json()).artifact.humanStatus).toBe('approved')
+    expect(fx.store.getArtifactVersion(fx.work.id, 'beat', 1, fx.beat.id, 1)?.content).toEqual(original)
+    expect(fx.store.getArtifactVersion(fx.work.id, 'beat', 1, candidate.id, 2)?.humanStatus).toBe('approved')
+    expect(fx.store.getWork(fx.work.id)!.artifacts.filter(a => a.kind === 'beat' && a.chapter === 1)).toHaveLength(1)
+  })
+
+  it('copies A as a new C only for explicit old choice and preserves A/B/C history', async () => {
+    const fx = makeFixture()
+    const regen = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: fx.beat.id, expectedHeadVersion: 1, content: original, instructions: '更紧张' }) })
+    const candidate = (await regen.json() as any).artifact
     const chooseOld = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/select`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: candidate.id, expectedHeadVersion: candidate.version,
         originalArtifactId: fx.beat.id, originalVersion: fx.beat.version, originalContent: original, choice: 'original' }) })
     expect(chooseOld.status).toBe(200); const selected = await chooseOld.json() as any
-    expect(selected.artifact.version).toBe(3); expect(selected.artifact.content).toEqual(fx.beat.content)
+    expect(selected.artifact.version).toBe(3)
+    expect(selected.artifact.id).not.toBe(fx.beat.id)
+    expect(selected.artifact.id).not.toBe(candidate.id)
+    expect(selected.artifact.content).toEqual(original)
+    expect(selected.artifact.humanStatus).toBe('pending')
+    expect(selected.comparison).toMatchObject({ original: fx.beat, candidate })
+    expect(fx.store.getArtifactVersion(fx.work.id, 'beat', 1, fx.beat.id, 1)?.content).toEqual(original)
+    expect(fx.store.getArtifactVersion(fx.work.id, 'beat', 1, candidate.id, 2)?.content).toEqual(regenerated)
+    expect(fx.store.getArtifactVersion(fx.work.id, 'beat', 1, selected.artifact.id, 3)?.content).toEqual(original)
     const approve = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/approve`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: selected.artifact.id, expectedHeadVersion: 3, content: selected.artifact.content }) })
-    expect(approve.status).toBe(200); expect((await approve.json()).artifact.humanStatus).toBe('approved')
-    expect(fx.store.getArtifactVersion(fx.work.id, 'beat', 1, fx.beat.id, 1)?.content).toEqual(original)
-    expect(fx.store.getWork(fx.work.id)!.artifacts.find(a => a.kind === 'beat' && a.chapter === 1)?.version).toBe(3)
+    expect(approve.status).toBe(200); expect((await approve.json()).artifact.id).toBe(selected.artifact.id)
+    expect(fx.store.getWork(fx.work.id)!.artifacts.filter(a => a.kind === 'beat' && a.chapter === 1).map(a => [a.id, a.version, a.humanStatus])).toEqual([[selected.artifact.id, 3, 'approved']])
   })
 
-  it('rejects stale or approved targets before the model and leaves no new head on failure', async () => {
+  it('rejects missing, stale, non-current, and approved identities before the model, with no half-write', async () => {
     const seen: unknown[] = []; const step: ArtifactStep = { ...fakeArtifactStep('beat', regenerated).step, async run(input) { seen.push(input); throw new Error('synthetic provider failure') } }
     const fx = makeFixture(step)
     const response = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
@@ -66,5 +101,25 @@ describe('E20 server acceptance: compare/select beat variants', () => {
     const failed = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: fx.beat.id, expectedHeadVersion: 1, content: original, instructions: '' }) })
     expect(failed.status).toBe(500); expect(seen).toHaveLength(1); expect(fx.store.getWork(fx.work.id)!.artifacts.find(a => a.kind === 'beat' && a.chapter === 1)?.version).toBe(1)
+
+    const healthy = makeFixture()
+    const generated = await healthy.app.request(`/api/works/${healthy.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: healthy.beat.id, expectedHeadVersion: 1, content: original, instructions: '' }) })
+    const b = (await generated.json() as any).artifact
+    const missing = await healthy.app.request(`/api/works/${healthy.work.id}/artifacts/beat/select`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: b.id, expectedHeadVersion: 2, originalArtifactId: 'missing', originalVersion: 1, originalContent: original, choice: 'new' }) })
+    expect(missing.status).toBe(409)
+    const nonCurrent = await healthy.app.request(`/api/works/${healthy.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 2, expectedArtifactId: healthy.beat.id, expectedHeadVersion: 1, content: original, instructions: '' }) })
+    expect(nonCurrent.status).toBe(409)
+    const stale = await healthy.app.request(`/api/works/${healthy.work.id}/artifacts/beat/select`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: healthy.beat.id, expectedHeadVersion: 1, originalArtifactId: healthy.beat.id, originalVersion: 1, originalContent: original, choice: 'new' }) })
+    expect(stale.status).toBe(409)
+    const approved = await healthy.app.request(`/api/works/${healthy.work.id}/artifacts/beat/approve`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: b.id, expectedHeadVersion: 2, content: b.content }) })
+    expect(approved.status).toBe(200)
+    const afterApprove = await healthy.app.request(`/api/works/${healthy.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: b.id, expectedHeadVersion: 2, content: b.content, instructions: '' }) })
+    expect(afterApprove.status).toBe(409)
   })
 })

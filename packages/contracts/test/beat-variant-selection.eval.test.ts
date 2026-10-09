@@ -21,7 +21,7 @@ describe('E20 contract: beat variant compare/select', () => {
     expect(beatVariantSelectionRequestSchema.safeParse({ chapter: 1, expectedArtifactId: 'beat-b', expectedHeadVersion: 2,
       originalArtifactId: artifact.id, originalVersion: 1, originalContent: original, choice: 'new', extra: true }).success).toBe(false)
     expect(beatVariantSelectionResponseSchema.safeParse({
-      artifact, original: artifact, candidate: { ...artifact, id: 'beat-b', version: 2, content: { ...original, title: '新章纲' } }, choice: 'new',
+      artifact, comparison: { original: artifact, candidate: { ...artifact, id: 'beat-b', version: 2, content: { ...original, title: '新章纲' } } }, choice: 'new',
       selection: { operation: 'select-beat-variant', workId: 'work-1', chapter: 1,
         expectedHead: { artifactId: 'beat-b', version: 2 }, originalHead: { artifactId: 'beat-a', version: 1 }, choice: 'new',
         writeOutcome: 'not-committed', resultHead: { artifactId: 'beat-b', version: 2, humanStatus: 'pending' } },
