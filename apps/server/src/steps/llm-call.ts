@@ -8,6 +8,7 @@ import { KnownError } from '../errors.js'
 import { modelRuntime } from './llm.js'
 import { recordTelemetry, currentRequest } from './telemetry.js'
 import { safeLog } from '../safe-log.js'
+import { currentStepRecorder, StepRecordError } from './step-record.js'
 
 // 提示词以文件维护(ADR-0002),各 step 一个目录,此处共享 loader,模块级缓存
 const skillCache = new Map<string, string>()
@@ -68,6 +69,8 @@ export async function callLlm<T>(args: {
   maxOutputTokens?: number
   /** 仅整份设定明确关闭 SDK 重试；其他步骤保留现有 SDK 默认行为。 */
   maxRetries?: number
+  /** Node assembly settings already resolved by the production step. */
+  effectiveConfig?: { directionCount?: number }
 }): Promise<T> {
   const model = args.config.model ?? modelRuntime.defaultModelId
   const started = Date.now()
@@ -88,6 +91,32 @@ export async function callLlm<T>(args: {
     const languageModel = modelRuntime.languageModel(model)
     const settings = modelRuntime.generationSettings(args.config)
     generation = settings.parameters
+    await currentStepRecorder()?.captureInvocation({
+      system: args.system,
+      prompt: args.prompt,
+      model,
+      attemptId: args.attemptId,
+      effectiveConfig: {
+        model,
+        directionCount: args.effectiveConfig?.directionCount ?? null,
+        thinking: settings.parameters.thinking ?? null,
+        temperature: settings.parameters.temperature ?? null,
+        topP: settings.parameters.topP ?? null,
+      },
+      generation: {
+        thinking: settings.parameters.thinking ?? null,
+        temperature: settings.parameters.temperature ?? null,
+        topP: settings.parameters.topP ?? null,
+      },
+      sdkOptions: {
+        temperature: settings.options.temperature ?? null,
+        topP: settings.options.topP ?? null,
+        providerOptions: settings.options.providerOptions ?? null,
+      },
+      maxOutputTokens: args.maxOutputTokens ?? 8000,
+      maxRetries: args.maxRetries ?? null,
+      requestTimeoutMs: modelRuntime.requestTimeoutMs,
+    })
     const { object, usage, finishReason } = await generateObject({
       model: languageModel,
       ...settings.options,
@@ -113,6 +142,7 @@ export async function callLlm<T>(args: {
     safeLog({ event: 'llm.call', ...telemetry })
     return validated
   } catch (err) {
+    if (err instanceof StepRecordError) throw err
     // Provider text, nested causes, and arbitrary messages are never public diagnostics.
     const diag = err as {
       finishReason?: string

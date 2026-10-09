@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { stepExperimentRequestSchema, stepExperimentResponseSchema } from '@agent4novel/contracts'
 import { CliError } from './client.js'
+import { makeStepRecordRequest, markStepRecordUnknown, reserveStepRecordDir } from './step-record.js'
 
 const FILE_BYTES = 1024 * 1024
 const RESULT_BYTES = 8 * FILE_BYTES
@@ -35,7 +36,7 @@ function readJson(path: string): unknown {
 // 文件只在 CLI 读取。provider 配置与推理只在 server 包的独立 worker 中运行。
 export async function runLocalStep(stepId: string | undefined, flags: Record<string, string>, timeoutMs?: number) {
   if ('top-k' in flags) throw new CliError('--top-k is not supported by the documented LongCat-2.0 API; use --top-p instead', 'usage')
-  if (!stepId || Object.values(flags).some(value => value.trim() === '') || Object.keys(flags).some(key => !['input-file', 'seed-file', 'system-prompt-file', 'config-file', 'timeout-ms', 'thinking', 'temperature', 'top-p'].includes(key))
+  if (!stepId || Object.values(flags).some(value => value.trim() === '') || Object.keys(flags).some(key => !['input-file', 'seed-file', 'system-prompt-file', 'config-file', 'record-dir', 'timeout-ms', 'thinking', 'temperature', 'top-p'].includes(key))
     || Boolean(flags['input-file']) === Boolean(flags['seed-file'])) {
     throw new CliError('run-step requires a node and exactly one of --input-file or --seed-file; --url is not supported', 'usage')
   }
@@ -58,7 +59,19 @@ export async function runLocalStep(stepId: string | undefined, flags: Record<str
     ...(Object.keys(overrides).length ? { config: { ...fromFile.data.config, ...overrides } } : {}),
   })
   if (!parsed.success) throw new CliError('Invalid step experiment input or options', 'invalid-input')
-  const payload = JSON.stringify(parsed.data)
+  let recordRequest: ReturnType<typeof makeStepRecordRequest> | undefined
+  if (flags['record-dir'] !== undefined) {
+    const dir = reserveStepRecordDir(flags['record-dir'])
+    recordRequest = makeStepRecordRequest({
+      dir,
+      inputSource: flags['input-file'] ? 'input-file' : 'seed-file',
+      inputPath: flags['input-file'] ?? flags['seed-file'] ?? null,
+      systemPromptPath: flags['system-prompt-file'] ?? null,
+      configPath: flags['config-file'] ?? null,
+    })
+  }
+  const request = stepExperimentRequestSchema.parse({ ...parsed.data, ...(recordRequest ? { record: recordRequest } : {}) })
+  const payload = JSON.stringify(request)
   if (Buffer.byteLength(payload) > FILE_BYTES) throw new CliError('Combined step experiment request exceeds 1 MiB', 'payload-too-large')
   const loader = new URL('../../server/node_modules/tsx/dist/loader.mjs', import.meta.url).href
   const worker = fileURLToPath(new URL('../../server/src/step-lab-main.ts', import.meta.url))
@@ -72,7 +85,11 @@ export async function runLocalStep(stepId: string | undefined, flags: Record<str
       if (settled) return
       settled = true
       clearTimeout(timer)
-      if (error) { child.kill('SIGTERM'); reject(error) } else resolve(stdout)
+      if (error) {
+        child.kill('SIGTERM')
+        if (recordRequest) markStepRecordUnknown(recordRequest, stepId, request.input, request.config?.model ?? 'unknown', error.code === 'network-error' ? 'cli-timeout' : 'worker-failed')
+        reject(error)
+      } else resolve(stdout)
     }
     const timer = setTimeout(() => finish(new CliError('Step timed out; the remote provider may still process the request', 'network-error')), timeoutMs ?? DEFAULT_STEP_TIMEOUT_MS)
     child.stdout.setEncoding('utf8')
@@ -83,7 +100,7 @@ export async function runLocalStep(stepId: string | undefined, flags: Record<str
       stdout += chunk
     })
     child.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-65536) })
-    child.on('error', () => finish(new CliError('Unable to start the local server worker', 'step-worker-failed')))
+    child.on('error', () => { void finish(new CliError('Unable to start the local server worker', 'step-worker-failed')) })
     child.stdin.on('error', () => { /* close/error handlers report worker failures */ })
     child.on('close', code => {
       if (code !== 0 && stdout.trim() === '') {
@@ -93,8 +110,8 @@ export async function runLocalStep(stepId: string | undefined, flags: Record<str
           if (typeof last === 'object' && last !== null && 'code' in last && typeof last.code === 'string'
             && ['invalid-input', 'payload-too-large', 'llm-config-invalid'].includes(last.code)) errorCode = last.code
         } catch { /* never echo worker stderr or provider text */ }
-        finish(new CliError('Local step worker failed; check input and model configuration', errorCode))
-      } else finish()
+        void finish(new CliError('Local step worker failed; check input and model configuration', errorCode))
+      } else void finish()
     })
     child.stdin.end(payload)
   })

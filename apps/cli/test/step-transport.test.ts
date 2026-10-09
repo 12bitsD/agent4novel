@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 import { once } from 'node:events'
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync, statSync, symlinkSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { cliBin as bin, cliTestEnv } from './cli-process.js'
@@ -25,6 +25,75 @@ async function invoke(args: string[], providerUrl: string, env: NodeJS.ProcessEn
 }
 
 describe('run-step through a local mock provider', () => {
+  it('writes a private complete record with the actual transport input and final result', async () => {
+    const directory = mkdtempSync(join(realpathSync(tmpdir()), 'a4n-step-record-cli-'))
+    const recordDir = join(directory, 'run-a')
+    const server = createServer(async (req, res) => {
+      let source = ''; for await (const chunk of req) source += chunk
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ id: 'mock-record', model: 'LongCat-2.0', choices: [{ index: 0,
+        message: { role: 'assistant', content: JSON.stringify(caption) }, finish_reason: 'stop' }] }))
+    })
+    server.listen(0, '127.0.0.1'); await once(server, 'listening')
+    const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
+    try {
+      const seedFile = join(directory, 'seed.txt'); writeFileSync(seedFile, 'recorded cli seed')
+      const spFile = join(directory, 'sp.md'); writeFileSync(spFile, 'recorded cli system')
+      const result = await invoke(['run-step', 'caption', '--seed-file', seedFile, '--system-prompt-file', spFile, '--record-dir', recordDir,
+        '--thinking', 'off', '--temperature', '0.4', '--top-p', '0.6'], `http://127.0.0.1:${address.port}/v1`)
+      expect(result.code, result.stderr).toBe(0)
+      expect(JSON.parse(result.stdout)).toMatchObject({ kind: 'succeeded', recording: { status: 'complete', dir: recordDir } })
+      expect(readdirSync(recordDir).sort()).toEqual(['input.json', 'invocation.json', 'meta.json', 'result.json'])
+      const invocation = JSON.parse(readFileSync(join(recordDir, 'invocation.json'), 'utf8'))
+      const recordedResult = JSON.parse(readFileSync(join(recordDir, 'result.json'), 'utf8'))
+      expect(invocation).toMatchObject({ captured: true, system: 'recorded cli system', prompt: '作者原始素材:\nrecorded cli seed\n\n请输出提炼稿。',
+        generation: { thinking: 'disabled', temperature: 0.4, topP: 0.6 }, maxOutputTokens: 8000 })
+      expect(recordedResult).toMatchObject({ status: 'succeeded', content: caption })
+      expect(statSync(recordDir).mode & 0o777).toBe(0o700)
+      for (const file of ['input.json', 'invocation.json', 'meta.json', 'result.json']) expect(statSync(join(recordDir, file)).mode & 0o777).toBe(0o600)
+    } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
+  }, 20000)
+
+  it('rejects a colliding or symlink record directory without contacting the provider', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'a4n-step-record-path-'))
+    let calls = 0
+    const server = createServer((_req, res) => { calls++; res.writeHead(500); res.end() })
+    server.listen(0, '127.0.0.1'); await once(server, 'listening')
+    const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
+    try {
+      const seedFile = join(directory, 'seed.txt'); writeFileSync(seedFile, 'record path seed')
+      const existing = join(directory, 'existing'); writeFileSync(existing, 'must remain')
+      for (const recordDir of [existing, join(directory, 'link')]) {
+        if (recordDir.endsWith('/link')) symlinkSync(existing, recordDir)
+        const result = await invoke(['run-step', 'caption', '--seed-file', seedFile, '--record-dir', recordDir], `http://127.0.0.1:${address.port}/v1`)
+        expect(result.code).toBe(1)
+        expect(JSON.parse(result.stderr).code).toMatch(/recording-/)
+      }
+      expect(readFileSync(existing, 'utf8')).toBe('must remain')
+      expect(calls).toBe(0)
+    } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
+  }, 20000)
+
+  it('rejects a record directory with a symlink parent without contacting the provider or changing the real parent', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'a4n-step-record-parent-link-'))
+    let calls = 0
+    const server = createServer((_req, res) => { calls++; res.writeHead(500); res.end() })
+    server.listen(0, '127.0.0.1'); await once(server, 'listening')
+    const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
+    try {
+      const seedFile = join(directory, 'seed.txt'); writeFileSync(seedFile, 'record parent link seed')
+      const realParent = join(directory, 'real-parent'); mkdirSync(realParent)
+      const existing = join(realParent, 'existing'); writeFileSync(existing, 'must remain')
+      const parentLink = join(directory, 'parent-link'); symlinkSync(realParent, parentLink)
+      const result = await invoke(['run-step', 'caption', '--seed-file', seedFile, '--record-dir', join(parentLink, 'run-a')], `http://127.0.0.1:${address.port}/v1`)
+      expect(result.code).toBe(1)
+      expect(JSON.parse(result.stderr).code).toBe('recording-path-invalid')
+      expect(readFileSync(existing, 'utf8')).toBe('must remain')
+      expect(readdirSync(realParent)).toEqual(['existing'])
+      expect(calls).toBe(0)
+    } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
+  }, 20000)
+
   it('runs chapter two through the executable worker with exact previous text and chapter telemetry', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'a4n-step-continuation-'))
     const requests: { messages: { role: string; content: string }[] }[] = []
@@ -230,7 +299,7 @@ describe('run-step through a local mock provider', () => {
   }, 20000)
 
   it('ends the worker on a CLI deadline and returns one safe JSON error', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'a4n-step-timeout-'))
+    const directory = mkdtempSync(join(realpathSync(tmpdir()), 'a4n-step-timeout-'))
     let calls = 0
     let disconnected = false
     const server = createServer((req, _res) => {
@@ -242,11 +311,14 @@ describe('run-step through a local mock provider', () => {
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
     try {
       const seedFile = join(directory, 'seed.txt'); writeFileSync(seedFile, 'synthetic timeout seed')
-      const result = await invoke(['run-step', 'caption', '--seed-file', seedFile, '--timeout-ms', '2000'], `http://127.0.0.1:${address.port}/v1`)
+      const recordDir = join(directory, 'run-timeout')
+      const result = await invoke(['run-step', 'caption', '--seed-file', seedFile, '--record-dir', recordDir, '--timeout-ms', '2000'], `http://127.0.0.1:${address.port}/v1`)
       expect(result.code).toBe(1); expect(result.stdout).toBe('')
       expect(JSON.parse(result.stderr)).toMatchObject({ code: 'network-error', retryable: false })
       expect(calls).toBe(1)
       expect(disconnected).toBe(true)
+      expect(JSON.parse(readFileSync(join(recordDir, 'result.json'), 'utf8'))).toMatchObject({ status: 'unknown', content: null, diagnostic: { code: 'cli-timeout' } })
+      expect(JSON.parse(readFileSync(join(recordDir, 'meta.json'), 'utf8'))).toMatchObject({ complete: false, status: 'incomplete' })
     } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
   }, 15000)
 

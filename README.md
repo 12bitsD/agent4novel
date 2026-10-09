@@ -65,6 +65,17 @@ pnpm dev
 
 命令行入口：`pnpm cli --help`。作品操作、独立节点测试与诊断见 [CLI 说明](./docs/wiki/014-agent-cli-telemetry.md)。
 
+### 节点观测与迭代
+
+Agent 需要检查一次独立节点的真实输入输出时，可给 `run-step` 指定一个尚不存在的私有目录：
+
+```bash
+./apps/cli/bin/a4n run-step caption --seed-file seed.txt \
+  --system-prompt-file caption-sp.md --record-dir .data/experiments/round-1/a
+```
+
+目录固定包含 `input.json`、`invocation.json`、`result.json`、`meta.json`。先读 `meta.json`，确认 `complete: true` 且 `status: "complete"`，再按 `meta.files` 读齐其余文件；未捕获值保持 `null`，不从当前源码重建历史调用。A/B 使用两个新目录，comment 写在旁边的 `comments.md`，复跑继续用 `run-step`，原记录只读保留。完整边界见 [节点记录与 Agent 迭代 Wiki](./docs/wiki/051-node-iteration-records.md) 与 [迭代 skill](./.claude/skills/agent4novel-iterate/SKILL.md)。
+
 </details>
 
 <a id="配置模型服务"></a>

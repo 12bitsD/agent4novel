@@ -10,7 +10,7 @@ symbols: ["run-step", "runLocalStep", "runIsolatedStep", "callLlm", "--record-di
 inherits: ["014", "011", "016"]
 changed_by: []
 read_when: ["develop-node-iteration", "record-isolated-step", "review-node-input-output", "compare-system-prompts"]
-last_context_reviewed: "2026-10-07"
+last_context_reviewed: "2026-10-10"
 ---
 
 # 051 — 节点实际输入输出记录与Agent迭代
@@ -19,10 +19,10 @@ last_context_reviewed: "2026-10-07"
 
 - **读取时机**：开发节点记录、检查实际输入输出、单节点A/B或comment使用方式。
 - **原始目的**：让用户通过Agent方便地review/modify SP/context/Harness、看输入输出、A/B + comment，减少重复操作和无用基础设施。
-- **实际落地**：[#51](https://github.com/12bitsD/agent4novel/issues/51)已创建并claim给12bitsD，ready-for-agent；需求和实施方案已建立，产品代码与新增测试尚未实现。
-- **当前价值**：本票WHAT/AC以GitHub为准，本页给最小HOW、代码落点和TDD切片；普通工程细节自主收敛，不再重开已确认的Agent入口与三动作范围。
-- **后续变化**：输入捕获/归档/联验依序实现；此处不把方案或旧测试当成本票已通过的能力。
-- **代码入口**：local-step/step-lab-main负责CLI-worker交接；isolated-runner负责最终节点结果；callLlm是六节点共同SDK调用边界；step-experiment定义已有输入/结果。
+- **实际落地**：[#51](https://github.com/12bitsD/agent4novel/issues/51)的最小记录入口已落在 `run-step --record-dir <新目录>`；目录预检、四文件落盘、六节点共同 `callLlm` 捕获和失败/unknown 语义均由CLI/worker测试覆盖。
+- **当前价值**：本票WHAT/AC以GitHub为准，本页给已实现的最小HOW、代码落点和使用边界；普通工程细节自主收敛，不重开已确认的Agent入口与三动作范围。
+- **后续变化**：本票只提供一次运行的私有文件资源；读取、A/B、comment和复跑由Agent/Harness复用现有文件与 `run-step` 完成，不扩成Pipeline、UI、数据库或评测平台。
+- **代码入口**：local-step/step-lab-main负责CLI-worker交接；isolated-runner负责最终节点结果；callLlm是六节点共同SDK调用边界；step-experiment定义请求、响应和四文件schema；`apps/cli/src/step-record.ts`负责私有目录预检/CLI deadline收尾。
 
 ## 设计目的
 
@@ -44,9 +44,9 @@ C1证据：/tmp/a4n-node-iteration-dev-evidence中的open-issues-baseline.json�
 
 ### 1. 最小接缝选择
 
-已核对三条机制：把六节点装配全部提成新builder；在现有共同调用边界增加仅实验启用的捕获；另写实验专用装配。选择第二条：改动较少，能记录当前真实传给SDK的内容，并保持生产与实验同源。第三条易与生产漂移；第一条不是本票先决条件。选择不代表实现已验证。
+已核对三条机制：把六节点装配全部提成新builder；在现有共同调用边界增加仅实验启用的捕获；另写实验专用装配。选择第二条：改动较少，能记录当前真实传给SDK的内容，并保持生产与实验同源。第三条易与生产漂移；第一条不是本票先决条件。记录只在请求显式带 `record` 时启用；未带参数时不生成全文记录，stdout/stderr/telemetry行为保持原样。
 
-拟议新入口：run-step原语法增加可选 `--record-dir <dir>`。不给参数时行为完全保留。modify仍由Agent修改普通文件/代码并展示diff；A/B通过读取本地记录完成，comment用本轮comments.md保存，不创建独立会话/评分/采用模型。
+实际入口：run-step原语法增加可选 `--record-dir <dir>`。不给参数时行为完全保留。modify仍由Agent修改普通文件/代码并展示diff；A/B通过读取本地记录完成，comment用本轮comments.md保存，不创建独立会话/评分/采用模型。
 
 ### 2. 捕获边界与结果语义
 
@@ -60,7 +60,11 @@ C1证据：/tmp/a4n-node-iteration-dev-evidence中的open-issues-baseline.json�
 
 Agent指定尚不存在的本次记录目录，推荐.data/experiments/<本轮>/<A或B>（占位示例，非现存目录）。目录在发请求前做路径/权限/碰撞检查；拒绝破坏性覆盖、保留旧记录。实际实现对符号链接/路径归属及文件权限的保证由确定性测试锁定。
 
-拟议最少4份记录：input.json（供实验使用的源输入/配置）、invocation.json（实际SDK输入或明确未捕获）、result.json（最终节点结果或安全失败/unknown）、meta.json（格式版本、节点/run标识、时间、代码commit/dirty等可确认标识与文件关联）。文件命名/有限schema在第一片测试中固定；不建立服务/数据库。comments.md由Agent保存用户原话，Agent解释另列，不改机器结果。
+实际固定4份记录：`input.json`（供实验使用的输入与 `sources`）、`invocation.json`（`callLlm`实际传给 `generateObject` 的 system/prompt、`effectiveConfig`、有效SDK选项，或明确未捕获）、`result.json`（最终节点结果或安全失败/unknown）、`meta.json`（格式版本、节点/run标识、时间、代码commit/dirty、来源与完成标志）。`effectiveConfig` 严格只含 model、directionCount、thinking、temperature、topP；它补足影响节点装配但不一定进入generation的配置，不记录凭据或完整配置文件。Harness把同一目录的这四个文件作为一次读取资源：先读 `meta.json`，只有 `complete: true` 且 `status: "complete"` 才把本次结果视为完整，再按 `meta.files` 一次读齐其余三份；`in-progress`/`incomplete` 目录只能作为部分证据，不能冒充成功。
+
+缺失信息保留为 `null`（例如输入校验/guard 在SDK前失败时，`invocation` 的 captured/system/prompt/model/选项不会被源文件重建）；未传给SDK的可选项也不猜 provider 默认值，记录为 `null` 或不出现。`result.json` 的成功内容是节点最终校验并补齐结构ID后的结果，不声称是provider原始文本。文件命名和有限schema已固定；不建立服务/数据库。`comments.md`由Agent在记录目录旁另存用户原话与解释，不改四个机器记录。
+
+CLI在发起worker前只接受尚不存在的记录目录；目标或任何父级是符号链接、目录已存在或路径不安全时直接拒绝且不调用provider。目录权限为0700，四个文件权限为0600；CLI timeout/worker failure 会保留已有调用证据并写 `result.status: "unknown"`、`meta.complete: false`，不能把迟到provider结果或局部文件说成成功。
 
 CLI版本信息HEAD/dirty只报告可确认内容；dirty不冒称已冻结或可重现。完整prompt/素材仅进入显式私有本地归档，不加进现有stdout/stderr/telemetry，不录credential配置或请求头、不上传外部服务。自定义内容可能含用户私有文本，按本地实验材料处理。
 
@@ -72,7 +76,11 @@ CLI版本信息HEAD/dirty只报告可确认内容；dirty不冒称已冻结或�
 
 ### 5. Agent如何使用
 
-Agent直接读记录文件，展示当前问题相关SP/context/Harness差异、实际输入和原输出。比较时核对节点、源输入、模型/参数、代码与待测因素；条件不全或不同就说明，不能伪称单因素公平对照。可比旧A直接复用，不计新调用/独立重复。用户原话comment留在本轮；需要继续时读取这些文件即可。
+Agent/Harness直接读同一记录目录的四个文件，展示当前问题相关SP/context/Harness差异、实际输入和最终输出。比较时核对 `meta` 的节点、来源、版本，以及 `invocation` 的 system/prompt/model/参数和 `result`；条件不全或不同就说明，不能伪称单因素公平对照。
+
+- **A/B**：为A、B分别指定两个全新的 `--record-dir`，复用相同的合成 `--input-file`/`--seed-file`，只替换明确的 `--system-prompt-file` 或选项；分别读取四文件后比较，不能复制或覆盖A。
+- **comment**：在记录目录旁写 `comments.md`，记录用户原话、观察和待改假设；它不是机器结果，不回写 `input/result/meta`。
+- **复跑**：先核对 `meta`/`input` 和来源文件，再用现有 `run-step` 从相同源输入重新发起，并指定新的记录目录；原目录只读保留。若只剩记录文件，可据 `input.json.input` 生成新的 `--input-file` 请求，不能据缺失的 invocation 字段猜测原调用。
 
 用户明确接回基础版本时仍走现有源码审核流程；实验记录不创建WorkStore/Pipeline，不修改作者作品、批准状态或已有章节。
 
@@ -81,33 +89,33 @@ Agent直接读记录文件，展示当前问题相关SP/context/Harness差异、
 | 责任 | 当前入口/拟议新增位置 |
 | --- | --- |
 | CLI参数、帮助、文件/版本与worker启动 | apps/cli/src/command-line.ts、main.ts、local-step.ts |
-| 共同实际调用捕获（拟议小模块） | apps/server/src/steps/llm-call.ts、steps下的实验捕获模块 |
+| 共同实际调用捕获 | apps/server/src/steps/llm-call.ts、apps/server/src/steps/step-record.ts |
 | 最终结果/错误与记录交接 | apps/server/src/steps/isolated-runner.ts、apps/server/src/step-lab-main.ts |
-| 内部记录契约（按最小跨包需要新增） | packages/contracts/src/step-experiment.ts或相邻实验记录schema |
+| 内部记录契约 | packages/contracts/src/step-experiment.ts |
 | 文档/运行方法 | 本页、schema受影响部分、CLI help、drive skill、README中英、handoff |
 
 ## 测试与验证
 
-TDD计划（尚未运行）：
+TDD切片与当前证据：
 
-1. S1 SDK边界：mock generateObject，先复现缺少记录；验证system/prompt/settings精确匹配、未传字段缺失、六节点捕获、并发隔离、默认生产无全文。
-2. S2 CLI/worker：先复现新flag不存在；验证help零I/O、参数/私有目录预检、记录读取成功、最终ID已注入结果、各失败/期限/归档错误和旧语法结果兼容。
-3. S3 Agent联验：用合成内容/本地SDK transport完成正文记录→A/B文件读取→comment→下一版，验证复用A无新调用、读取评论不修改机器记录或作者作品；补齐文档并跑全test/typecheck/build。
+1. S1 SDK边界：已用mock `generateObject`覆盖六个step，验证记录中的system/prompt与实际入参逐字一致，`effectiveConfig`保留model/directionCount及采样配置，未传generation/provider选项为null，默认无记录路径保持无全文。
+2. S2 CLI/worker：已用loopback provider覆盖help、私有目录预检、父级symlink、碰撞、文件权限、最终ID、CLI timeout unknown和worker失败收尾。
+3. S3 Agent联验：没有新增平台或独立读取命令；Harness按本页四文件规则完成A/B读取，comment与复跑复用现有文件和 `run-step`。完整门禁仍由主Agent按固定验收版本独立复核。
 
-公开接缝使用CLI进程、SDK transport、共享输入/输出schema和实际文件内容，不针对私有函数/目录结构镜像测试。真实provider调用在必要时使用已授权配置与明确小样本预算；不沿用先前934项门禁当本票结果，不把fake链路当文学质量。
+公开接缝使用CLI进程、SDK transport、共享输入/输出schema和实际文件内容，不针对私有函数/目录结构镜像测试。本候选未调用真实provider，测试使用合成fixture、SDK mock和loopback transport；不沿用先前934项门禁当本票结果，不把fake链路当文学质量。
 
 AC映射：AC1/5→S2；AC2→S1；AC3/4/6→S1+S2；AC7→S3；AC8→三片公开联验；AC9→知识/完整门禁/独立审核/CI回读。scope-check报告在/tmp/a4n-iteration-ticket-scope-check.md，明确SDK边界、最终产物和错误分类；它是实施前核对，不是正式候选review。
 
 ### 完成审核证据
 
-- **清单与候选**：固定点/源分支已知；当前无实现候选，T0/T1与清单blob待后续审核。
-- **逐项判定**：C1需求/claim/范围/计划已有证据；产品实现、门禁与正式审核未执行，不预写PASS。
-- **验收与 TDD**：AC1–AC9与S1–S3已映射；RED/GREEN待实际执行。
-- **本地门禁**：本次只做文档结构/链接核对；全测试、typecheck、build及实现安全核查待执行。
-- **双轴 review**：实施前scope核对已完成；正式Standards/Spec待冻结候选。
-- **修复与回归**：待实际实现/发现；不补造失败或通过。
-- **知识维护**：本页、Wiki索引与已收敛方案回链；schema/README/handoff/drive在行为落地后同步，CONTEXT/ADR是否受影响届时按真实变化记录。
-- **发布前裁决**：待实现/候选审核，不提前宣称交付、CI、merge或关闭。
+- **固定点与候选**：固定点 `d2669132c8598a1368f43e2b7fe66225211f09be`；候选分支 `feat/node-observation-loop`，当前保留在隔离worktree，尚未提交、发布或合并。
+- **loop 轮次**：R0 基线在 `/tmp/a4n-loop-start-20261010/baseline.json` 确认旧 CLI 对 `--record-dir` 返回安全 usage 且未创建目录；R1 实现记录四文件；R2 修复父级 symlink、六节点边界测试并同步使用文档。没有开启第3轮。
+- **主 Agent 验收**：E1（六节点 SDK mock 逐字对比及 `effectiveConfig`）、E3（预调用失败/provider拒绝/CLI timeout）、E4（碰撞、目标/父级 symlink、权限）、E5（公共输出不带全文）通过；E2（四文件目录作为一次 Harness 读取资源）、E6（记录保存输入/调用/版本快照）、E7（skill规定A/B/comment/复跑）有实现和文档证据。真实 provider 文学质量未验证。
+- **未宣称项**：没有新增独立读取 CLI；读取动作按已确认范围复用本地四文件。未做进程崩溃级归档恢复和真实 provider 质量验证；这些不被包装成已通过。独立 Standards/Spec reviewer 本轮未返回可用报告，因此正式发布审查保持 pending。
+- **本地门禁**：`pnpm test` 通过（4个workspace共计 32 个测试文件、208 tests）；`pnpm typecheck` 通过；`pnpm build` 通过，保留 web chunk size warning；受影响包定向 tests/typecheck/build 也通过。`git diff --check d2669132c8598a1368f43e2b7fe66225211f09be`、skill validator 和 Markdown 相对链接检查通过。
+- **修复与回归**：`safePathChain` 对任一父级 symlink 直接拒绝；server 独占落盘不覆盖已有文件；新增公开 CLI/runner 回归证明不调用 provider 且不改变真实目录。六节点记录测试证明 `invocation.system/prompt` 与 `generateObject` 入参逐字一致，`effectiveConfig`和省略选项保持预期/null。
+- **知识维护**：本页、`.claude/skills/agent4novel-drive/SKILL.md`、`README.md`、`README.en.md` 和 `agent4novel-iterate` 已同步记录资源/动作边界；`CONTEXT.md`/ADR 不受影响，未新增不可逆架构决策。
+- **loop 结论**：本轮“主 Agent 定义验收 → 子 Agent 实现 → 主 Agent独立验收 → 定向修复 → 再验收”已完成；#51 的正式双轴 review、提交/PR/CI/merge/issue关闭仍不是本轮已发生事实。
 
 ## 边界与非目标
 
@@ -125,6 +133,24 @@ AC映射：AC1/5→S2；AC2→S1；AC3/4/6→S1+S2；AC7→S3；AC8→三片公�
 - **影响**：源分支固定、AC/TDD和代码接缝建立，后续按三片实施而非扩成平台。
 - **上下文处理**：preserve用户三动作与Agent入口决定、已有实验方法；compact冗余设计为可选研究/私有历史；replace当前进行中入口为本票，不修改旧票冻结审核。
 
+### 2026-10-10 — 第2轮定向修复
+
+- **触发证据**：第1轮主验收指出父级symlink与六节点共同 `callLlm` 记录证据需要补强，并要求明确四文件Harness读取方式。
+- **决定**：`safePathChain` 对任一父级symlink直接拒绝；用合成fixture和SDK mock对六个step逐一比对实际 `generateObject` 的system/prompt及省略选项；timeout/worker failure维持已有unknown/incomplete保护。
+- **影响**：补充公开CLI文件系统测试、六节点记录测试和本页/drive skill操作说明；不加入Pipeline、UI、数据库、评论API或真实provider。
+
+### 2026-10-10 — loop 收口
+
+- **触发证据**：R1 候选通过定向测试但 E2/E6/E7 证据不足，且发现父级symlink路径边界未锁定。
+- **决定**：R2 只修该边界、补六节点真实 SDK 接缝证据并同步中英文 README；不增加读取服务或实验平台。
+- **结果**：R2 代码、测试、typecheck、build和文档检查通过；主 Agent完成固定验收版本复验。正式双轴 review因只读 reviewer未返回报告保持待办，不能提前宣称票据发布完成。
+
+### 2026-10-10 — 第3轮配置与落盘收口
+
+- **触发证据**：主验收发现 `directionCount` 只能从 prompt 间接推断，且 worker 独占写入的目标替换语义需要锁定。
+- **决定**：在实际调用记录中增加严格 `effectiveConfig`；独占写入改为不覆盖已有文件并补回归；不增加读取服务或其他资源平台。
+- **结果**：第3轮受影响测试、全量 `pnpm test`、`pnpm typecheck`、`pnpm build` 均通过；没有开启第4轮。唯一保留的发布前缺口是独立 Standards/Spec reviewer 未返回报告。
+
 ## 交接结论
 
-51已claim，需求及最小HOW已就绪；实现/新测试未开始。下一动作是S1实际SDK捕获的有效RED，再依序补CLI/worker与Agent文件联验；代码落地后按规范回写和独立审核。无需再问CLI还是平台，也不自动把comment转成新费用或生产发布。
+loop 已完成到 R2：#51 的最小候选、四文件 Harness 资源、运行 skill 和双语说明保留在隔离worktree；正式双轴 review、提交/PR/CI/merge和 issue 关闭仍待后续交付流程，不把当前候选写成已发布。

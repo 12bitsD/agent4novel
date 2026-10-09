@@ -1,4 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest'
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { JsonValue } from '@agent4novel/contracts'
 const mocks = vi.hoisted(() => ({ generateObject: vi.fn(), runtime: { mode: 'live', defaultModelId: 'longcat:LongCat-2.0', requestTimeoutMs: 300000, generationSettings: () => ({ parameters: {}, options: {} }), languageModel: () => 'mock' } }))
 vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
@@ -35,6 +38,7 @@ it('does not expose provider errors', async () => {
 })
 
 import { runStep, creativeContentSchema, outlineContentSchema, settingContentSchema, beatContentSchema, stepExperimentRequestSchema } from '@agent4novel/contracts'
+import type { StepExperimentRequest } from '@agent4novel/contracts'
 import { createFakeCaptionStep, createFakeCreativeStep, createFakeOutlineStep, createFakeSettingStep, createFakeBeatStep } from '../src/steps/fake-step.js'
 async function fixtures() {
   const base = { workId: 'synthetic', seed: '合成素材', upstream: {} }
@@ -87,6 +91,113 @@ it('keeps Beat assembled-input budget with overridden system', async () => {
   expect(result).toMatchObject({ kind: 'failed', code: 'input-budget-exceeded' })
   expect(mocks.generateObject).not.toHaveBeenCalled()
 })
+
+it('records the actual SDK invocation and final step result only when explicitly requested', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'a4n-step-record-server-'))
+  const recordDir = join(directory, 'run-a')
+  mkdirSync(recordDir, { mode: 0o700 })
+  mocks.runtime.generationSettings = () => ({
+    parameters: { thinking: 'disabled', temperature: 0.4, topP: 0.6 },
+    options: { temperature: 0.4, topP: 0.6, providerOptions: { longcat: { thinking: { type: 'disabled' } } } },
+  })
+  mocks.generateObject.mockResolvedValue({ object: content, usage: {}, finishReason: 'stop' })
+  try {
+    const result = await runIsolatedStep({ stepId: 'caption', input: { seed: 'recorded seed' },
+      systemPrompt: 'recorded system', config: { model: 'longcat:LongCat-2.0' },
+      record: { dir: recordDir, sources: { input: 'seed-file', inputPath: '/private/seed.txt', systemPromptPath: '/private/sp.md', configPath: null }, version: { gitCommit: 'a'.repeat(40), gitDirty: true } },
+    } as never)
+    expect(result).toMatchObject({ kind: 'succeeded', recording: { status: 'complete', dir: recordDir } })
+    expect(readdirSync(recordDir).sort()).toEqual(['input.json', 'invocation.json', 'meta.json', 'result.json'])
+    const input = JSON.parse(readFileSync(join(recordDir, 'input.json'), 'utf8'))
+    const invocation = JSON.parse(readFileSync(join(recordDir, 'invocation.json'), 'utf8'))
+    const recordedResult = JSON.parse(readFileSync(join(recordDir, 'result.json'), 'utf8'))
+    const meta = JSON.parse(readFileSync(join(recordDir, 'meta.json'), 'utf8'))
+    expect(input.input).toEqual({ seed: 'recorded seed' })
+    expect(invocation).toMatchObject({ captured: true, system: 'recorded system', prompt: '作者原始素材:\nrecorded seed\n\n请输出提炼稿。',
+      model: 'longcat:LongCat-2.0', effectiveConfig: { model: 'longcat:LongCat-2.0', directionCount: null, thinking: 'disabled', temperature: 0.4, topP: 0.6 },
+      generation: { thinking: 'disabled', temperature: 0.4, topP: 0.6 },
+      maxOutputTokens: 8000, maxRetries: null, requestTimeoutMs: 300000 })
+    expect(recordedResult).toMatchObject({ status: 'succeeded', content })
+    expect(meta).toMatchObject({ formatVersion: 1, complete: true, status: 'complete', stepId: 'caption', gitCommit: 'a'.repeat(40), gitDirty: true })
+    expect(statSync(recordDir).mode & 0o777).toBe(0o700)
+    for (const file of ['input.json', 'invocation.json', 'meta.json', 'result.json']) expect(statSync(join(recordDir, file)).mode & 0o777).toBe(0o600)
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})
+
+it('records a pre-call validation failure without fabricating an invocation', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'a4n-step-record-failure-'))
+  const recordDir = join(directory, 'run-failure')
+  mkdirSync(recordDir, { mode: 0o700 })
+  try {
+    const result = await runIsolatedStep({ stepId: 'outline', input: { seed: 'recorded seed' },
+      record: { dir: recordDir, sources: { input: 'input-file', inputPath: '/private/input.json', systemPromptPath: null, configPath: null }, version: { gitCommit: null, gitDirty: null } },
+    } as never)
+    expect(result).toMatchObject({ kind: 'failed', code: 'invalid-input', recording: { status: 'complete' } })
+    const invocation = JSON.parse(readFileSync(join(recordDir, 'invocation.json'), 'utf8'))
+    const recordedResult = JSON.parse(readFileSync(join(recordDir, 'result.json'), 'utf8'))
+    expect(invocation).toEqual(expect.objectContaining({ captured: false, system: null, prompt: null, model: null, generation: null, maxOutputTokens: null, maxRetries: null }))
+    expect(recordedResult).toMatchObject({ status: 'failed', content: null, diagnostic: { code: 'invalid-input' } })
+    expect(mocks.generateObject).not.toHaveBeenCalled()
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})
+
+it.each(['caption', 'creative', 'outline', 'setting', 'beat', 'prose'] as const)('records the actual SDK boundary for %s with nulls for omitted options', async stepId => {
+  const f = await fixtures()
+  const directory = mkdtempSync(join(tmpdir(), `a4n-step-record-${stepId}-`))
+  const recordDir = join(directory, 'run-a')
+  mkdirSync(recordDir, { mode: 0o700 })
+  mocks.runtime.generationSettings = () => ({ parameters: {}, options: {} })
+  const input: StepExperimentRequest['input'] = stepId === 'caption' ? { seed: '合成素材' }
+    : stepId === 'creative' ? { seed: '合成素材', upstream: { caption: f.caption } }
+    : stepId === 'outline' ? { seed: '合成素材', upstream: { creative: f.creative } }
+    : stepId === 'setting' ? { seed: '合成素材', upstream: { caption: f.caption, creative: f.creative, outline: f.outline } }
+    : { seed: '合成素材', chapter: 1, upstream: stepId === 'beat' ? { outline: f.outline, setting: f.setting } : { beat: f.beat, setting: f.setting } }
+  const object = stepId === 'caption' ? f.caption
+    : stepId === 'creative' ? { directions: f.creative.directions.map(({ directionId, ...value }) => value) }
+    : stepId === 'outline' ? { arcs: f.outline.arcs.map(({ arcId, segments, ...arc }) => ({ ...arc, segments: segments.map(({ segmentId, ...value }) => value) })) }
+    : stepId === 'setting' ? { ...f.setting, world: f.setting.world.map(({ itemId, ...value }) => value), characters: f.setting.characters.map(({ itemId, ...value }) => value) }
+    : stepId === 'beat' ? { ...f.beat, writingPlan: f.beat.writingPlan.map(({ itemId, ...value }) => value) }
+    : { text: '合成正文。' }
+  mocks.generateObject.mockResolvedValue({ object, usage: {}, finishReason: 'stop' })
+  try {
+    const result = await runIsolatedStep({ stepId, input, systemPrompt: 'recorded system', config: { model: 'longcat:LongCat-2.0', ...(stepId === 'creative' ? { directionCount: 1 } : {}) },
+      record: { dir: recordDir, sources: { input: 'input-file', inputPath: '/private/input.json', systemPromptPath: '/private/sp.md', configPath: null }, version: { gitCommit: null, gitDirty: null } } })
+    expect(result).toMatchObject({ kind: 'succeeded', recording: { status: 'complete', dir: recordDir } })
+    expect(mocks.generateObject).toHaveBeenCalledTimes(1)
+    const call = mocks.generateObject.mock.calls[0]![0]
+    const invocation = JSON.parse(readFileSync(join(recordDir, 'invocation.json'), 'utf8'))
+    expect(invocation.system).toBe(call.system)
+    expect(invocation.prompt).toBe(call.prompt)
+    expect(invocation).toMatchObject({ model: 'longcat:LongCat-2.0', effectiveConfig: { model: 'longcat:LongCat-2.0', directionCount: stepId === 'creative' ? 1 : null, thinking: null, temperature: null, topP: null },
+      generation: { thinking: null, temperature: null, topP: null },
+      sdkOptions: { temperature: null, topP: null, providerOptions: null }, requestTimeoutMs: 300000 })
+    expect(invocation.maxOutputTokens).toBe(call.maxOutputTokens)
+    if (stepId === 'setting' || stepId === 'beat' || stepId === 'prose') {
+      expect(invocation.maxRetries).toBe(0)
+      expect(call.maxRetries).toBe(0)
+    } else {
+      expect(invocation.maxRetries).toBeNull()
+      expect(call).not.toHaveProperty('maxRetries')
+    }
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})
+
+it('refuses an existing input record without calling the model or changing the original file', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'a4n-step-record-collision-'))
+  const recordDir = join(directory, 'run-a')
+  mkdirSync(recordDir, { mode: 0o700 })
+  const original = '{"original":true}\n'
+  writeFileSync(join(recordDir, 'input.json'), original, { encoding: 'utf8', mode: 0o600 })
+  try {
+    const result = await runIsolatedStep({ stepId: 'caption', input: { seed: 'should not run' },
+      record: { dir: recordDir, sources: { input: 'input-file', inputPath: '/private/input.json', systemPromptPath: null, configPath: null }, version: { gitCommit: null, gitDirty: null } },
+    } as never)
+    expect(result).toMatchObject({ kind: 'failed', code: 'recording-failed', recording: { status: 'failed' } })
+    expect(readFileSync(join(recordDir, 'input.json'), 'utf8')).toBe(original)
+    expect(mocks.generateObject).not.toHaveBeenCalled()
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})
+
 it('validates limits and chapter semantics before invoking the model', () => {
   for (const request of [
     { stepId: 'caption', input: { seed: 'x'.repeat(1000000) } },
