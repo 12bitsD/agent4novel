@@ -1,6 +1,6 @@
 # #51：节点源信息验收准备
 
-日期：2026-10-10（Asia/Shanghai）。状态：R0 验收准备，产品实现尚未开始。固定点 `d2669132c8598a1368f43e2b7fe66225211f09be`。需求以 [#51](https://github.com/12bitsD/agent4novel/issues/51) 和当前用户决定为准；本页保存可执行验证方法，不替代 issue 的 WHAT/AC。
+日期：2026-10-10（Asia/Shanghai）。状态：候选待正式审核。固定点 `d2669132c8598a1368f43e2b7fe66225211f09be`，候选 `b0d51d188c5b9c9db907700fec5a1cd4bfbf1138`。需求以 [#51](https://github.com/12bitsD/agent4novel/issues/51) 和当前用户决定为准；本页保存可执行验证方法，不替代 issue 的 WHAT/AC。
 
 用户已确定：可观测性优先收集高价值源信息，AI可一次读取；未取得值为 None；分析/比较/comment/复跑工作方式进入 skill；主 Agent 先定义并校准验收，子 Agent 实现，主 Agent 复验，首次候选计第1轮，默认2轮、上限3轮，正常流程不逐票等待人工确认。目标是控制验收自证、代码膨胀和效果偏离。
 
@@ -33,7 +33,7 @@ E1–E8均为本票必需项；每项附候选版本、命令和原始证据，P
 
 ## 校准与执行顺序
 
-1. R0：确认原基线不支持记录/一次读取；用独立reviewer审查上述方法的可作弊方式。此时不存在新实现，成功路径校准仍待候选，不伪造GREEN。
+1. R0：确认原基线不支持记录/一次读取；用独立reviewer审查上述方法的可作弊方式。候选产生后再执行成功路径校准，不把基线或文档当作GREEN。
 2. S1：SDK边界捕获的有效RED→最小GREEN，六节点、并发隔离与无sink兼容。
 3. S2：CLI/worker显式私有归档和一次读取；真实文件/transport RED→GREEN，补失败/期限/路径联验。
 4. S3：A/B/comment与skill前向验证；主Agent亲自执行E1–E8，记录第1轮候选与差距，最多两次修复复验。
@@ -44,5 +44,6 @@ E1–E8均为本票必需项；每项附候选版本、命令和原始证据，P
 ## 当前证据
 
 - 原基线、干净main与#51 OPEN已回读；未加入Project，无开放PR。
-- 基线RED已保存于 `/tmp/a4n-loop-start-20261010/baseline.json`；第1轮实现和第2/3轮定向修复已在隔离候选中完成。主 Agent 已独立复跑 E1/E3/E4/E5，并按四文件资源规则核对 E2/E6/E7；真实 provider 质量、进程崩溃级归档恢复保持未验证。
-- `pnpm test`、`pnpm typecheck`、`pnpm build` 以及受影响包定向门禁均通过；Markdown链接、skill validator和diff check通过。只读 reviewer 未返回可用的 Standards/Spec 报告，正式发布审查因此保持 pending；本页不把候选写成已发布。
+- 基线RED已保存于 `/tmp/a4n-loop-start-20261010/baseline.json`；第1轮实现和第2/3轮定向修复已在隔离候选中完成。主 Agent 已独立复跑 E1/E3/E4/E5，并按四文件资源规则核对 E2/E6；真实 CLI/worker 的正文 A/B/comment/复跑联验已执行，真实 provider 质量、进程崩溃级归档恢复保持未验证。
+- E7/E8 联验命令：在候选 worktree 执行一次内联 `node --input-type=module` loopback-provider 脚本，使用 `run-step prose` 两个全新目录 A/B，读取两版 `meta.json`/`invocation.json`/`result.json`，写入旁置 `comments.md`，再检查 A 未被 B 覆盖、两次 provider 请求、同一 prompt、评论分离和四个记录文件 `0600`。输出：`{"ok":true,"calls":2,"aComplete":true,"bComplete":true,"samePrompt":true,"aPreserved":true,"commentSeparated":true,"filesPrivate":true}`。
+- `pnpm test`、`pnpm typecheck`、`pnpm build` 以及受影响包定向门禁均通过；Markdown链接、skill validator和diff check通过。独立 Standards/Spec reviewer 已完成前置候选审查，发现 AC7/AC8 证据缺口后已补做上述联验；正式 C5/C6 审查仍待最终候选冻结。

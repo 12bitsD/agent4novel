@@ -24,7 +24,7 @@
 - **已验证基线**：#6 有 fake 多章、CLI/Web、独立真实 Beat2/Prose2 和本地门禁证据，见 [Wiki 006](./wiki/006-chapter-continuation.md)。真实节点使用合成上游，不是全书/全部节点真实模型验收，也不证明长篇质量。#19 的共享验证证据见其本票 Wiki；#9 的 SQLite、真实进程重启及关闭路径需看 Wiki 009 的实际结果，不沿用旧票测试。
 - **当前存储边界**：生产启动使用 SQLite，恢复已提交的作品、产物版本、状态和输入引用；未保存页面编辑不恢复，遥测仍在进程内，不自动恢复模型调用。旧内存进程不自动迁移或清空。#33同源Web/API、非root镜像、两章卷恢复及实际CI已验证。#7已接入默认/节点覆盖、Prompt/Skill版本和操作快照，实际交付见PR38和本票issue；#8已接入手工坏例快照与回看，交付状态核对#8；长期记忆与Wiki工具仍后置。
 - **复审与修复**：原定向复现发现配置草稿/未知请求在自动切章时丢失、起章前章版本条件未保持至生成、静态文件校验与读取路径解码不一致。原触发条件见 [复审记录](./wiki/001-mvp-acceptance.md#2026-10-03-清点与复审)，修复、有效红绿、完整门禁和独立审核见 Wiki043；[完成评论](https://github.com/12bitsD/agent4novel/issues/43#issuecomment-5964216514) 记录 PR/CI 与终止裁决。原复审保留为历史未修复快照，不能替代修复证据。
-- **当前工作**：#51 的开发 loop 已完成到 R2，候选在隔离分支 `feat/node-observation-loop`：`run-step --record-dir` 提供四文件私有源信息，skill规定 Harness 读取、A/B、comment 与复跑；定向/完整 tests、typecheck、build 已通过。正式 Standards/Spec review、提交/PR/CI/merge 和 issue 关闭尚未发生；不把候选写成已发布。
+- **当前工作**：#51 的开发 loop 已完成到 R3，候选在隔离分支 `feat/node-observation-loop`：`run-step --record-dir` 提供四文件私有源信息，skill规定 Harness 读取、A/B、comment 与复跑；定向/完整 tests、typecheck、build 已通过。正式 Standards/Spec review、提交/PR/CI/merge 和 issue 关闭尚未发生；不把候选写成已发布。
 
 ## 已完成
 

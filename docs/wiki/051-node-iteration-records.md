@@ -100,7 +100,7 @@ TDD切片与当前证据：
 
 1. S1 SDK边界：已用mock `generateObject`覆盖六个step，验证记录中的system/prompt与实际入参逐字一致，`effectiveConfig`保留model/directionCount及采样配置，未传generation/provider选项为null，默认无记录路径保持无全文。
 2. S2 CLI/worker：已用loopback provider覆盖help、私有目录预检、父级symlink、碰撞、文件权限、最终ID、CLI timeout unknown和worker失败收尾。
-3. S3 Agent联验：没有新增平台或独立读取命令；Harness按本页四文件规则完成A/B读取，comment与复跑复用现有文件和 `run-step`。完整门禁仍由主Agent按固定验收版本独立复核。
+3. S3 Agent联验：没有新增平台或独立读取命令；候选 worktree 使用 loopback provider 通过真实 `run-step prose` 完成 A/B，读取两版四文件，写入旁置 `comments.md`，复核 A 未被 B 覆盖、同一 prompt、两次调用和文件权限。完整门禁仍由主Agent按固定验收版本独立复核。
 
 公开接缝使用CLI进程、SDK transport、共享输入/输出schema和实际文件内容，不针对私有函数/目录结构镜像测试。本候选未调用真实provider，测试使用合成fixture、SDK mock和loopback transport；不沿用先前934项门禁当本票结果，不把fake链路当文学质量。
 
@@ -109,13 +109,14 @@ AC映射：AC1/5→S2；AC2→S1；AC3/4/6→S1+S2；AC7→S3；AC8→三片公�
 ### 完成审核证据
 
 - **固定点与候选**：固定点 `d2669132c8598a1368f43e2b7fe66225211f09be`；候选分支 `feat/node-observation-loop`，当前保留在隔离worktree，尚未提交、发布或合并。
-- **loop 轮次**：R0 基线在 `/tmp/a4n-loop-start-20261010/baseline.json` 确认旧 CLI 对 `--record-dir` 返回安全 usage 且未创建目录；R1 实现记录四文件；R2 修复父级 symlink、六节点边界测试并同步使用文档。没有开启第3轮。
-- **主 Agent 验收**：E1（六节点 SDK mock 逐字对比及 `effectiveConfig`）、E3（预调用失败/provider拒绝/CLI timeout）、E4（碰撞、目标/父级 symlink、权限）、E5（公共输出不带全文）通过；E2（四文件目录作为一次 Harness 读取资源）、E6（记录保存输入/调用/版本快照）、E7（skill规定A/B/comment/复跑）有实现和文档证据。真实 provider 文学质量未验证。
-- **未宣称项**：没有新增独立读取 CLI；读取动作按已确认范围复用本地四文件。未做进程崩溃级归档恢复和真实 provider 质量验证；这些不被包装成已通过。独立 Standards/Spec reviewer 本轮未返回可用报告，因此正式发布审查保持 pending。
+- **loop 轮次**：R0 基线在 `/tmp/a4n-loop-start-20261010/baseline.json` 确认旧 CLI 对 `--record-dir` 返回安全 usage 且未创建目录；R1 实现记录四文件；R2 修复父级 symlink、六节点边界测试并同步使用文档；R3 补齐 `effectiveConfig` 与独占落盘回归。没有开启第4轮。
+- **主 Agent 验收**：E1（六节点 SDK mock 逐字对比及 `effectiveConfig`）、E3（预调用失败/provider拒绝/CLI timeout）、E4（碰撞、目标/父级 symlink、权限）、E5（公共输出不带全文）、E7/E8（loopback CLI/worker 正文 A/B、四文件读取、comment、复跑和权限）通过；E2（四文件目录作为一次 Harness 读取资源）、E6（记录保存输入/调用/版本快照）有实现、文档和联验依据。真实 provider 文学质量未验证。
+- **E7/E8 联验原始摘要**：内联 Node 脚本启动 loopback OpenAI-compatible provider，分别执行 `run-step prose --record-dir A` 与 `--record-dir B`，读取 `meta.json`、`invocation.json`、`result.json` 并写入旁置 `comments.md`；输出 `{"ok":true,"calls":2,"aComplete":true,"bComplete":true,"samePrompt":true,"aPreserved":true,"commentSeparated":true,"filesPrivate":true}`。该证据证明 Harness 文件动作，不证明真实模型文学质量。
+- **未宣称项**：没有新增独立读取 CLI；读取动作按已确认范围复用本地四文件。未做进程崩溃级归档恢复和真实 provider 质量验证；这些不被包装成已通过。前置 Standards/Spec reviewer 已指出并核对 AC7/AC8 联验缺口；正式 C5/C6 发布审查保持 pending。
 - **本地门禁**：`pnpm test` 通过（4个workspace共计 32 个测试文件、208 tests）；`pnpm typecheck` 通过；`pnpm build` 通过，保留 web chunk size warning；受影响包定向 tests/typecheck/build 也通过。`git diff --check d2669132c8598a1368f43e2b7fe66225211f09be`、skill validator 和 Markdown 相对链接检查通过。
 - **修复与回归**：`safePathChain` 对任一父级 symlink 直接拒绝；server 独占落盘不覆盖已有文件；新增公开 CLI/runner 回归证明不调用 provider 且不改变真实目录。六节点记录测试证明 `invocation.system/prompt` 与 `generateObject` 入参逐字一致，`effectiveConfig`和省略选项保持预期/null。
 - **知识维护**：本页、`.claude/skills/agent4novel-drive/SKILL.md`、`README.md`、`README.en.md` 和 `agent4novel-iterate` 已同步记录资源/动作边界；`CONTEXT.md`/ADR 不受影响，未新增不可逆架构决策。
-- **loop 结论**：本轮“主 Agent 定义验收 → 子 Agent 实现 → 主 Agent独立验收 → 定向修复 → 再验收”已完成；#51 的正式双轴 review、提交/PR/CI/merge/issue关闭仍不是本轮已发生事实。
+- **loop 结论**：本轮“主 Agent 定义验收 → 子 Agent 实现 → 主 Agent独立验收 → 定向修复 → 再验收”已完成到 R3；#51 的正式双轴 review、提交/PR/CI/merge/issue关闭仍不是本轮已发生事实。
 
 ## 边界与非目标
 
@@ -149,8 +150,8 @@ AC映射：AC1/5→S2；AC2→S1；AC3/4/6→S1+S2；AC7→S3；AC8→三片公�
 
 - **触发证据**：主验收发现 `directionCount` 只能从 prompt 间接推断，且 worker 独占写入的目标替换语义需要锁定。
 - **决定**：在实际调用记录中增加严格 `effectiveConfig`；独占写入改为不覆盖已有文件并补回归；不增加读取服务或其他资源平台。
-- **结果**：第3轮受影响测试、全量 `pnpm test`、`pnpm typecheck`、`pnpm build` 均通过；没有开启第4轮。唯一保留的发布前缺口是独立 Standards/Spec reviewer 未返回报告。
+- **结果**：第3轮受影响测试、全量 `pnpm test`、`pnpm typecheck`、`pnpm build` 均通过；没有开启第4轮。前置独立 Standards/Spec reviewer 已返回候选报告；AC7/AC8 的 loopback 联验随后补齐，正式 C5/C6 仍待执行。
 
 ## 交接结论
 
-loop 已完成到 R2：#51 的最小候选、四文件 Harness 资源、运行 skill 和双语说明保留在隔离worktree；正式双轴 review、提交/PR/CI/merge和 issue 关闭仍待后续交付流程，不把当前候选写成已发布。
+loop 已完成到 R3：#51 的最小候选、四文件 Harness 资源、运行 skill 和双语说明保留在隔离worktree；正式双轴 review、提交/PR/CI/merge和 issue 关闭仍待后续交付流程，不把当前候选写成已发布。
