@@ -35,6 +35,8 @@ export interface WorkStore {
   createWork(input: WorkCreateRequest): Work
   listWorks(): WorkSummary[]
   getWork(id: string): WorkDetail | undefined
+  // Read one immutable historical version without exposing other history.
+  getArtifactVersion(workId: string, kind: ArtifactKind, chapter: number | undefined, artifactId: string, version: number): Artifact | undefined
   appendArtifact(
     workId: string,
     kind: ArtifactKind,

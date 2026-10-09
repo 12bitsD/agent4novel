@@ -114,6 +114,7 @@ async function main(): Promise<void> {
     case 'start-chapter':
     case 'approve-beat':
     case 'regenerate-beat':
+    case 'select-beat-variant':
     case 'regenerate-creative':
     case 'approve-prose':
     case 'save-prose':
@@ -129,7 +130,9 @@ async function main(): Promise<void> {
       let input: unknown
       try { input = JSON.parse(source) } catch { throw new CliError(`${label} request file must contain valid JSON`, 'invalid-input') }
       result = command === 'start-chapter' ? await cmd.startChapter(client, pos[0], input)
-        : isProse ? await cmd.runProseCommand(client, pos[0], command, input) : await cmd.runBeatCommand(client, pos[0], command, input)
+        : isProse ? await cmd.runProseCommand(client, pos[0], command, input)
+          : command === 'select-beat-variant' ? await cmd.selectBeatVariant(client, pos[0], input)
+            : await cmd.runBeatCommand(client, pos[0], command, input)
       break
     }
     case 'logs':

@@ -10,7 +10,7 @@ import {
   settingApproveRequestSchema,
   settingLimits,
   beatApproveRequestSchema, beatRequestHeadSchema, beatLimits, beatCommandResponseSchema, beatCommandErrorSchema,
-  beatRegenerateRequestSchema,
+  beatRegenerateRequestSchema, beatVariantSelectionRequestSchema, beatVariantSelectionResponseSchema,
   proseApproveRequestSchema, proseRequestHeadSchema, proseLimits, proseCommandResponseSchema, proseCommandErrorSchema,
   proseRegenerateRequestSchema, proseSaveRequestSchema,
   diagnosticQuerySchema,
@@ -239,6 +239,26 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
         ...(known?.inputBudget ? { inputBudget: known.inputBudget } : {}),
         ...(invalid && code === 'invalid-content' ? { issues: invalid.issues.slice(0, 128).map(issue => ({ path: issue.path[0] === 'content' || issue.path[0] === 'instructions' ? issue.path : ['content', ...issue.path], code: issue.code, message: 'invalid field' })) } : {}),
       }), status)
+    }
+  })
+
+  app.post('/api/works/:id/artifacts/beat/select', bodyLimit({
+    maxSize: beatLimits.bodyBytes,
+    onError: c => c.json(errorBody('payload-too-large', 'request body too large'), 413),
+  }), async c => {
+    const body = await readJsonBody(c)
+    if (!body.ok) return body.response
+    const parsed = beatVariantSelectionRequestSchema.safeParse(body.data)
+    if (!parsed.success) return c.json(errorBody('invalid-input', 'invalid beat variant selection'), 400)
+    try {
+      const result = await pipeline.selectBeatVariant(c.req.param('id'), parsed.data)
+      return c.json(beatVariantSelectionResponseSchema.parse(result))
+    } catch (error) {
+      if (error instanceof KnownError) {
+        const status = error.code === 'work-not-found' || error.code === 'artifact-not-found' ? 404 : 409
+        return c.json(errorBody(error.code, error.message, error.retryable), status)
+      }
+      return c.json(errorBody('internal-error', 'beat variant selection unavailable'), 500)
     }
   })
 

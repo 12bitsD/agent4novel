@@ -1,12 +1,13 @@
 import { chapterActions } from './chapter-view.js'
-import { beatApproveRequestSchema, beatRegenerateRequestSchema, beatArtifactSchema, recoverBeatSubmission, beatCommandErrorSchema } from '@agent4novel/contracts'
-import type { BeatArtifact, BeatEditDraft, BeatSubmission, ValidationIssue, WorkView, BeatRecovery } from '@agent4novel/contracts'
+import { beatApproveRequestSchema, beatRegenerateRequestSchema, beatArtifactSchema, recoverBeatSubmission, beatCommandErrorSchema, beatCommandResponseSchema, beatVariantSelectionResponseSchema, httpErrorSchema } from '@agent4novel/contracts'
+import type { BeatArtifact, BeatEditDraft, BeatSubmission, ValidationIssue, WorkView, BeatRecovery, BeatVariantComparison, BeatVariantSelectionRequest } from '@agent4novel/contracts'
 
 export type BeatEditorDraft = Omit<BeatEditDraft, 'writingPlan'> & { writingPlan: Array<BeatEditDraft['writingPlan'][number] & { localKey: string }> }
 export type BeatReviewState = {
   baseline: BeatArtifact; draft: BeatEditorDraft; instructions: string; mode: 'preview' | 'edit'
-  phase: 'editing' | 'submitting' | 'regenerating' | 'reconciling' | 'uncertain' | 'conflict' | 'approved'
+  phase: 'editing' | 'submitting' | 'regenerating' | 'reconciling' | 'comparing' | 'uncertain' | 'conflict' | 'approved'
   submitted?: BeatSubmission; hasUnknownWrite: boolean; issues: ValidationIssue[]; notice?: string
+  comparison?: BeatVariantComparison; variantSubmission?: BeatVariantSelectionRequest
   response?: { status: number; body: unknown }; observedWork?: WorkView; remote?: BeatArtifact; recovery?: BeatRecovery; canResume?: boolean
 }
 export type BeatReviewAction =
@@ -16,6 +17,7 @@ export type BeatReviewAction =
   | { type: 'instructions'; value: string } | { type: 'mode'; mode: 'preview' | 'edit' }
   | { type: 'start'; operation: BeatSubmission['operation'] }
   | { type: 'result'; response?: { status: number; body: unknown } }
+  | { type: 'variant-result'; response?: { status: number; body: unknown } }
   | { type: 'observe'; work: WorkView } | { type: 'readback'; work?: WorkView }
   | { type: 'retry' } | { type: 'confirm' } | { type: 'resume' } | { type: 'load-server' }
 
@@ -33,7 +35,7 @@ export function toBeatSubmission(state: BeatReviewState, operation: BeatSubmissi
 }
 export function isBeatDirty(state: BeatReviewState): boolean {
   return state.instructions.length > 0 || JSON.stringify(toBeatSubmission(state, 'approve-beat').request.content) !== JSON.stringify(state.baseline.content)
-    || ['submitting', 'regenerating', 'reconciling', 'uncertain'].includes(state.phase) || state.hasUnknownWrite
+    || ['submitting', 'regenerating', 'reconciling', 'comparing', 'uncertain'].includes(state.phase) || state.hasUnknownWrite
 }
 export function canLoadServerBeat(state: BeatReviewState): boolean {
   return state.phase === 'conflict' && !!state.remote && (!state.submitted || state.recovery?.nextActions.includes('load-server-version') === true)
@@ -47,7 +49,17 @@ export function reduceBeatReview(state: BeatReviewState, action: BeatReviewActio
   if (action.type === 'retry') return state.submitted && state.recovery?.nextActions.includes('retry-frozen-request')
     ? { ...state, phase: state.submitted.operation === 'approve-beat' ? 'submitting' : 'regenerating' } : state
   if (action.type === 'confirm') return { ...state, phase: 'reconciling' }
+  if (action.type === 'variant-result') {
+    const result = action.response?.status === 200 ? beatVariantSelectionResponseSchema.safeParse(action.response.body) : undefined
+    if (result?.success) return { ...initBeatReview(result.data.artifact), notice: result.data.choice === 'new' ? '已采用新章纲，请显式通过后继续。' : '已保留旧章纲并建立新版本，请审阅后通过。' }
+    const failure = action.response && action.response.status >= 400 ? httpErrorSchema.safeParse(action.response.body) : undefined
+    return { ...state, response: action.response, phase: action.response?.status && action.response.status < 500 ? 'conflict' : 'uncertain',
+      hasUnknownWrite: !(failure?.success), recovery: { resolution: failure?.success ? 'rejected' : 'uncertain',
+        nextActions: failure?.success ? ['read-work'] : ['read-work', 'retry-frozen-request'], hasUnknownWrite: !(failure?.success) },
+      notice: failure?.success ? '选择未写入，比较内容已保留。' : '选择结果尚未确认，比较内容已冻结；请核对或重试同一份请求。' }
+  }
   if (action.type === 'observe' || action.type === 'readback' || action.type === 'result') {
+    if (state.comparison && action.type !== 'result') return { ...state, observedWork: action.work ?? state.observedWork }
     let observedWork = state.observedWork
     if (action.type !== 'result' && action.work?.id === state.baseline.workId) {
       const previous = observedWork?.artifacts.find(a => a.kind === 'beat' && a.chapter === state.baseline.chapter)
@@ -67,6 +79,13 @@ export function reduceBeatReview(state: BeatReviewState, action: BeatReviewActio
         notice: '服务器关卡或章纲发生变化，本页修改已保留。' }
     }
     const response = action.type === 'result' ? action.response : state.response
+    if (action.type === 'result' && state.submitted?.operation === 'regenerate-beat' && response?.status === 200) {
+      const generated = beatCommandResponseSchema.safeParse(response.body)
+      if (generated.success && generated.data.comparison) {
+        return { ...initBeatReview(generated.data.artifact), phase: 'comparing', comparison: generated.data.comparison, response,
+          notice: '请比较 A/B 两份章纲并明确选择；选择前不能通过。' }
+      }
+    }
     const recovery = recoverBeatSubmission({ baseline: state.baseline, submission: state.submitted, hasUnknownWrite: state.hasUnknownWrite, response, work: observedWork,
       workIsReadback: action.type !== 'result' && !!action.work && action.work === observedWork,
     })

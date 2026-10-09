@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { captionContentSchema, creativeContentSchema, outlineContentSchema, settingArtifactSchema, beatArtifactSchema, proseArtifactSchema } from '@agent4novel/contracts'
-import type { CaptionContent, CreativeContent, OutlineContent, WorkView } from '@agent4novel/contracts'
+import type { CaptionContent, CreativeContent, OutlineContent, WorkView, BeatVariantSelectionRequest } from '@agent4novel/contracts'
 import { advance, getWork, startChapter, type StartChapterRequest } from '../api.js'
 import { chapterActions, chapterLabel } from '../chapter-view.js'
 import ReferenceMaterials from './ReferenceMaterials.js'
@@ -13,7 +13,7 @@ import { confirmSettingApproval, finishSettingApproval } from '../setting-api.js
 import { ConfirmDialog } from '../ConfirmDialog.js'
 import BeatReview from './BeatReview.js'
 import { initBeatReview, isBeatDirty, reduceBeatReview, type BeatReviewState, type BeatReviewAction } from '../beat-review.js'
-import { postBeatCommand } from '../beat-api.js'
+import { postBeatCommand, postBeatVariantSelection } from '../beat-api.js'
 import ProseReview from './ProseReview.js'
 import { initProseReview, isProseDirty, reduceProseReview, type ProseReviewState, type ProseReviewAction } from '../prose-review.js'
 import { postProseCommand } from '../prose-api.js'
@@ -237,9 +237,47 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
     }
   }
   const beatAction = (action: BeatReviewAction) => { if (beatRef.current) setBeat(reduceBeatReview(beatRef.current, action)) }
+  const runBeatVariant = async (choice: 'new' | 'original', frozen?: BeatVariantSelectionRequest) => {
+    const current = beatRef.current
+    const comparison = current?.comparison
+    if (!current || (!comparison && !frozen) || ['submitting', 'regenerating', 'reconciling'].includes(current.phase)) return
+    const request = frozen ?? {
+      chapter: comparison!.candidate.chapter, expectedArtifactId: comparison!.candidate.id, expectedHeadVersion: comparison!.candidate.version,
+      originalArtifactId: comparison!.original.id, originalVersion: comparison!.original.version,
+      originalContent: comparison!.original.content, choice,
+    }
+    setBeat({ ...current, variantSubmission: structuredClone(request), phase: 'submitting', hasUnknownWrite: false, notice: undefined })
+    const sequence = ++commandSequence.current
+    readSequence.current++
+    const active = () => mounted.current && sequence === commandSequence.current
+    let response: { status: number; body: unknown } | undefined
+    try { response = await postBeatVariantSelection(workId, request) } catch { /* unknown; preserve the frozen comparison */ }
+    if (!active()) return
+    const updated = reduceBeatReview(beatRef.current!, { type: 'variant-result', response })
+    setBeat(updated)
+    if (!updated.comparison && updated.phase === 'editing') await refresh()
+  }
   const runBeat = async (mode: 'approve-beat' | 'regenerate-beat' | 'confirm' | 'retry') => {
     const current = beatRef.current
     if (!current || ['submitting', 'regenerating', 'reconciling'].includes(current.phase)) return
+    if (current.variantSubmission && mode === 'retry') {
+      await runBeatVariant(current.variantSubmission.choice, current.variantSubmission)
+      return
+    }
+    if (current.variantSubmission && mode === 'confirm') {
+      setBeat({ ...current, phase: 'reconciling' })
+      const view = await getWork(workId).catch(() => undefined)
+      const head = view?.artifacts.find(a => a.kind === 'beat' && a.chapter === current.variantSubmission!.chapter)
+      const matches = head && head.humanStatus === 'pending' && head.version >= current.variantSubmission.expectedHeadVersion
+        && (current.variantSubmission.choice === 'new'
+          ? head.id === current.variantSubmission.expectedArtifactId
+          : head.version === current.variantSubmission.expectedHeadVersion + 1 && JSON.stringify(head.content) === JSON.stringify(current.variantSubmission.originalContent))
+      if (matches) {
+        setBeat(initBeatReview(head as typeof current.baseline))
+        if (view) acceptWork(view, false)
+      } else setBeat({ ...beatRef.current!, phase: 'uncertain', hasUnknownWrite: true, notice: '选择结果尚未确认，比较内容已冻结；请重试同一份请求。' })
+      return
+    }
     if ((mode === 'approve-beat' || mode === 'regenerate-beat') && !chapterActions(workRef.current, current.baseline.chapter).includes(mode === 'approve-beat' ? 'approve' : 'regenerate')) return
     const next = reduceBeatReview(current, mode === 'confirm' || mode === 'retry' ? { type: mode } : { type: 'start', operation: mode })
     setBeat(next)
@@ -479,7 +517,8 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
       {showBeat && beat && <BeatReview state={beat} onAction={beatAction}
         allowCommands={actions.includes('approve') && actions.includes('regenerate')}
         onApprove={() => void runBeat('approve-beat')} onRegenerate={() => void runBeat('regenerate-beat')}
-        onConfirm={() => void runBeat('confirm')} onRetry={() => void runBeat('retry')} />}
+        onConfirm={() => void runBeat('confirm')} onRetry={() => void runBeat('retry')}
+        onChooseVariant={choice => void runBeatVariant(choice)} />}
       {showProse && prose && <ProseReview title={beat?.baseline.content.title ?? chapterLabel(chapter)} state={prose} onAction={proseAction}
         contextLabel={starting || generating ? '正在生成' : isCurrentChapter ? '当前创作' : '历史阅读'}
         primaryAction={(actions.includes('start-next-chapter') || startUncertain) && <div className="prose-next-action">

@@ -7,9 +7,10 @@ import { FiniteMarkdown } from '../finite-markdown.js'
 import { ConfirmDialog } from '../ConfirmDialog.js'
 import MaterialFrame from '../MaterialFrame.js'
 import { btnPrimary, btnSecondary, cardStyle, fieldStyle, smallBtnStyle, focusMaterialField } from '../ui.js'
-export default function BeatReview({ state, onAction, allowCommands, onApprove, onRegenerate, onConfirm, onRetry }: {
+export default function BeatReview({ state, onAction, allowCommands, onApprove, onRegenerate, onConfirm, onRetry, onChooseVariant }: {
   state: BeatReviewState; onAction: (action: BeatReviewAction) => void; allowCommands: boolean
   onApprove: () => void; onRegenerate: () => void; onConfirm: () => void; onRetry: () => void
+  onChooseVariant?: (choice: 'new' | 'original') => void
 }) {
   const root = useRef<HTMLElement>(null)
   const [confirmation, setConfirmation] = useState<{ title: string; description: string; label: string; run: () => void } | null>(null)
@@ -52,8 +53,23 @@ export default function BeatReview({ state, onAction, allowCommands, onApprove, 
     {state.notice && <p className="setting-notice" role="status">{state.notice}</p>}
     {busy && <p role="status">{state.phase === 'regenerating' ? '正在重新生成整份章纲…' : '正在确认结果…'} 当前内容已保留。</p>}
     {state.issues.length > 0 && <div className="setting-notice" role="alert">请检查标出的字段后再提交。<ul>{state.issues.map((issue, i) => <li key={i}>{issuePath(issue.path)}：{issue.message}</li>)}</ul></div>}
+    {state.comparison && <section className="setting-section" aria-label="章纲版本比较">
+      <h3>冻结的 A/B 章纲比较</h3>
+      <div className="setting-card" style={cardStyle}>
+        <h4>A · 原章纲 · {state.comparison.original.content.title}</h4>
+        <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(state.comparison.original.content, null, 2)}</pre>
+      </div>
+      <div className="setting-card" style={cardStyle}>
+        <h4>B · 新章纲 · {state.comparison.candidate.content.title}</h4>
+        <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(state.comparison.candidate.content, null, 2)}</pre>
+      </div>
+      {state.phase === 'comparing' && <div className="setting-actions">
+        <button type="button" style={btnPrimary} onClick={() => onChooseVariant?.('new')}>采用新章纲</button>
+        <button type="button" style={btnSecondary} onClick={() => onChooseVariant?.('original')}>保留旧章纲</button>
+      </div>}
+    </section>}
     {(state.phase === 'uncertain' || state.phase === 'conflict') && <div className="setting-actions setting-recovery">
-      <button type="button" style={btnSecondary} onClick={onConfirm}>核对服务器结果</button>
+      <button type="button" style={btnSecondary} onClick={() => { onAction({ type: 'confirm' }); onConfirm() }}>核对服务器结果</button>
       {state.recovery?.nextActions.includes('retry-frozen-request') && <button type="button" style={btnSecondary} onClick={onRetry}>重试同一份请求</button>}
       {state.canResume && <button type="button" style={btnPrimary} onClick={() => onAction({ type: 'resume' })}>继续编辑</button>}
       {canLoadServerBeat(state) && <button type="button" style={btnSecondary} onClick={() => setConfirmation({ title: '载入服务器版本？', description: '载入将放弃本页修改和意见；已发送的请求可能继续处理。', label: '放弃并载入', run: () => onAction({ type: 'load-server' }) })}>载入服务器章纲</button>}

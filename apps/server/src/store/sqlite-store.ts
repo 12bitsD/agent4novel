@@ -141,6 +141,14 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
 
   getWork(id: string): WorkDetail | undefined { return this.read(() => this.readDetail(id)) }
 
+  getArtifactVersion(workId: string, kind: ArtifactKind, chapter: number | undefined, artifactId: string, version: number): Artifact | undefined {
+    return this.read(() => {
+      const row = this.db.prepare(`SELECT * FROM artifacts
+        WHERE work_id = ? AND kind = ? AND chapter IS ? AND id = ? AND version = ?`).get(workId, kind, chapter ?? null, artifactId, version) as ArtifactRow | undefined
+      return row === undefined ? undefined : validateStoreValue(artifactSchema, artifactFromRow(row), 'stored')
+    })
+  }
+
   listWorks(): WorkSummary[] {
     return this.read(() => {
       const rows = this.db.prepare('SELECT id FROM works ORDER BY rowid').all() as { id: string }[]

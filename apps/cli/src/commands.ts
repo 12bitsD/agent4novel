@@ -5,12 +5,13 @@ import {
   startChapterRequestSchema, outlineApprovalRequestSchema,
   perChapterKinds,
   beatApproveRequestSchema, beatRegenerateRequestSchema, beatArtifactSchema, recoverBeatSubmission, beatCommandErrorSchema, beatCommandResponseSchema,
+  beatVariantSelectionRequestSchema, beatVariantSelectionResponseSchema,
   matchesBeatSubmission,
   proseApproveRequestSchema, proseRegenerateRequestSchema, proseSaveRequestSchema, proseArtifactSchema, recoverProseSubmission, proseCommandErrorSchema, proseCommandResponseSchema, matchesProseSubmission,
 } from '@agent4novel/contracts'
 import { CliError } from './client.js'
 import type { Client } from './client.js'
-import type { BeatSubmission, ProseSubmission, DiagnosticQuery } from '@agent4novel/contracts'
+import type { BeatSubmission, ProseSubmission, DiagnosticQuery, BeatVariantSelectionRequest } from '@agent4novel/contracts'
 
 // 命令层(#14):每个命令返回可 JSON 序列化的结果,由 main 打印;进度一律走 stderr(logger 注入)
 
@@ -195,6 +196,44 @@ export async function runBeatCommand(client: Client, workId: string, operation: 
   throw new CliError('Beat command did not confirm the requested result; keep the request file', code, response?.status,
     failure.success ? failure.data.retryable : false, failure.success ? failure.data.attemptId : undefined, failure.success ? failure.data.issues : undefined,
     { ...local, ...safeRecovery, causeCode, ...(failure.success ? { command: failure.data.command, telemetry: failure.data.telemetry, inputBudget: failure.data.inputBudget } : {}) })
+}
+
+export async function selectBeatVariant(client: Client, workId: string, input: unknown) {
+  const parsed = beatVariantSelectionRequestSchema.safeParse(input)
+  if (!parsed.success) throw new CliError('Invalid Beat variant selection file', 'invalid-input', undefined, false, undefined,
+    parsed.error.issues.map(({ path, code }) => ({ path, code, message: 'invalid field' })))
+  const request: BeatVariantSelectionRequest = parsed.data
+  let response: { status: number; body: unknown }
+  try {
+    response = await client.selectBeatVariant(workId, request)
+  } catch (error) {
+    // This endpoint is intentionally one POST: a timeout is unknown and is
+    // never resolved by a client-side retry or readback.
+    throw error
+  }
+  if (response.status >= 200 && response.status < 300) {
+    const result = beatVariantSelectionResponseSchema.safeParse(response.body)
+    if (!result.success) throw new CliError('Invalid server response; inspect the work before retrying a write', 'invalid-response', undefined,
+      false, undefined, undefined, { writeOutcome: 'unknown' })
+    const value = result.data
+    if (value.selection.workId !== workId || value.selection.chapter !== request.chapter || value.choice !== request.choice
+      || value.selection.expectedHead.artifactId !== request.expectedArtifactId
+      || value.selection.expectedHead.version !== request.expectedHeadVersion
+      || value.selection.originalHead.artifactId !== request.originalArtifactId
+      || value.selection.originalHead.version !== request.originalVersion
+      || JSON.stringify(value.comparison.original.content) !== JSON.stringify(request.originalContent)) {
+      throw new CliError('Invalid server response; inspect the work before retrying a write', 'invalid-response', undefined,
+        false, undefined, undefined, { writeOutcome: 'unknown' })
+    }
+    return value
+  }
+  const failure = httpErrorSchema.safeParse(response.body)
+  if (!failure.success) throw new CliError('Invalid server response; inspect the work before retrying a write', 'invalid-response', undefined,
+    false, undefined, undefined, { writeOutcome: 'unknown' })
+  if (response.status >= 500) throw new CliError(failure.data.message, failure.data.code, undefined, failure.data.retryable,
+    failure.data.attemptId, failure.data.issues, { writeOutcome: 'unknown' })
+  throw new CliError(failure.data.message, failure.data.code, response.status, failure.data.retryable,
+    failure.data.attemptId, failure.data.issues)
 }
 
 export async function runProseCommand(client: Client, workId: string, operation: ProseSubmission['operation'], input: unknown) {
