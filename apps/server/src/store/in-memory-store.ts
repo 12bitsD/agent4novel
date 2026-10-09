@@ -93,6 +93,11 @@ export class InMemoryStore implements WorkStore {
     return validateStoreValue(workDetailSchema, { ...work, artifacts }, 'stored')
   }
 
+  getArtifactVersion(workId: string, kind: ArtifactKind, chapter: number | undefined, artifactId: string, version: number): Artifact | undefined {
+    const artifact = this.findBucket(workId, kind, chapter)?.versions.find(candidate => candidate.id === artifactId && candidate.version === version)
+    return artifact === undefined ? undefined : validateStoreValue(artifactSchema, artifact, 'stored')
+  }
+
   appendArtifact(
     workId: string,
     kind: ArtifactKind,

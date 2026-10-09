@@ -9,7 +9,7 @@ export function prepareBeatReview(store: WorkStore, workId: string, request: Pic
   const work = store.getWork(workId)
   if (!work) throw new KnownError('work-not-found', 'work not found')
   const target = work.artifacts.find(a => a.kind === 'beat' && a.chapter === request.chapter)
-  if (!target) throw new KnownError('artifact-not-found', 'beat not found')
+  if (!target) throw new KnownError('beat-gate-not-ready', 'beat gate not ready')
   if (target.id !== request.expectedArtifactId || target.version !== request.expectedHeadVersion) throw new KnownError('version-conflict', 'beat head changed')
   if (target.humanStatus !== 'pending') throw new KnownError('artifact-already-approved', 'beat already approved')
   const preconditions: ArtifactPrecondition[] = []

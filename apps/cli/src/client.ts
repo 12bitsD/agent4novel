@@ -1,5 +1,5 @@
 import { advanceOutcomeDtoSchema, httpErrorSchema, artifactSchema, workSchema, workListResponseSchema, pipelineStateSchema, settingApproveResponseSchema, workViewSchema, diagnosticResponseSchema, diagnosticQuerySchema } from '@agent4novel/contracts'
-import type { BeatSubmission, ProseSubmission, DiagnosticQuery, StartChapterRequest, WorkCreateRequest, SelectCreativeRequest, OutlineDraftRequest, ApproveRequest, CreativeRegenerateRequest } from '@agent4novel/contracts'
+import type { BeatSubmission, ProseSubmission, DiagnosticQuery, StartChapterRequest, WorkCreateRequest, SelectCreativeRequest, OutlineDraftRequest, ApproveRequest, CreativeRegenerateRequest, BeatVariantSelectionRequest } from '@agent4novel/contracts'
 import { appConfigSchema, matchesStartChapterResponse, outlineApprovalRequestSchema, outlineApprovalResponseSchema, matchesOutlineApprovalResponse, type OutlineApprovalRequest } from '@agent4novel/contracts'
 import { agentFileSchema, agentFileReadSchema, agentFileUploadSchema, authorConfigViewSchema, authorConfigReceiptSchema, authorConfigSaveSchema,
   managedAgentFileText, type AuthorConfigSave, type AgentFileUpload } from '@agent4novel/contracts'
@@ -222,6 +222,8 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
     beatCommand: (workId: string, submission: BeatSubmission) => call<{ status: number; body: unknown }>('POST',
       `/api/works/${encodeURIComponent(workId)}/artifacts/beat/${submission.operation === 'approve-beat' ? 'approve' : 'regenerate'}`,
       submission.request, submission.operation === 'approve-beat' ? 30_000 : 920_000, true),
+    selectBeatVariant: (workId: string, request: BeatVariantSelectionRequest) => call<{ status: number; body: unknown }>('POST',
+      `/api/works/${encodeURIComponent(workId)}/artifacts/beat/select`, request, 30_000, true),
     proseCommand: (workId: string, submission: ProseSubmission) => call<{ status: number; body: unknown }>('POST',
       `/api/works/${encodeURIComponent(workId)}/artifacts/prose/${submission.operation === 'approve-prose' ? 'approve' : submission.operation === 'save-prose' ? 'save' : 'regenerate'}`,
       submission.request, submission.operation === 'regenerate-prose' ? 920_000 : 30_000, true),

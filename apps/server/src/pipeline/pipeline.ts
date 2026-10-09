@@ -1,4 +1,4 @@
-import { runStep, perChapterKinds, beatContentSchema, beatRegenerateRequestSchema, proseContentSchema, proseRegenerateRequestSchema, creativeContentSchema, creativeRegenerateRequestSchema, startChapterRequestSchema, outlineApprovalRequestSchema, outlineApprovalResponseSchema } from '@agent4novel/contracts'
+import { runStep, perChapterKinds, beatContentSchema, beatArtifactSchema, beatRegenerateRequestSchema, beatVariantSelectionRequestSchema, proseContentSchema, proseRegenerateRequestSchema, creativeContentSchema, creativeRegenerateRequestSchema, startChapterRequestSchema, outlineApprovalRequestSchema, outlineApprovalResponseSchema } from '@agent4novel/contracts'
 import type {
   AgentConfig,
   Artifact,
@@ -14,6 +14,9 @@ import type {
   OutlineApprovalRequest,
   OutlineApprovalResponse,
   CreativeRegenerateRequest,
+  BeatVariantSelectionRequest,
+  BeatVariantSelectionResponse,
+  BeatVariantComparison,
 } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
 import type { ArtifactPrecondition, WorkStore } from '../store/work-store.js'
@@ -339,7 +342,8 @@ export class Pipeline {
 
   // 读模型按定义末端区分三步兼容链与四步设定链。
   async regenerateBeat(workId: string, request: BeatRegenerateRequest) {
-    return observeBeat(workId, 'regenerate-beat', { artifactId: request.expectedArtifactId, version: request.expectedHeadVersion }, async execution => {
+    let comparison: BeatVariantComparison | undefined
+    const observed = await observeBeat(workId, 'regenerate-beat', { artifactId: request.expectedArtifactId, version: request.expectedHeadVersion }, async execution => {
       if (this.advancing.has(workId)) throw new KnownError('advance-in-progress', 'generation already running', { retryable: true })
       this.advancing.add(workId)
       try {
@@ -362,13 +366,73 @@ export class Pipeline {
         }, this.operationConfigs(workId)[entry.stepId]!)
         execution.stage = 'output'
         const generated = beatContentSchema.parse(output.content)
-        const candidate = assignBeatIds({ ...generated, writingPlan: generated.writingPlan.map(({ title, content }) => ({ title, content })) }, baseline.content)
+        const candidate = assignBeatIds({ ...generated, writingPlan: generated.writingPlan.map(item => {
+          const prior = baseline.content.writingPlan.find(existing => existing.itemId === item.itemId)
+          // Preserve a model-provided identity when it clearly describes a
+          // changed card; unchanged cards receive a fresh identity as before.
+          return prior && (prior.title !== item.title || prior.content !== item.content)
+            ? item : { title: item.title, content: item.content }
+        }) }, baseline.content)
         execution.stage = 'commit'
-        return this.store.appendArtifact(workId, 'beat', candidate, { chapter: request.chapter, inputs, preconditions: [
+        const artifact = beatArtifactSchema.parse(this.store.appendArtifact(workId, 'beat', candidate, { chapter: request.chapter, inputs, preconditions: [
           ...preconditions, ...input.preconditions, { kind: 'beat', chapter: request.chapter, head: { artifactId: baseline.id, version: baseline.version, humanStatus: 'pending' } },
-        ] })
+        ] }))
+        comparison = { original: baseline, candidate: artifact }
+        return artifact
       } finally { this.advancing.delete(workId) }
     }, request.chapter)
+    return { ...observed, comparison: comparison! }
+  }
+
+  async selectBeatVariant(workId: string, request: BeatVariantSelectionRequest): Promise<BeatVariantSelectionResponse> {
+    const parsed = beatVariantSelectionRequestSchema.parse(request)
+    if (this.advancing.has(workId)) throw new KnownError('advance-in-progress', 'generation already running', { retryable: true })
+    this.advancing.add(workId)
+    try {
+      const work = this.store.getWork(workId)
+      if (!work) throw new KnownError('work-not-found', 'work not found')
+      const state = this.getState(workId)
+      if (state.stage !== 'awaiting-approval' || state.pendingGate?.kind !== 'beat' || state.pendingGate.chapter !== parsed.chapter) {
+        throw new KnownError('beat-gate-not-ready', 'beat gate not ready')
+      }
+      const current = beatArtifactSchema.safeParse(work.artifacts.find(artifact => artifact.kind === 'beat' && artifact.chapter === parsed.chapter)).data
+      if (!current || current.id !== parsed.expectedArtifactId || current.version !== parsed.expectedHeadVersion) {
+        throw new KnownError('version-conflict', 'beat head changed')
+      }
+      if (current.humanStatus !== 'pending') throw new KnownError('artifact-already-approved', 'beat already approved')
+      const original = beatArtifactSchema.safeParse(this.store.getArtifactVersion(workId, 'beat', parsed.chapter, parsed.originalArtifactId, parsed.originalVersion)).data
+      if (!original || original.chapter !== parsed.chapter || JSON.stringify(original.content) !== JSON.stringify(parsed.originalContent)) {
+        throw new KnownError('version-conflict', 'original beat version is not the requested history')
+      }
+      const comparison = { original, candidate: current }
+      if (parsed.choice === 'new') {
+        return {
+          artifact: current,
+          comparison,
+          choice: parsed.choice,
+          selection: {
+            operation: 'select-beat-variant', workId, chapter: parsed.chapter,
+            expectedHead: { artifactId: current.id, version: current.version },
+            originalHead: { artifactId: original.id, version: original.version }, choice: parsed.choice,
+            writeOutcome: 'not-committed', resultHead: { artifactId: current.id, version: current.version, humanStatus: current.humanStatus },
+          },
+        }
+      }
+      const artifact = beatArtifactSchema.parse(this.store.appendArtifact(workId, 'beat', original.content, {
+        chapter: parsed.chapter,
+        inputs: original.inputs,
+        preconditions: [{ kind: 'beat', chapter: parsed.chapter, head: { artifactId: current.id, version: current.version, humanStatus: 'pending' } }],
+      }))
+      return {
+        artifact, comparison, choice: parsed.choice,
+        selection: {
+          operation: 'select-beat-variant', workId, chapter: parsed.chapter,
+          expectedHead: { artifactId: current.id, version: current.version },
+          originalHead: { artifactId: original.id, version: original.version }, choice: parsed.choice,
+          writeOutcome: 'committed', resultHead: { artifactId: artifact.id, version: artifact.version, humanStatus: artifact.humanStatus },
+        },
+      }
+    } finally { this.advancing.delete(workId) }
   }
 
   // 创意再生是独立于 advance 的整步操作：caption 只读复用，目标 creative

@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。最后更新：2026-10-10。本机 MVP 已发布；#35/PR45、#47/PR48 与 #49/PR50 已关闭/合并（本轮 GitHub 回读）。当前进入 MVP 后第二期；#51 与 #46 已合并关闭，当前开发票是 [#12](https://github.com/12bitsD/agent4novel/issues/12)，上下文见 [Wiki012](./wiki/012-creative-regeneration.md)。#20、#21、#18、#17 按 [第二期路线](./plans/mvp-phase2-roadmap.md) 排队；#28/#29 与长篇质量评估保持后置。
+> 用途：context compaction / 新会话接力。最后更新：2026-10-10。本机 MVP 已发布；#35/PR45、#47/PR48 与 #49/PR50 已关闭/合并（本轮 GitHub 回读）。当前进入 MVP 后第二期；#51 与 #46 已合并关闭，#12 仍在交付门禁中（本地与 quality CI 通过，container CI 受 Docker Hub 429 限流，尚未关闭）。#20 已形成实现候选，当前处于 Loop 第二轮回归与文档/双轴复审；上下文见 [Wiki020](./wiki/020-beat-variant-compare.md)。#21、#18、#17 按 [第二期路线](./plans/mvp-phase2-roadmap.md) 继续逐票对齐；#28/#29 与长篇质量评估保持后置。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -20,7 +20,7 @@
 
 **本机 MVP 已发布，整体验证与边界从 [Wiki001](./wiki/001-mvp-acceptance.md) 进入。** 2026-10-03 回读 #1 及 #6/#19/#9/#33/#7/#8 均已关闭，对应 PR 均已合并；[PR40](https://github.com/12bitsD/agent4novel/pull/40) 对应源提交的 CI 与 [main CI](https://github.com/12bitsD/agent4novel/actions/runs/36727036119) 均成功。文档 #41/PR42、修复 #43/PR44 与视觉 #35/PR45 也已关闭/合并；#47/#49 的后续交接分别见 Wiki047 与 Wiki049。#35 的 [main CI](https://github.com/12bitsD/agent4novel/actions/runs/37100590655/attempts/2) 最终成功；其首轮 SQLite 并发初始化失败由 #46 独立跟踪，重试通过不表示该竞争已修复。关闭记录证明交付状态，不能消除未来新发现。
 
-- **交付状态**：#22/PR #30、#6/[PR #32](https://github.com/12bitsD/agent4novel/pull/32)、#19/[PR #34](https://github.com/12bitsD/agent4novel/pull/34)、#9/[PR #36](https://github.com/12bitsD/agent4novel/pull/36) 已关闭/合并；#9终止记录见[完成评论](https://github.com/12bitsD/agent4novel/issues/9#issuecomment-5897744738)。#33/[PR37](https://github.com/12bitsD/agent4novel/pull/37)已关闭/合并，最终源提交两job[CI成功](https://github.com/12bitsD/agent4novel/actions/runs/36653441274)。#35/[PR45](https://github.com/12bitsD/agent4novel/pull/45)、#47/[PR48](https://github.com/12bitsD/agent4novel/pull/48)、#49/[PR50](https://github.com/12bitsD/agent4novel/pull/50)也已关闭/合并；#49 main CI [37515609633](https://github.com/12bitsD/agent4novel/actions/runs/37515609633) 的 quality/container 均成功。
+- **交付状态**：#22/PR #30、#6/[PR #32](https://github.com/12bitsD/agent4novel/pull/32)、#19/[PR #34](https://github.com/12bitsD/agent4novel/pull/34)、#9/[PR #36](https://github.com/12bitsD/agent4novel/pull/36) 已关闭/合并；#9终止记录见[完成评论](https://github.com/12bitsD/agent4novel/issues/9#issuecomment-5897744738)。#33/[PR37](https://github.com/12bitsD/agent4novel/pull/37)已关闭/合并，最终源提交两job[CI成功](https://github.com/12bitsD/agent4novel/actions/runs/36653441274)。#35/[PR45](https://github.com/12bitsD/agent4novel/pull/45)、#47/[PR48](https://github.com/12bitsD/agent4novel/pull/48)、#49/[PR50](https://github.com/12bitsD/agent4novel/pull/50)也已关闭/合并；#49 main CI [37515609633](https://github.com/12bitsD/agent4novel/actions/runs/37515609633) 的 quality/container 均成功。#12 当前候选 PR56 的 quality CI 通过，container CI 被 Docker Hub 429 限流阻断，不能写成已关闭；#20 尚未创建 PR。
 - **已验证基线**：#6 有 fake 多章、CLI/Web、独立真实 Beat2/Prose2 和本地门禁证据，见 [Wiki 006](./wiki/006-chapter-continuation.md)。真实节点使用合成上游，不是全书/全部节点真实模型验收，也不证明长篇质量。#19 的共享验证证据见其本票 Wiki；#9 的 SQLite、真实进程重启及关闭路径需看 Wiki 009 的实际结果，不沿用旧票测试。
 - **当前存储边界**：生产启动使用 SQLite，恢复已提交的作品、产物版本、状态和输入引用；未保存页面编辑不恢复，遥测仍在进程内，不自动恢复模型调用。旧内存进程不自动迁移或清空。#33同源Web/API、非root镜像、两章卷恢复及实际CI已验证。#7已接入默认/节点覆盖、Prompt/Skill版本和操作快照，实际交付见PR38和本票issue；#8已接入手工坏例快照与回看，交付状态核对#8；长期记忆与Wiki工具仍后置。
 - **复审与修复**：原定向复现发现配置草稿/未知请求在自动切章时丢失、起章前章版本条件未保持至生成、静态文件校验与读取路径解码不一致。原触发条件见 [复审记录](./wiki/001-mvp-acceptance.md#2026-10-03-清点与复审)，修复、有效红绿、完整门禁和独立审核见 Wiki043；[完成评论](https://github.com/12bitsD/agent4novel/issues/43#issuecomment-5964216514) 记录 PR/CI 与终止裁决。原复审保留为历史未修复快照，不能替代修复证据。
@@ -129,8 +129,9 @@ CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化
 | #49 作者编稿台（已交付） | 稳定作品框架、材料交接、导航恢复、编辑保护和大纲可见版本 | 实际证据见 Wiki049 与 PR50 |
 | #51 节点迭代（已交付） | 可选本地记录实际输入输出、Agent A/B 与 comment；四文件资源和迭代 skill 已落地 | 不做平台、自动 judge 或作品 Wiki |
 | #46 SQLite 初始化竞争（已交付） | 首次并发建库只对可重试锁竞争做有界处理，保留安全初始化诊断 | 已合并关闭；不扩展运行期通用重试 |
-| #12 创意稿再生（当前候选） | 失败重试、补充想法、整步再生、版本条件与未知结果恢复 | 双轴 review、PR/CI/远端回读后关闭 |
-| #20/#21 作者迭代（排队） | 章纲版本选择、章节重生 | 按第二期路线逐票进入 |
+| #12 创意稿再生（当前候选） | 失败重试、补充想法、整步再生、版本条件与未知结果恢复 | container CI 限流解除并完成双轴/远端回读后关闭 |
+| #20 章纲版本比较与选择（实现候选） | 当前 pending beat 的 A/B 比较、B 选择或 A-copy C、显式通过 | Round 2 回归、C4/C5/C6、PR/CI/远端回读后关闭；不扩展为通用历史 |
+| #21 章节重生（待产品对齐） | 通过后章节的 beat/prose 重生与下游影响 | 先由 Human 确认 current-only、rebirth 形态、后续章节标记和命令边界，再进入实现 Loop |
 | #18/#17 设定演进（设计／候选） | 冲突分类与通过后设定影响语义 | 先设计，再决定是否进入第二期核心 |
 | #28/#29 扩展（第三期） | 设定查询工具循环、作品 Wiki 档案演进 | 当前均未实现，保持后置 |
 

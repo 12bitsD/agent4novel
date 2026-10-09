@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { apiErrorSchema, workflowStates } from './artifacts.js'
 import { beatArtifactSchema } from './beat.js'
 import { llmTelemetrySchema } from './telemetry.js'
+import { beatVariantComparisonSchema } from './beat-variant.js'
 
 export const beatOperationSchema = z.enum(['generate-beat', 'regenerate-beat', 'approve-beat'])
 export const beatHeadSchema = z.object({ artifactId: z.string().min(1), version: z.number().int().positive().safe() }).strict()
@@ -43,9 +44,10 @@ export type BeatExecutionObservation = Extract<BeatCommandObservation, { kind: '
 export const beatWorkflowSchema = z.object({
   workflowState: z.enum(workflowStates), nextStepId: z.string().nullable(), allowedActions: z.array(z.string()),
 }).strict()
-export const beatCommandResponseSchema = z.object({
-  artifact: beatArtifactSchema, command: beatCommandObservationSchema, workflow: beatWorkflowSchema, telemetry: z.array(llmTelemetrySchema),
-}).strict().superRefine((v, ctx) => {
+const beatCommandResponseObjectSchema = z.object({
+  artifact: beatArtifactSchema, comparison: beatVariantComparisonSchema.optional(), command: beatCommandObservationSchema, workflow: beatWorkflowSchema, telemetry: z.array(llmTelemetrySchema),
+}).strict()
+const beatCommandResponseEffects = beatCommandResponseObjectSchema.superRefine((v, ctx) => {
   const command = v.command
   if (command.kind !== 'execution-result' || command.writeOutcome !== 'committed'
     || command.target.chapter !== v.artifact.chapter || command.target.workId !== v.artifact.workId || command.resultHead?.artifactId !== v.artifact.id
@@ -53,6 +55,9 @@ export const beatCommandResponseSchema = z.object({
     ctx.addIssue({ code: 'custom', message: '成功结果与命令观察不一致' })
   }
 })
+// Keep the object schema's public shape for callers that need to discover the
+// optional comparison while retaining the cross-field response invariant.
+export const beatCommandResponseSchema = Object.assign(beatCommandResponseEffects, { shape: beatCommandResponseObjectSchema.shape })
 export const beatInputBudgetSchema = z.object({
   limit: z.number().int().positive(), actualLength: z.number().int().nonnegative(),
   systemChars: z.number().int().nonnegative(), outlineChars: z.number().int().nonnegative(), settingChars: z.number().int().nonnegative(),
