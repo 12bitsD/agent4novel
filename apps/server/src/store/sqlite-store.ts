@@ -10,7 +10,7 @@ import {
 } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
 import { assertBucketAddress, assertDirectStatusAllowed } from './invariants.js'
-import { initializeSqliteSchema, UnsupportedDatabaseError } from './sqlite-schema.js'
+import { getSqliteErrorCode, initializeSqliteDatabase, SqliteInitializationError, UnsupportedDatabaseError } from './sqlite-schema.js'
 import { StoreContractError, validateStoreValue } from './validation.js'
 import type { AppendOptions, ArtifactPrecondition, FinalizeArtifactInput, SaveArtifactInput, WorkStore } from './work-store.js'
 import type { AuthorConfigRepository } from '../config/author-config-repository.js'
@@ -60,15 +60,15 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
         catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error }
       }
       db = new Database(path, { timeout: 5000 })
-      db.pragma('foreign_keys = ON')
-      initializeSqliteSchema(db)
-      db.pragma('journal_mode = WAL')
-      db.pragma('synchronous = FULL')
+      initializeSqliteDatabase(db)
+      // Initialization uses a short per-attempt busy handler. Restore the
+      // established runtime wait for ordinary CAS/write transactions.
+      db.pragma('busy_timeout = 5000')
       this.db = db
     } catch (error) {
       if (db?.open) db.close()
-      if (error instanceof UnsupportedDatabaseError) throw error
-      throw new Error('database could not be opened')
+      if (error instanceof UnsupportedDatabaseError || error instanceof SqliteInitializationError) throw error
+      throw new SqliteInitializationError('open', getSqliteErrorCode(error) ?? null, 1, false)
     }
   }
 

@@ -55,7 +55,115 @@ const additionsV3 = [
 ]
 
 export class UnsupportedDatabaseError extends Error {
+  readonly stage = 'schema' as const
+  readonly sqliteCode = null
+  readonly attempts = 1
+  readonly retryable = false
+  readonly diagnosticCode = 'unsupported-schema' as const
+
   constructor() { super('unsupported database schema'); this.name = 'UnsupportedDatabaseError' }
+}
+
+export type SqliteInitializationStage = 'open' | 'foreign_keys' | 'schema' | 'wal' | 'synchronous'
+
+export class SqliteInitializationError extends Error {
+  readonly stage: SqliteInitializationStage
+  readonly sqliteCode: string | null
+  readonly attempts: number
+  readonly retryable: boolean
+  readonly diagnosticCode = 'initialization-error' as const
+
+  constructor(stage: SqliteInitializationStage, sqliteCode: string | null, attempts: number, retryable: boolean) {
+    super('database could not be opened')
+    this.name = 'SqliteInitializationError'
+    this.stage = stage
+    this.sqliteCode = sqliteCode
+    this.attempts = attempts
+    this.retryable = retryable
+  }
+}
+
+export interface SqliteInitializationOptions {
+  busyTimeoutMs?: number
+  maxAttempts?: number
+  retryDelayMs?: number
+}
+
+const defaultInitializationOptions = {
+  busyTimeoutMs: 100,
+  maxAttempts: 8,
+  retryDelayMs: 10,
+} as const
+
+// Keep this an explicit result-code allowlist. In particular, SQLITE_LOCKED is
+// not a transient cross-connection busy condition and must never be retried.
+const retryableBusyCodes = new Set([
+  'SQLITE_BUSY',
+  'SQLITE_BUSY_RECOVERY',
+  'SQLITE_BUSY_SNAPSHOT',
+  'SQLITE_BUSY_TIMEOUT',
+])
+
+export function getSqliteErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object') return undefined
+  const code = (error as { code?: unknown }).code
+  return typeof code === 'string' ? code : undefined
+}
+
+function sleepSynchronously(milliseconds: number): void {
+  if (milliseconds <= 0) return
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
+}
+
+function optionNumber(value: number | undefined, fallback: number, minimum: number): number {
+  return Number.isFinite(value) && value !== undefined && value >= minimum ? value : fallback
+}
+
+/**
+ * Open-time boundary only: foreign keys, schema migration, WAL and FULL
+ * synchronous are retried as one operation. Runtime writes retain the
+ * normal 5-second better-sqlite3 busy handler, restored by SqliteStore.
+ */
+export function initializeSqliteDatabase(db: Database.Database, options: SqliteInitializationOptions = {}): void {
+  const busyTimeoutMs = optionNumber(options.busyTimeoutMs, defaultInitializationOptions.busyTimeoutMs, 1)
+  const maxAttempts = Math.min(20, Math.floor(optionNumber(options.maxAttempts, defaultInitializationOptions.maxAttempts, 1)))
+  const retryDelayMs = optionNumber(options.retryDelayMs, defaultInitializationOptions.retryDelayMs, 0)
+  const runtimeBusyTimeout = Number(db.pragma('busy_timeout', { simple: true }))
+
+  try {
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      let stage: SqliteInitializationStage = 'foreign_keys'
+      try {
+        // PRAGMA busy_timeout replaces the connection's busy handler. This is
+        // deliberately short for each bounded initialization attempt.
+        db.pragma(`busy_timeout = ${busyTimeoutMs}`)
+        db.pragma('foreign_keys = ON')
+        stage = 'schema'
+        initializeSqliteSchema(db)
+        stage = 'wal'
+        if (!db.memory) {
+          const journalMode = db.pragma('journal_mode = WAL', { simple: true })
+          if (String(journalMode).toLowerCase() !== 'wal') throw new SqliteInitializationError(stage, null, attempt, false)
+        }
+        stage = 'synchronous'
+        db.pragma('synchronous = FULL')
+        const synchronous = db.pragma('synchronous', { simple: true })
+        if (Number(synchronous) !== 2) throw new SqliteInitializationError(stage, null, attempt, false)
+        return
+      } catch (error) {
+        if (error instanceof UnsupportedDatabaseError) throw error
+        if (error instanceof SqliteInitializationError && !error.retryable) throw error
+        const code = getSqliteErrorCode(error)
+        const retryable = code !== undefined && retryableBusyCodes.has(code)
+        if (!retryable || attempt === maxAttempts) throw new SqliteInitializationError(stage, code ?? null, attempt, retryable)
+        sleepSynchronously(retryDelayMs)
+      }
+    }
+  } finally {
+    // Do not leave a caller's connection on the short initialization handler,
+    // including when initialization fails and the caller keeps the handle.
+    db.pragma(`busy_timeout = ${runtimeBusyTimeout}`)
+  }
 }
 
 const normalize = (sql: string) => sql.replace(/\s+/g, ' ').trim()

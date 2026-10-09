@@ -30,7 +30,14 @@ process.once('message', (message: { action: string; request?: SaveArtifactInput;
       return
     } else throw new Error('unknown worker action')
   } catch (error) {
-    process.send!({ type: 'result', outcome: error && typeof error === 'object' && 'code' in error ? error.code : 'unexpected-error' })
+    if (error && typeof error === 'object' && 'stage' in error && 'attempts' in error && 'retryable' in error) {
+      const diagnostic = error as { stage: string; sqliteCode?: string | null; attempts: number; retryable: boolean; diagnosticCode?: string }
+      process.send!({ type: 'result', outcome: 'initialization-error', stage: diagnostic.stage,
+        diagnosticCode: diagnostic.diagnosticCode ?? 'initialization-error', sqliteCode: diagnostic.sqliteCode ?? null,
+        attempts: diagnostic.attempts, retryable: diagnostic.retryable })
+    } else {
+      process.send!({ type: 'result', outcome: error && typeof error === 'object' && 'code' in error ? error.code : 'unexpected-error' })
+    }
   } finally {
     if (message.action !== 'committed') store?.close()
   }
