@@ -57,7 +57,7 @@ Web：未保存方向编辑先保存；本次补充想法单独保留。生成�
 
 反作弊：生产 Step canary 不接受 fake substring；失败断言同时核对当前 head；竞争用实际等待模型的 Promise；unknown 要有无回执或畸形 2xx 的记录并证明没有自动确认/重发。未跑的校准保持 pending。
 
-前置方法审查：Hume 只读 reviewer 首轮判 `FAIL`，指出原 v1 只有 E1 且 E2–E6 不可执行，尤其遗漏生产 prompt、竞争、unknown 和 creative 的 run-step 契约；上述 v2 已逐项补齐，后续需重新只读复核。
+前置方法审查：Hume 只读 reviewer 首轮判 `FAIL`，指出原 v1 只有 E1 且 E2–E6 不可执行，尤其遗漏生产 prompt、竞争、unknown 和 creative 的 run-step 契约；上述 v2 已逐项补齐，后续需重新只读复核。受保护材料当前 SHA-256：server HTTP `f41e92c5719858620652883531f0f07eac45e49acc2ea861564e731995633a80`；真实 Step `3f917b1f8e341ad31b5e2f40fe6ab3457f2e20b99e23bac236468cb9ee6f1bd7`；contracts `3b53a3263516a184c9ab177cb7c703bb361d9905eb54cc0f91f3eeec25c774d7`；Web `c1267a83f74e0a3a5662a4066265b0bab2118cd363c7c88e2bc01efeea5f80fe`。
 
 ### TDD 切片与轮次
 
