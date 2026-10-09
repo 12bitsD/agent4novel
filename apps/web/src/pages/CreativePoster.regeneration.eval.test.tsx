@@ -48,12 +48,40 @@ describe('creative regeneration Web acceptance', () => {
       expect(request).toBeTruthy()
       expect(JSON.parse(String(request!.init?.body))).toMatchObject({ expectedArtifactId: 'creative-2', expectedHeadVersion: 2, instructions: 'UI unique author thought' })
       expect(thought.disabled).toBe(true)
-      expect(title.disabled).toBe(true)
+      expect(title.closest('fieldset')?.hasAttribute('disabled')).toBe(true)
       expect(regenerate.disabled).toBe(true)
       expect(host.textContent).toContain('UI unique author thought')
       await act(async () => rejectRegeneration(new Error('network lost')))
-      expect(host.textContent).toContain('UI unique author thought')
+      expect(thought.value).toBe('UI unique author thought')
+      expect(host.textContent).toContain('核对服务器内容')
       expect(host.textContent).toContain('旧方向')
+      expect(calls.filter(call => call.url.endsWith('/artifacts/creative/regenerate'))).toHaveLength(1)
+    } finally {
+      await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals()
+    }
+  })
+
+  it('E5 adopts a successful new pending head without selecting it and clears the thought', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
+    const generated = { ...creative(2), content: { directions: [pack('new-direction', '再生方向')] } }
+    let postCount = 0
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/api/works/creative-ui-work')) return new Response(JSON.stringify(view()))
+      if (url.endsWith('/artifacts/creative/regenerate')) { postCount++; return new Response(JSON.stringify(generated)) }
+      throw new Error(`unexpected ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const host = document.createElement('div'); document.body.append(host); const root = createRoot(host)
+    try {
+      await act(async () => root.render(<Workspace workId="creative-ui-work" onBack={() => {}} />))
+      const thought = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="补充想法"]')!
+      setValue(thought, 'success thought')
+      await act(async () => [...host.querySelectorAll<HTMLButtonElement>('button')].find(button => button.textContent?.includes('重新生成创意稿'))!.click())
+      expect(postCount).toBe(1)
+      expect(host.textContent).toContain('再生方向')
+      expect(host.textContent).toContain('重新生成创意稿')
+      expect(host.textContent).not.toContain('已选定')
+      expect(host.querySelector<HTMLTextAreaElement>('textarea[aria-label="补充想法"]')!.value).toBe('')
     } finally {
       await act(async () => root.unmount()); host.remove(); vi.unstubAllGlobals()
     }

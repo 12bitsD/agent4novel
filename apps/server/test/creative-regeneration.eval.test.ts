@@ -107,6 +107,8 @@ describe('creative regeneration acceptance v1', () => {
     expect((await regenerate(app, work.id, { expectedArtifactId: null, expectedHeadVersion: null, instructions: '' })).status).toBe(409)
     expect(step.seen).toHaveLength(0)
 
+    store.appendArtifact(work.id, 'caption', caption('E4 pending caption'))
+    expect((await regenerate(app, work.id, { expectedArtifactId: null, expectedHeadVersion: null, instructions: '' })).status).toBe(409)
     const source = store.appendArtifact(work.id, 'caption', caption('E4 caption'), { humanStatus: 'approved' })
     const old = store.appendArtifact(work.id, 'creative', creative('E4 old'))
     expect((await regenerate(app, work.id, { expectedArtifactId: 'stale', expectedHeadVersion: old.version, instructions: '' })).status).toBe(409)
@@ -127,12 +129,14 @@ describe('creative regeneration acceptance v1', () => {
     store.appendArtifact(work.id, 'caption', caption('E4 race caption'), { humanStatus: 'approved' })
     const old = store.appendArtifact(work.id, 'creative', creative('E4 race old'))
     let release!: () => void
+    let entered!: () => void
     const waiting = new Promise<void>(resolve => { release = resolve })
+    const started = new Promise<void>(resolve => { entered = resolve })
     const step = fakeArtifactStep('creative', creative('E4 race generated'))
-    step.step.run = async input => { step.seen.push(input); await waiting; return { content: creative('E4 race generated') } }
+    step.step.run = async input => { step.seen.push(input); entered(); await waiting; return { content: creative('E4 race generated') } }
     const { app } = appFor(store, step)
     const pending = regenerate(app, work.id, { expectedArtifactId: old.id, expectedHeadVersion: old.version, instructions: '' })
-    await new Promise(resolve => setTimeout(resolve, 0))
+    await started
     store.appendArtifact(work.id, 'creative', creative('E4 competing creative'))
     release()
     expect((await pending).status).toBe(409)
@@ -164,12 +168,14 @@ describe('creative regeneration acceptance v1', () => {
     store.appendArtifact(work.id, 'caption', caption('E4 lock caption'), { humanStatus: 'approved' })
     const old = store.appendArtifact(work.id, 'creative', creative('E4 lock old'))
     let release!: () => void
+    let entered!: () => void
     const waiting = new Promise<void>(resolve => { release = resolve })
+    const started = new Promise<void>(resolve => { entered = resolve })
     const step = fakeArtifactStep('creative', creative('E4 lock new'))
-    step.step.run = async input => { step.seen.push(input); await waiting; return { content: creative('E4 lock new') } }
+    step.step.run = async input => { step.seen.push(input); entered(); await waiting; return { content: creative('E4 lock new') } }
     const { app } = appFor(store, step)
     const first = regenerate(app, work.id, { expectedArtifactId: old.id, expectedHeadVersion: old.version, instructions: '' })
-    await new Promise(resolve => setTimeout(resolve, 0))
+    await started
     expect((await regenerate(app, work.id, { expectedArtifactId: old.id, expectedHeadVersion: old.version, instructions: '' })).status).toBe(409)
     expect(step.seen).toHaveLength(1)
     release()

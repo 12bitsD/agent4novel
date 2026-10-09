@@ -44,20 +44,20 @@ Web：未保存方向编辑先保存；本次补充想法单独保留。生成�
 
 ### 固定验收 v2（主 Agent 维护，实施 Agent 不得改）
 
-接缝：公开 HTTP/CLI、真实 creative Step 的 SDK transport、Web DOM 交互；存储通过 WorkStore 公开版本接口验证。受保护材料为 `apps/server/test/creative-regeneration.eval.test.ts`、`apps/server/test/creative-regeneration-real-step.eval.test.ts`、`packages/contracts/test/creative-regeneration.eval.test.ts` 和 `apps/web/src/pages/CreativePoster.regeneration.eval.test.tsx`。
+接缝：公开 HTTP/CLI、真实 creative Step 的 SDK transport、Web DOM 交互；存储通过 WorkStore 公开版本接口验证。受保护材料为 `apps/server/test/creative-regeneration.eval.test.ts`、`apps/server/test/creative-regeneration-real-step.eval.test.ts`、`packages/contracts/test/creative-regeneration.eval.test.ts` 和 `apps/web/src/pages/CreativePoster.regeneration.eval.test.tsx`、`apps/cli/test/creative-cli.test.ts`。
 
 | Eval | 固定材料与入口 | 独立预期 / 判失败条件 |
 |---|---|---|
 | E1 / AC1,3 | server HTTP；approved caption、无 creative、null/null 基线 | 只调用 creative；step 收到精确 seed/caption/null 旧包/意见；恰好追加完整 pending head；caption、seed 不变，无下游；0/半包/approved 失败 |
-| E2 / AC2,3 | server HTTP + `creative-regeneration-real-step`；唯一 canary 的 seed、caption、旧方向包、意见 | 实际生产 Step 的 SDK prompt 精确包含四类 canary；成功产生新 ID/version、完整 pending；旧当前快照不被覆盖、仍可显式选定 |
+| E2 / AC2,3 | `creative-regeneration-real-step` 的 HTTP route + `createCreativeStep`；唯一 canary 的 seed、caption、旧方向包、意见 | 同一公开 HTTP 路径调用真实生产 Step；SDK 恰好一次，prompt 精确包含四类 canary；成功产生新 ID/version、完整 pending；旧当前快照不被覆盖、仍可显式选定 |
 | E3 / AC3 | HTTP 的 timeout、非法结构输出、竞争提交 | 安全分类错误；旧 head 内容/ID/version/status 不变；无半包/下游；模型成功但 CAS 失败也不算成功 |
 | E4 / AC4 | HTTP 的半个 ID/version、缺 caption、stale、approved、caption/creative race、重入锁 | 每个前置拒绝均在模型前且模型调用为 0；等待期间两类竞争均只保留竞争 head；重入第二次不调用模型 |
-| E5 / AC5 | `CreativePoster.regeneration.eval` DOM | 脏编辑先 PUT 保存，随后 POST 绑定保存后的 ID/version；生成中补充想法、方向编辑、选择和再生均锁定；失败/unknown 保留旧材料和原话，不自动 POST/追认 |
-| E6 / AC6 | contracts schema、严格 CLI 文件命令、已有 `run-step --record-dir` | creative regeneration 输入可被同一生产 Step 接受且意见超限前置拒绝；CLI 单次 POST、畸形/目标不匹配非零，unknown 不回读认领/重发；record 四文件实际捕获 system/user/model/config |
+| E5 / AC5 | `CreativePoster.regeneration.eval` DOM | 脏编辑先 PUT 保存，随后 POST 绑定保存后的 ID/version；成功替换为新 pending 且不自动选定；生成中补充想法、方向编辑、选择和再生均锁定；失败/unknown 保留旧材料和原话，不自动 POST/GET 追认 |
+| E6 / AC6 | contracts、`apps/cli/test/creative-cli` 可执行 CLI、`run-step --record-dir` | creative regeneration 输入可被同一生产 Step 接受且意见超限前置拒绝；CLI 单次 POST、畸形/目标不匹配非零，unknown 不回读认领/重发；creative run-step 实际生成四文件并捕获 system/user/model/config |
 
 反作弊：生产 Step canary 不接受 fake substring；失败断言同时核对当前 head；竞争用实际等待模型的 Promise；unknown 要有无回执或畸形 2xx 的记录并证明没有自动确认/重发。未跑的校准保持 pending。
 
-前置方法审查：Hume 只读 reviewer 首轮判 `FAIL`，指出原 v1 只有 E1 且 E2–E6 不可执行，尤其遗漏生产 prompt、竞争、unknown 和 creative 的 run-step 契约；上述 v2 已逐项补齐，后续需重新只读复核。受保护材料当前 SHA-256：server HTTP `f41e92c5719858620652883531f0f07eac45e49acc2ea861564e731995633a80`；真实 Step `3f917b1f8e341ad31b5e2f40fe6ab3457f2e20b99e23bac236468cb9ee6f1bd7`；contracts `3b53a3263516a184c9ab177cb7c703bb361d9905eb54cc0f91f3eeec25c774d7`；Web `c1267a83f74e0a3a5662a4066265b0bab2118cd363c7c88e2bc01efeea5f80fe`。
+前置方法审查：Hume 只读 reviewer 首轮判 `FAIL`，指出原 v1 只有 E1 且 E2–E6 不可执行，尤其遗漏生产 prompt、竞争、unknown 和 creative 的 run-step 契约；上述 v2 已逐项补齐，后续需重新只读复核。受保护材料当前 SHA-256：server HTTP `41e8651ba9265abeea1e5f511bec33d8efdd3bd930f931738b92234ee43102b8`；HTTP+真实 Step `07a326aad444e802afc8093a300087ba7fd8c28fdd69cb8ff21b95cf7d85d6ac`；contracts `3b53a3263516a184c9ab177cb7c703bb361d9905eb54cc0f91f3eeec25c774d7`；Web `73c1b2dc524ee02eb9897e4948f8e8981cc2e4a7542738205c4bdd0d176d3c93`；CLI `aa026bf7d6781ab656acb4e7b642899951e167d3b1be82b23f721202ba4771b5`。
 
 ### TDD 切片与轮次
 
