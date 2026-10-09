@@ -5,6 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { cliBin as bin, cliTestEnv } from './cli-process.js'
+import { stepExperimentRecordInvocationSchema } from '@agent4novel/contracts'
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 
@@ -372,6 +373,10 @@ describe('run-step through a local mock provider', () => {
       expect(calls).toBe(1)
       expect(disconnected).toBe(true)
       expect(JSON.parse(readFileSync(join(recordDir, 'result.json'), 'utf8'))).toMatchObject({ status: 'unknown', content: null, diagnostic: { code: 'cli-timeout' } })
+      const invocation = JSON.parse(readFileSync(join(recordDir, 'invocation.json'), 'utf8'))
+      const parsedInvocation = stepExperimentRecordInvocationSchema.safeParse(invocation)
+      expect(parsedInvocation.success).toBe(true)
+      expect(invocation).toHaveProperty('effectiveConfig')
       expect(JSON.parse(readFileSync(join(recordDir, 'meta.json'), 'utf8'))).toMatchObject({ complete: false, status: 'incomplete' })
     } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
   }, 15000)
