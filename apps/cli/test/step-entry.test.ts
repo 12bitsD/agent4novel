@@ -12,6 +12,7 @@ describe('run-step executable entry', () => {
     expect(help).toContain('--thinking on|off')
     expect(help).toContain('--temperature')
     expect(help).toContain('--top-p')
+    expect(help).toContain('--record-dir')
     expect(help).toContain('不支持 --top-k')
     const result = spawnSync(bin, ['run-step', 'caption'], { encoding: 'utf8', env: cliTestEnv() })
     expect(result.status).toBe(1)

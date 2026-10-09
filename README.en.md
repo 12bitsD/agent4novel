@@ -65,6 +65,17 @@ Leave the terminal running and open **[localhost:5173](http://localhost:5173)**.
 
 CLI entry: `pnpm cli --help`. See [CLI documentation](./docs/wiki/014-agent-cli-telemetry.md) for work operations, isolated node tests and diagnostics.
 
+### Node observation and iteration
+
+When an agent needs the real input and output of one isolated node, pass `run-step` a new private directory:
+
+```bash
+./apps/cli/bin/a4n run-step caption --seed-file seed.txt \
+  --system-prompt-file caption-sp.md --record-dir .data/experiments/round-1/a
+```
+
+The directory contains `input.json`, `invocation.json`, `result.json`, and `meta.json`. Read `meta.json` first; only `complete: true` with `status: "complete"` is a complete run, then read the remaining files listed by `meta.files`. Uncaptured values remain `null`; do not reconstruct historical calls from current source files. Use two new directories for A/B, keep user and agent notes in an adjacent `comments.md`, and rerun with `run-step` while preserving old records. See the [node-record Wiki](./docs/wiki/051-node-iteration-records.md) and [iteration skill](./.claude/skills/agent4novel-iterate/SKILL.md) for the full boundary.
+
 </details>
 
 <a id="configure-a-model-service"></a>

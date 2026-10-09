@@ -1,10 +1,11 @@
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 import { once } from 'node:events'
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync, statSync, symlinkSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { cliBin as bin, cliTestEnv } from './cli-process.js'
+import { stepExperimentRecordInvocationSchema } from '@agent4novel/contracts'
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 
@@ -25,6 +26,129 @@ async function invoke(args: string[], providerUrl: string, env: NodeJS.ProcessEn
 }
 
 describe('run-step through a local mock provider', () => {
+  it('writes a private complete record with the actual transport input and final result', async () => {
+    const directory = mkdtempSync(join(realpathSync(tmpdir()), 'a4n-step-record-cli-'))
+    const recordDir = join(directory, 'run-a')
+    const server = createServer(async (req, res) => {
+      let source = ''; for await (const chunk of req) source += chunk
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ id: 'mock-record', model: 'LongCat-2.0', choices: [{ index: 0,
+        message: { role: 'assistant', content: JSON.stringify(caption) }, finish_reason: 'stop' }] }))
+    })
+    server.listen(0, '127.0.0.1'); await once(server, 'listening')
+    const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
+    try {
+      const seedFile = join(directory, 'seed.txt'); writeFileSync(seedFile, 'recorded cli seed')
+      const spFile = join(directory, 'sp.md'); writeFileSync(spFile, 'recorded cli system')
+      const result = await invoke(['run-step', 'caption', '--seed-file', seedFile, '--system-prompt-file', spFile, '--record-dir', recordDir,
+        '--thinking', 'off', '--temperature', '0.4', '--top-p', '0.6'], `http://127.0.0.1:${address.port}/v1`)
+      expect(result.code, result.stderr).toBe(0)
+      expect(JSON.parse(result.stdout)).toMatchObject({ kind: 'succeeded', recording: { status: 'complete', dir: recordDir } })
+      expect(readdirSync(recordDir).sort()).toEqual(['input.json', 'invocation.json', 'meta.json', 'result.json'])
+      const invocation = JSON.parse(readFileSync(join(recordDir, 'invocation.json'), 'utf8'))
+      const recordedResult = JSON.parse(readFileSync(join(recordDir, 'result.json'), 'utf8'))
+      expect(invocation).toMatchObject({ captured: true, system: 'recorded cli system', prompt: '作者原始素材:\nrecorded cli seed\n\n请输出提炼稿。',
+        generation: { thinking: 'disabled', temperature: 0.4, topP: 0.6 }, maxOutputTokens: 8000 })
+      expect(recordedResult).toMatchObject({ status: 'succeeded', content: caption })
+      expect(statSync(recordDir).mode & 0o777).toBe(0o700)
+      for (const file of ['input.json', 'invocation.json', 'meta.json', 'result.json']) expect(statSync(join(recordDir, file)).mode & 0o777).toBe(0o600)
+    } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
+  }, 20000)
+
+  it('supports one complete prose A/B/comment loop through the CLI worker and files', async () => {
+    const directory = mkdtempSync(join(realpathSync(tmpdir()), 'a4n-step-iteration-loop-'))
+    const requests: { messages: { role: string; content: string }[] }[] = []
+    const server = createServer(async (req, res) => {
+      let source = ''; for await (const chunk of req) source += chunk
+      const request = JSON.parse(source) as { messages: { role: string; content: string }[] }
+      requests.push(request)
+      const system = request.messages.find(message => message.role === 'system')?.content ?? ''
+      const text = system.includes('B版') ? 'B版正文：第二段更具体。' : 'A版正文：第二段仍需调整。'
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ id: 'mock-iteration-loop', model: 'LongCat-2.0', choices: [{ index: 0,
+        message: { role: 'assistant', content: JSON.stringify({ text }) }, finish_reason: 'stop' }] }))
+    })
+    server.listen(0, '127.0.0.1'); await once(server, 'listening')
+    const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
+    const input = { seed: '合成正文迭代素材', chapter: 1, upstream: {
+      beat: { title: '过桥', goal: '继续追寻', writingPlan: [{ itemId: 'item-one', title: '行动', content: '沿桥寻找线索' }], ending: '发现新线索' },
+      setting: { overview: '城市夜行', world: [{ itemId: 'world-one', title: '城市', content: '河流横贯城市' }],
+        characters: [{ itemId: 'char-one', title: '主角', content: '寻找证人' }], factions: [], relationships: [], extensions: [] },
+    } }
+    try {
+      const inputFile = join(directory, 'prose-input.json'); const spFile = join(directory, 'sp.md')
+      writeFileSync(inputFile, JSON.stringify(input))
+      const providerUrl = `http://127.0.0.1:${address.port}/v1`
+      const run = async (recordDir: string, system: string) => {
+        writeFileSync(spFile, system)
+        return invoke(['run-step', 'prose', '--input-file', inputFile, '--system-prompt-file', spFile, '--record-dir', recordDir], providerUrl)
+      }
+      const aDir = join(directory, 'A'); const bDir = join(directory, 'B')
+      const a = await run(aDir, 'A版迭代：定位第二段。')
+      const b = await run(bDir, 'B版迭代：第二段更具体。')
+      expect(a.code, a.stderr).toBe(0); expect(b.code, b.stderr).toBe(0)
+      const readRecord = (dir: string, name: string) => JSON.parse(readFileSync(join(dir, name), 'utf8')) as Record<string, any>
+      const aInput = readRecord(aDir, 'input.json'); const aInvocation = readRecord(aDir, 'invocation.json'); const aResult = readRecord(aDir, 'result.json'); const aMeta = readRecord(aDir, 'meta.json')
+      const bInput = readRecord(bDir, 'input.json'); const bInvocation = readRecord(bDir, 'invocation.json'); const bResult = readRecord(bDir, 'result.json'); const bMeta = readRecord(bDir, 'meta.json')
+      writeFileSync(join(directory, 'comments.md'), '用户原话：第二段还在讲道理。\nAgent观察：A版问题集中在第二段。\n下一轮假设：B版要求具体行动。\n')
+      expect(aMeta).toMatchObject({ complete: true, status: 'complete', stepId: 'prose' })
+      expect(bMeta).toMatchObject({ complete: true, status: 'complete', stepId: 'prose' })
+      expect(aInput).toEqual(bInput)
+      expect(aInput).toMatchObject({ input })
+      expect(aInvocation.system).toContain('A版'); expect(bInvocation.system).toContain('B版')
+      expect(aInvocation.prompt).toBe(bInvocation.prompt)
+      expect(aResult).toMatchObject({ status: 'succeeded', content: { text: 'A版正文：第二段仍需调整。' } })
+      expect(bResult).toMatchObject({ status: 'succeeded', content: { text: 'B版正文：第二段更具体。' } })
+      expect(readRecord(aDir, 'result.json')).toEqual(aResult)
+      expect(readFileSync(join(directory, 'comments.md'), 'utf8')).toContain('用户原话：')
+      expect(readFileSync(join(directory, 'comments.md'), 'utf8')).toContain('Agent观察：')
+      expect(requests).toHaveLength(2)
+      for (const dir of [aDir, bDir]) for (const file of ['input.json', 'invocation.json', 'meta.json', 'result.json']) {
+        expect(statSync(join(dir, file)).mode & 0o777).toBe(0o600)
+      }
+    } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
+  }, 20000)
+
+  it('rejects a colliding or symlink record directory without contacting the provider', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'a4n-step-record-path-'))
+    let calls = 0
+    const server = createServer((_req, res) => { calls++; res.writeHead(500); res.end() })
+    server.listen(0, '127.0.0.1'); await once(server, 'listening')
+    const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
+    try {
+      const seedFile = join(directory, 'seed.txt'); writeFileSync(seedFile, 'record path seed')
+      const existing = join(directory, 'existing'); writeFileSync(existing, 'must remain')
+      for (const recordDir of [existing, join(directory, 'link')]) {
+        if (recordDir.endsWith('/link')) symlinkSync(existing, recordDir)
+        const result = await invoke(['run-step', 'caption', '--seed-file', seedFile, '--record-dir', recordDir], `http://127.0.0.1:${address.port}/v1`)
+        expect(result.code).toBe(1)
+        expect(JSON.parse(result.stderr).code).toMatch(/recording-/)
+      }
+      expect(readFileSync(existing, 'utf8')).toBe('must remain')
+      expect(calls).toBe(0)
+    } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
+  }, 20000)
+
+  it('rejects a record directory with a symlink parent without contacting the provider or changing the real parent', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'a4n-step-record-parent-link-'))
+    let calls = 0
+    const server = createServer((_req, res) => { calls++; res.writeHead(500); res.end() })
+    server.listen(0, '127.0.0.1'); await once(server, 'listening')
+    const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
+    try {
+      const seedFile = join(directory, 'seed.txt'); writeFileSync(seedFile, 'record parent link seed')
+      const realParent = join(directory, 'real-parent'); mkdirSync(realParent)
+      const existing = join(realParent, 'existing'); writeFileSync(existing, 'must remain')
+      const parentLink = join(directory, 'parent-link'); symlinkSync(realParent, parentLink)
+      const result = await invoke(['run-step', 'caption', '--seed-file', seedFile, '--record-dir', join(parentLink, 'run-a')], `http://127.0.0.1:${address.port}/v1`)
+      expect(result.code).toBe(1)
+      expect(JSON.parse(result.stderr).code).toBe('recording-path-invalid')
+      expect(readFileSync(existing, 'utf8')).toBe('must remain')
+      expect(readdirSync(realParent)).toEqual(['existing'])
+      expect(calls).toBe(0)
+    } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
+  }, 20000)
+
   it('runs chapter two through the executable worker with exact previous text and chapter telemetry', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'a4n-step-continuation-'))
     const requests: { messages: { role: string; content: string }[] }[] = []
@@ -230,7 +354,7 @@ describe('run-step through a local mock provider', () => {
   }, 20000)
 
   it('ends the worker on a CLI deadline and returns one safe JSON error', async () => {
-    const directory = mkdtempSync(join(tmpdir(), 'a4n-step-timeout-'))
+    const directory = mkdtempSync(join(realpathSync(tmpdir()), 'a4n-step-timeout-'))
     let calls = 0
     let disconnected = false
     const server = createServer((req, _res) => {
@@ -242,11 +366,18 @@ describe('run-step through a local mock provider', () => {
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
     try {
       const seedFile = join(directory, 'seed.txt'); writeFileSync(seedFile, 'synthetic timeout seed')
-      const result = await invoke(['run-step', 'caption', '--seed-file', seedFile, '--timeout-ms', '2000'], `http://127.0.0.1:${address.port}/v1`)
+      const recordDir = join(directory, 'run-timeout')
+      const result = await invoke(['run-step', 'caption', '--seed-file', seedFile, '--record-dir', recordDir, '--timeout-ms', '2000'], `http://127.0.0.1:${address.port}/v1`)
       expect(result.code).toBe(1); expect(result.stdout).toBe('')
       expect(JSON.parse(result.stderr)).toMatchObject({ code: 'network-error', retryable: false })
       expect(calls).toBe(1)
       expect(disconnected).toBe(true)
+      expect(JSON.parse(readFileSync(join(recordDir, 'result.json'), 'utf8'))).toMatchObject({ status: 'unknown', content: null, diagnostic: { code: 'cli-timeout' } })
+      const invocation = JSON.parse(readFileSync(join(recordDir, 'invocation.json'), 'utf8'))
+      const parsedInvocation = stepExperimentRecordInvocationSchema.safeParse(invocation)
+      expect(parsedInvocation.success).toBe(true)
+      expect(invocation).toHaveProperty('effectiveConfig')
+      expect(JSON.parse(readFileSync(join(recordDir, 'meta.json'), 'utf8'))).toMatchObject({ complete: false, status: 'incomplete' })
     } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
   }, 15000)
 

@@ -33,6 +33,7 @@ export function createCreativeStep(options: { systemPrompt?: string } = {}): Art
         system: systemFor('creative', config, options.systemPrompt),
         prompt: buildPrompt({ seed: input.seed, caption }, count),
         config,
+        effectiveConfig: { directionCount: count },
         workId: input.workId,
         stepId: 'creative',
         attemptId,

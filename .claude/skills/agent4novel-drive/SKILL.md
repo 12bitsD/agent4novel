@@ -46,6 +46,17 @@ Live 模式会把生成所需的素材和上游产物发送给所选远程 provi
 ./apps/cli/bin/a4n run-step prose --input-file prose-input.json --config-file generation.json
 ```
 
+需要保存一次节点的私有实际调用时，为本次运行指定一个**尚不存在**的目录；不要复用或覆盖旧目录：
+
+```bash
+./apps/cli/bin/a4n run-step caption --seed-file seed.txt \
+  --system-prompt-file caption-sp.md --record-dir .data/experiments/round-1/a
+```
+
+记录目录是Harness的一次读取资源，固定包含 `input.json`、`invocation.json`、`result.json`、`meta.json`。先读 `meta.json`：只有 `complete:true` 且 `status:"complete"` 才能把本次结果视为完整；再按 `meta.files` 一次读齐另外三份。`input.json` 是实际输入和来源路径，`invocation.json` 是 `callLlm` 传给SDK的实际 system/prompt、严格的 `effectiveConfig`（model、directionCount、thinking、temperature、topP）和有效选项，`result.json` 是最终节点结果（含结构ID）或安全的 failed/unknown，`meta.json` 关联版本、运行身份、时间和完成语义。没有捕获的信息明确为 `null`；不能从源文件重建未发生或未捕获的调用，未传的选项也不能猜 provider 默认值。`effectiveConfig` 不包含凭据或完整配置文件。目录为0700、文件为0600；目标或任一父级是符号链接、目录已存在或路径不安全时，CLI在调用provider前拒绝。
+
+用两个新目录做A/B：复用同一份合成输入，只替换明确的SP或选项，分别读取四文件后比较 `meta`、`invocation` 和 `result`。comment写在记录目录旁的 `comments.md`，不修改机器记录；复跑先核对 `input`/来源，再用原有 `run-step` 和新的 `--record-dir` 发起，原记录只读保留。CLI timeout/worker failure 的目录若只有部分证据，读取时按 `meta.complete:false` 和 `result.status:"unknown"` 处理，不把迟到结果冒充成功。
+
 Beat和Prose都要求正安全整数chapter。Beat的upstream为`{outline, setting}`，Prose为`{beat:<同章完整章纲content>, setting:<完整设定content>}`；chapter>1时两者还必须提供`upstream.previousChapter:{chapter, beat, prose}`，其中章号恰为目标减1，第一章禁止该字段。可选`regeneration`使用当前节点草稿和instructions；Prose重写草稿可为空，模型输出须完整非空。前章内容计入实际输入总预算，超限拒绝。独立输入不证明来自作品当前已通过版本；需验证生产关卡时走作品命令。边界见 [续章契约](../../../docs/schema.md#后续章6-续写契约)。
 
 修改 thinking、temperature、topP、模型或等待时间前读 [Wiki 016](../../../docs/wiki/016-model-runtime-provider-config.md#生成参数与单节点覆盖)。`--thinking on|off`、`--temperature`、`--top-p` 逐字段覆盖配置文件，`--top-k` 明确不支持。固定输入对照 SP 时，保存返回的 content、telemetry.generation、promptHash 与 systemHash；成功 content 已过生产 schema，失败按 stderr JSON 与非零退出处理。文件限制、必需上游、timeout 和安全输出以 Wiki 014/016 为准。
