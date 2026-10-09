@@ -152,11 +152,13 @@ describe('E20 server acceptance: compare/select beat variants', () => {
     expect([winner.status, loser.status].sort()).toEqual([200, 409])
     expect(race.store.getWork(race.work.id)!.artifacts.find(a => a.kind === 'beat' && a.chapter === 1)?.version).toBe(3)
 
-    const timeoutStep: ArtifactStep = { ...fakeArtifactStep('beat', regenerated).step, async run() { throw new KnownError('llm-timeout', 'synthetic timeout') } }
+    let timeoutCalls = 0
+    const timeoutStep: ArtifactStep = { ...fakeArtifactStep('beat', regenerated).step, async run() { timeoutCalls++; throw new KnownError('llm-timeout', 'synthetic timeout') } }
     const timeoutFx = makeFixture(timeoutStep)
     const timeout = await timeoutFx.app.request(`/api/works/${timeoutFx.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: timeoutFx.beat.id, expectedHeadVersion: 1, content: original, instructions: '' }) })
     expect(timeout.status).toBe(504)
+    expect(timeoutCalls).toBe(1)
     expect(timeoutFx.store.getWork(timeoutFx.work.id)!.artifacts.find(a => a.kind === 'beat' && a.chapter === 1)?.version).toBe(1)
   })
 })
