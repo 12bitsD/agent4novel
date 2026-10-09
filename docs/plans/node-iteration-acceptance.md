@@ -46,4 +46,4 @@ E1–E8均为本票必需项；每项附候选版本、命令和原始证据，P
 - 原基线、干净main与#51 OPEN已回读；未加入Project，无开放PR。
 - 基线RED已保存于 `/tmp/a4n-loop-start-20261010/baseline.json`；第1轮实现和第2/3轮定向修复已在隔离候选中完成。主 Agent 已独立复跑 E1/E3/E4/E5，并按四文件资源规则核对 E2/E6；真实 CLI/worker 的正文 A/B/comment/复跑联验已执行，真实 provider 质量、进程崩溃级归档恢复保持未验证。
 - E7/E8 联验命令：`pnpm --filter @agent4novel/cli exec vitest run test/step-transport.test.ts`。其中 `supports one complete prose A/B/comment loop through the CLI worker and files` 启动 loopback provider，使用 `run-step prose` 两个全新目录 A/B，读取两版 `meta.json`/`invocation.json`/`result.json`，写入旁置 `comments.md`，检查 A 未被 B 覆盖、两次 provider 请求、同一 prompt、评论分离和四个记录文件 `0600`。该定向命令输出：`1 test file passed; 12 tests passed; A/B/comment test 559ms`。
-- `pnpm test`、`pnpm typecheck`、`pnpm build` 以及受影响包定向门禁均通过；Markdown链接、skill validator和diff check通过。独立 Standards/Spec reviewer 已完成前置候选审查，发现 AC7/AC8 证据缺口后已补做版本化联验；正式 C5/C6 审查仍待最终候选冻结。
+- `pnpm test`、`pnpm typecheck`、`pnpm build` 以及受影响包定向门禁均通过；Markdown链接、skill validator和diff check通过。独立 Standards/Spec reviewer 已完成前置候选审查，发现 AC7/AC8 证据缺口后已补做版本化联验；随后 C6.1 review 又修复了 unknown invocation 的 `effectiveConfig:null` schema 缺口并补回归，当前候选需重新冻结并执行正式 C5/C6。
