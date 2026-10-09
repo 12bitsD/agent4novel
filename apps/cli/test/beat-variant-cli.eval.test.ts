@@ -36,7 +36,7 @@ describe('E20 CLI/Harness acceptance: beat variant selection', () => {
   })
 
   it('drives the real CLI against the production fixture and keeps A/B plus pending selection observable', async () => {
-    const server = spawn(process.execPath, ['--import', createRequire(import.meta.url).resolve('tsx'), fileURLToPath(new URL('../../../server/test/fixtures/beat-cli-server.ts', import.meta.url))], { stdio: ['ignore', 'pipe', 'pipe'] })
+    const server = spawn(process.execPath, ['--import', createRequire(import.meta.url).resolve('tsx'), fileURLToPath(new URL('../../server/test/fixtures/beat-cli-server.ts', import.meta.url))], { stdio: ['ignore', 'pipe', 'pipe'] })
     const directory = mkdtempSync(join(tmpdir(), 'a4n-beat-variant-cli-')); let output = ''
     try {
       const port = await new Promise<number>((resolve, reject) => {
@@ -71,7 +71,7 @@ describe('E20 CLI/Harness acceptance: beat variant selection', () => {
         { segmentId: `${i}-1`, title: '点一', summary: '发生', outcome: '变化' }, { segmentId: `${i}-2`, title: '点二', summary: '发生', outcome: '变化' },
       ] })) }
       const setting = { overview: '城市', world: [{ itemId: 'world-1', title: '规则', content: '现实' }], characters: [{ itemId: 'character-1', title: '主角', content: '追查' }], factions: [], relationships: [], extensions: [] }
-      writeFileSync(inputFile, JSON.stringify({ workId: 'work-test', seed: '实验素材', chapter: 1, upstream: { outline, setting }, regeneration: { content: artifactA.content, instructions: '保留旧线索并加快行动。' } }))
+      writeFileSync(inputFile, JSON.stringify({ seed: '实验素材', chapter: 1, upstream: { outline, setting }, regeneration: { content: artifactA.content, instructions: '保留旧线索并加快行动。' } }))
       writeFileSync(promptFile, '受保护的 Beat system prompt'); writeFileSync(configFile, JSON.stringify({ thinking: 'disabled', temperature: 0.4, topP: 0.6 }))
       const result = await new Promise<{ code: number | null; stdout: string; stderr: string }>((resolve, reject) => {
         const child = spawn(bin, ['run-step', 'beat', '--input-file', inputFile, '--system-prompt-file', promptFile, '--config-file', configFile, '--record-dir', recordDir], { env: cliTestEnv({ A4N_MODEL: 'longcat:LongCat-2.0', LONGCAT_API_KEY: 'synthetic-step-key', LONGCAT_BASE_URL: `http://127.0.0.1:${address.port}/v1`, A4N_LLM_TIMEOUT_MS: '5000' }), stdio: ['ignore', 'pipe', 'pipe'] })
