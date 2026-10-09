@@ -109,6 +109,7 @@ export function markStepRecordUnknown(record: StepExperimentRecordRequest, stepI
     writeJsonExclusive(record.dir, FILES.input, { formatVersion: 1, input, sources: record.sources })
     writeJsonExclusive(record.dir, FILES.invocation, {
       formatVersion: 1, captured: false, capturedAt: null, system: null, prompt: null, model: null, attemptId: null,
+      effectiveConfig: null,
       generation: null, sdkOptions: null, maxOutputTokens: null, maxRetries: null, requestTimeoutMs: null,
     })
     const existingResult = readJson(join(record.dir, FILES.result))
