@@ -32,7 +32,7 @@ last_context_reviewed: "2026-10-10"
 
 main 固定点 `261b05e3347f7e12a328f8cea560ff0e05a395b2`；当前 PR source `codex/creative-retry-loop`，工作树无用户改动。现有 advance 在 pending 创意关卡只返回 awaiting-approval，因此不能复用为再生动作。创意比较页即 Workspace 子视图，不存在两个独立入口。
 
-C1 对齐：用户授权 Loop 自主定义可靠验收并派工，已确认二期路线取 #12 核心。本次保留原复合票意图并回写实施 AC；不可逆的已选回退不在范围。Issue Native blocked_by=0，无 main protection/required review；交付工作分支→PR→main，CI quality/container 均须通过。终态标签 ready-for-agent、assignee 12bitsD；现有 Project=agent4novel Development，Status 预期 Done。
+C1 对齐：用户授权 Loop 自主定义可靠验收并派工，已确认二期路线取 #12 核心。本次保留原复合票意图并回写实施 AC；不可逆的已选回退不在范围。Issue Native blocked_by=0，无 main protection/required review；交付工作分支→PR→main，CI quality/container 均须通过。终态标签 ready-for-agent、assignee 12bitsD；现有 Project=agent4novel Development；Status 回写 Done 因 token 缺少 project scope，按 C7.4 记录为 N/A。
 
 ## 技术方案
 
@@ -78,14 +78,14 @@ R0：Hume 方法审查 FAIL；补齐 v2 受保护 eval 后，目标端点公开 
 ### 完成审核证据
 
 - **清单与候选**：固定点 `261b05e3347f7e12a328f8cea560ff0e05a395b2`；代码与测试候选已在工作分支实现；本次文档证据修正后的 pre-attestation 候选 tree 为 T0 `f997efd3a3c3770fc770c1e1d1b615224f5a6a24`。
-- **C6.5 预发布 attestation**：清单 `docs/agents/ticket-completion-checklist.md` blob `42116082e8ca2804d826cc00f6578270077f60eb`；固定点与 T0 如上，pre-attestation tree 为 T1 `92e43f0fde0096629362a346b26cdc0fa22b8f8b`。C1–C4、C5.1–C5.7、C6.1–C6.2 均有本页/issue/本地证据且通过；C6.3 已将证据写入预留字段；C6.4 由未参与实现的 Noether 只读比较 T0→T1，确认仅修改本节预留字段并 PASS；C6.5 字段已写入并生成最终交付 tree（按清单不在本页记录 T2）。C6.6/C6.7、PR/CI/远端回读仍 pending。
-- **逐项判定**：C1.1–C1.8 已回读并记录在本页与 issue；C2.1 RED、C2.2 GREEN、C2.3 跨包/错误/竞争覆盖、C2.4 复用 Pipeline/Store 深接缝；C3/C4 已取得本地证据；C5.1–C5.7 通过，C6.1/C6.2 已完成，C6.3–C6.7 按本票发布流程执行。
+- **C6.5 预发布 attestation**：清单 `docs/agents/ticket-completion-checklist.md` blob `42116082e8ca2804d826cc00f6578270077f60eb`；固定点与 T0 如上，pre-attestation tree 为 T1 `92e43f0fde0096629362a346b26cdc0fa22b8f8b`。C1–C4、C5.1–C5.7、C6.1–C6.2 均有本页/issue/本地证据且通过；C6.3 已将证据写入预留字段；C6.4 由未参与实现的 Noether 只读比较 T0→T1，确认仅修改本节预留字段并 PASS；C6.5 字段已写入并生成最终交付 tree（按清单不在本页记录 T2）。C6.6/C6.7 PASS；PR56 已合并，quality/container CI 重跑通过，main 已回读；C7 终止证据保存在 issue 完成评论 `https://github.com/12bitsD/agent4novel/issues/12#issuecomment-6090248090` 及 Project 权限更正评论。
+- **逐项判定**：C1.1–C1.8 已回读并记录在本页与 issue；C2.1 RED、C2.2 GREEN、C2.3 跨包/错误/竞争覆盖、C2.4 复用 Pipeline/Store 深接缝；C3/C4 已取得本地证据；C5.1–C5.7 通过，C6.1/C6.2 已完成，C6.3–C6.7 均已完成；C7 以 issue 完成评论、PR56、CI 和 main 回读为终止证据。
 - **验收与 TDD**：Issue #12 AC1–AC6 对应 E1–E6 v2；R0 RED 已冻结；E1–E6 最终方法复核 PASS；R1 实现与 R2 artifact identity 修复均有定向 GREEN。
 - **本地门禁**：`pnpm test`、`pnpm typecheck`、`pnpm build` 已通过；Web acceptance 有既有 React `act(...)` 非致命警告；生产模型质量与真实 provider 未验证。
 - **双轴 review**：首次 Standards/Spec review 因 reviewer 固定在未包含未提交实现的旧 HEAD，结论不作为当前候选裁决；Spec 对当前 diff 发现 artifact identity 漂移，已在 R2 修复；当前候选复审中 Standards 与 Spec 均 PASS，无未满足 AC 或安全/逻辑阻断。
 - **修复与回归**：R2 增加当前 artifact identity 维护、父刷新旧快照保护、连续再生与显式回读测试；R2 GREEN 与最终完整门禁均已取得。C6.1 修正 Wiki 固定点 SHA 与 web 测试计数，C6.2 已复核 `git diff --check`、固定点可解析及既有全量门禁证据。
 - **知识维护**：已更新本页、Wiki Index、`docs/handoff.md`、中英文 README；`docs/schema.md`/`CONTEXT.md`/ADR/research/运行 skill：N/A（未改变公共数据形状、领域词、不可逆架构或运行方式）。Project Status：N/A（gh token 缺少 `project` scope，未伪造更新）。
-- **发布前裁决**：C6.6/C6.7、PR/CI/远端回读均 pending；不能以本页记录替代 GitHub PR/CI/远端回读。
+- **发布前裁决**：C6.6/C6.7、PR/CI/远端回读均 PASS；终止证据保存在 issue 完成评论和远端状态，Project Status 回写因缺少 project scope 记录为 N/A。
 
 ## 边界与非目标
 
