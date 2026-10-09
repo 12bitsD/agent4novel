@@ -1,7 +1,7 @@
 ---
 wiki_id: "012"
 ticket: 12
-ticket_state: active
+ticket_state: done
 context_state: current
 summary: "创意稿整步再生、失败重试与补充想法；固定目标和输入版本"
 topics: ["creative", "regeneration", "version-preconditions", "unknown-write"]
@@ -19,7 +19,7 @@ last_context_reviewed: "2026-10-10"
 
 - **读取时机**：修改创意稿失败重试、补充想法、再生和未知结果恢复时。
 - **原始目的**：[#12](https://github.com/12bitsD/agent4novel/issues/12) 中失败后缺入口、方向不满意缺补充想法；二期仅交付此核心子范围。
-- **实际落地**：已实现独立 HTTP/CLI 再生入口、Pipeline 锁与 Store CAS、真实 Creative Step 输入装配、Web 补充想法与恢复锁定；当前候选待 PR/CI 与远端回读。
+- **实际落地**：已实现独立 HTTP/CLI 再生入口、Pipeline 锁与 Store CAS、真实 Creative Step 输入装配、Web 补充想法与恢复锁定；PR56 已合并，quality/container CI 重跑通过，issue 已关闭。
 - **当前价值**：沿用 011 的整步方向包和显式选定；不放开已选方向重生。
 - **后续变化**：渐进展示、分段提炼、历史回看仍后置，原始需求在 issue 保留；连续再生的本地 artifact identity 漂移在 R2 修复。
 - **代码入口**：Pipeline/creative Step、CreativePoster（Workspace 内的比较关卡）、CLI 文件请求。
@@ -103,4 +103,4 @@ R0：Hume 方法审查 FAIL；补齐 v2 受保护 eval 后，目标端点公开 
 
 ## 交接结论
 
-当前候选已完成实现、修复与本地门禁，仍需在精确冻结 tree 上完成新的 Standards/Spec 双轴 review、C6 attestation、PR/CI、远端回读和 issue 完成评论。后续从这张 Wiki 和 issue #12 继续；不要把未合并候选称为二期整体完成。
+本票核心范围已完成并合并到 main。后续从这张 Wiki 读取创意再生边界；渐进展示、SSE、分段提炼、通用历史回看和真实供应商文学质量仍未承诺。二期整体状态以路线和各票远端回读为准。
