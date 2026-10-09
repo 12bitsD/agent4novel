@@ -72,7 +72,7 @@ describe('E20 server acceptance: compare/select beat variants', () => {
     expect(wrongApprove.status).toBe(409)
     const approveNew = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/approve`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: selected.artifact.id, expectedHeadVersion: 2, content: selected.artifact.content }) })
-    expect(approveNew.status).toBe(200); expect((await approveNew.json()).artifact.humanStatus).toBe('approved')
+    expect(approveNew.status).toBe(200); expect(((await approveNew.json()) as any).artifact.humanStatus).toBe('approved')
     expect(fx.store.getArtifactVersion(fx.work.id, 'beat', 1, fx.beat.id, 1)?.content).toEqual(original)
     expect(fx.store.getArtifactVersion(fx.work.id, 'beat', 1, candidate.id, 2)?.humanStatus).toBe('approved')
     expect(fx.store.getWork(fx.work.id)!.artifacts.filter(a => a.kind === 'beat' && a.chapter === 1)).toHaveLength(1)
@@ -107,7 +107,7 @@ describe('E20 server acceptance: compare/select beat variants', () => {
     }
     const approve = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/approve`, { method: 'POST', headers,
       body: JSON.stringify({ chapter: 1, expectedArtifactId: selected.artifact.id, expectedHeadVersion: 3, content: selected.artifact.content }) })
-    expect(approve.status).toBe(200); expect((await approve.json()).artifact.id).toBe(selected.artifact.id)
+    expect(approve.status).toBe(200); expect(((await approve.json()) as any).artifact.id).toBe(selected.artifact.id)
     expect(fx.store.getWork(fx.work.id)!.artifacts.filter(a => a.kind === 'beat' && a.chapter === 1).map(a => [a.id, a.version, a.humanStatus])).toEqual([[selected.artifact.id, 3, 'approved']])
   })
 
