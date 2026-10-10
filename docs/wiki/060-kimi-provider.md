@@ -95,14 +95,22 @@ git diff --check                                                           # pas
 
 ### 完成审核证据
 
-- **清单与候选**：清单 blob、固定点 SHA、T0、T1、staged manifest：待最终候选冻结后填写；固定点为 `59f6148e76b77178685982c2aec4cf11f4846077`。
-- **逐项判定**：C1–C4 已有开工、实现和文档证据；C5、C6.1–C6.7 待候选冻结、独立 review 和发布前裁决。不得据此提前宣称 C6 通过。
-- **验收与 TDD**：issue #60；RED/GREEN 和 AC 映射见本节；保护验收方法 SHA 见“起始上下文”。
-- **本地门禁**：定向 Kimi/author-config 测试、完整测试、typecheck、build、`git diff --check` 已通过；secret/范围扫描已执行且没有发现候选中的真实凭据，最终候选审计待完成。
-- **双轴 review**：独立 Standards/Spec reviewer 尚未取得；已有 reviewer 调度因模型容量失败，不能将其记为通过。
-- **修复与回归**：已按 Kimi provider、author config、telemetry、CLI/worker、Web 和 docs 影响面重跑完整 tests/typecheck；后续 review 发现修复须重新冻结候选。
-- **知识维护**：Wiki 060（本页）、Wiki 016、Wiki Index、README/README.en、schema、handoff、`.env.example`、CI 已更新；`CONTEXT.md`、ADR、research、运行 skill 不受影响，原因是没有新领域词、不可逆架构决策、外部选型研究所有权或运行流程变化。
-- **发布前裁决**：待独立 reviewer 对 T1 给出终止性 `PASS`/`FAIL`，并按清单写入候选证据。
+- **清单与固定点**：清单 blob `42116082e8ca2804d826cc00f6578270077f60eb`；原始开发固定点 `59f6148e76b77178685982c2aec4cf11f4846077`；实际 PR base 为 `1b87352c0c4a4c5468febc3f72c61ee3623f99ed`。受保护验收方法 `/tmp/a4n-kimi-acceptance-r0.md` SHA-256 仍为 `96c37a61ed7e25dd103015b20ba5396a53bcc56b5041a9aa0a673fe678ed8f52`，标准没有因候选而降低。当前 T0/T1/发布前裁决待重新冻结及独立 review。
+- **C1.1–C1.8 范围与交付**：已回读 issue #60 的 AC1–AC7、开工评论、标签、assignee、Project 和 native dependencies：OPEN，`enhancement`/`ready-for-agent`，assignee `12bitsD`，无依赖边、无 Project；标签/assignee 终态保持原值，Project 为 N/A（未加入）。模式仍为 `codex/kimi-provider` → PR → `main`；`main` protection API 返回 404，无强制 review/check 配置，但本票要求 CI 的 quality/container 两项成功后再 merge。用户授权 Loop 交付及本票范围，不含真实付费调用。开工对齐、TDD 切片与风险以本页及 issue 开工评论为据；当前 base reconciliation 只保留已在 main 的并发文档，不扩大产品范围。
+- **C2.1–C2.5 验收/TDD**：原始 RED/GREEN 与逐条 AC 映射见上文，独立期望来自保护验收而非候选输出。Round 2 修复通用 CLI transport fixture 仍用 LongCat；Round 3 修复 compiled smoke 仍用 LongCat，并清空 container smoke 的 Kimi 两个凭据变量；LongCat thinking/config tests 和 DeepSeek 专用 adapter tests 保留。没有新增 SDK、failover、状态机或作品数据协议。C2.6 为 N/A（本票是行为变化，采用 RED/GREEN 而非无行为替代验证）。
+- **C3.1–C3.2 / C3.6 本地门禁**：当前 base reconciliation 后的代码与上一已测候选相同；2026-10-10 重新执行并通过定向测试（Kimi/author-config 21、CLI transport 12）、`pnpm test`（contracts 125、CLI 213、server 444、Web 216）、`pnpm typecheck`、`pnpm build`、`node scripts/production-smoke.mjs`、`node --check scripts/container-smoke.mjs`、`docker compose --env-file /dev/null config --quiet`、`git diff --check`。Build 仅有既有 Web chunk warning；测试保留既有 AI SDK structured-output fallback 与 React `act(...)` 警告。没有配置独立 lint/format 脚本，以 typecheck 和 diff whitespace check 覆盖静态门禁；实际 container execution 交由 CI，不把 syntax check 冒充容器运行成功。
+- **C3.3–C3.4 安全/范围**：2026-10-10 对最终 PR 候选执行凭据模式、危险命令/外部输入、生成物/锁文件和范围扫描：仅 synthetic key、本地 mock 或 demo；未发起真实付费模型调用；公开日志/telemetry 不包含 key、完整 prompt/output；`.env.local` 仍被 `.gitignore` 忽略；无未跟踪/未暂存文件。六篇并发 Wiki 文件与 PR base 字节相同，最终 PR 差异不包含这些文件。
+- **C3.5 质量清理**：复用既有 ModelRuntime、OpenAI-compatible adapter、本地 schema、timeout/error/telemetry 接缝，无重复 SDK/helper；可读性上通用 Kimi fixture 与明确命名的 LongCat thinking/config 回归分开；边界只扩展 provider 识别、key/URL、fixture 与 no-key smoke；效率无新增调用层、重复序列化或运行时联网。base reconciliation 只改变历史父提交/保留 main 文档，没有改变 AC 行为。
+- **C4.1–C4.8 知识维护**：Wiki 060/016、Index、schema、双语 README、handoff、env/Compose/CI 已随初始实现更新并保留。C4.3 的 CONTEXT 为 N/A（无新领域词）；C4.4 的 ADR/research 为 N/A（沿用既有适配器，不产生不可逆架构决定或研究所有权迁移）；C4.7 的运行 skill/流程文档为 N/A（HOW 仍由 Wiki 016 持有，启动/运行方法不变）。2026-10-10 已校验本页 schema/frontmatter/固定标题、#60 backlink、Wiki Index、相关本地链接及中英文 README 的 Kimi model/key/base-url 事实一致。
+- **C4.9 三轮自校准**：①代码 ↔ 行为/测试：逐项核对 ModelRuntime、author config、isolated runner、telemetry、Web 与 smoke；定向验证没有发现漂移；②代码 ↔ Wiki/领域词：`kimi:kimi-k2.8-highspeed`、wire model、key alias、URL 和 no-paid-call 边界一致；③完整候选 ↔ issue AC/范围：初始实现来自原始固定点；当前 PR base 已含该实现，实际增量只有通用 CLI transport、compiled/container smoke 和本页证据，六篇并发 Wiki 原样保留。
+- **历史 review / 例外**：Huygens 发现 production smoke 遗漏并修复；Carver 发现 container smoke 未清空 Kimi credentials 并修复；Meitner 对上一候选 Standards/Spec 和 C6.4/C6.6 判 PASS，另发现 C3.5/C4.9 记录缺口并补齐。这些结论只覆盖各自旧 tree，不替代当前 PR base 重审。早期 mixed snapshot 已直接出现在 main，source branch 也曾在未正确核对 PR base 差异时推送；此流程偏差不能追记为合规发布。此次不改写 main，保留其六篇并发 Wiki，把 source 历史整理为以当前 main 为父的安全增量，并重新执行 C5/C6 后才继续发布。
+- **C5.1–C5.3 当前候选审计**：实际 base 为 `1b87352c0c4a4c5468febc3f72c61ee3623f99ed`；从 base 到候选的完整 diff 与每筆本地 commit 将重新审计，staged manifest、T0 与范围/secret 结果待冻结记录。此前 mixed 内容留在原 main 和本地 recovery tags，不混入 PR 增量。当前双轴 review 前的候选 T0 为 `35015b5b0adcf19ca0b1877e6e5384893b75438f`；pre-attestation T1 与独立裁决待完成。
+- **C5.4–C5.6 双轴 review**：当前 base 重审 pending；AC1–AC6 的旧 review 通过只作历史证据。所有既有行为发现已修复，剩余风险是真实模型账号可用性/文学质量未验证，非本票目标。
+- **C5.7 / C6.1–C6.2**：base drift 改变候选 tree/历史，已返回 C5，不复用旧裁决；本轮仅文档/历史收口，代码修复仍属于既有三轮，没有开启第四轮产品优化。受影响 gate 和独立 Standards/Spec 需针对重新冻结的候选完成。
+- **C6.3（受控证据回写）**：本页的当前行为候选 T0=`35015b5b0adcf19ca0b1877e6e5384893b75438f`，实际 PR base 为 `1b87352c0c4a4c5468febc3f72c61ee3623f99ed`；pre-attestation T1=`33b4034c3374b0379a9bcbc63fb593c91cab02aa`。本次 T0→T1 仅修改预留 `### 完成审核证据`，没有改产品/source/上下文演进。
+- **C6.4（独立 reviewer attestation）**：未参与实现的 reviewer Meitner（agent `01a1257b-f85e-7b41-82a1-3c6bd85f0fd0`）已精确比较上述 T0→T1，给出完整性 `PASS`（仅本页预留证据区、两侧 diff check 通过、无 unstaged/untracked）；Standards `PASS`（C3.1–C3.6、C4.1–C4.9 证据已补齐）；Spec `PASS`（AC1–AC6）；AC7 的 CI/PR review/merge/remote 仍为 `PENDING`。该结论来自 reviewer 原始回报，主 Agent 未替代裁决。
+- **C6.5（一次性 attestation 写回）**：在 C6.4 `PASS` 后，本段一次性记录清单 blob、原始固定点、实际 PR base、当前 T0/T1、C1–C5、C6.1–C6.4 证据与 reviewer attestation；不记录最终 tree 自身哈希。C6.6/C6.7 与 C7 尚未完成。
+- **C6.6–C6.7 / C7**：`PENDING`；下一步由同一或第二独立 reviewer 精确比较 T1→最终 evidence tree，随后提交/推送、创建 PR、等待 required CI/review、merge、远端回读、发布 issue 完成评论并关闭 issue。此前旧候选的 C6.6 结论不迁移为当前候选终止裁决。
 
 ## 边界与非目标
 
