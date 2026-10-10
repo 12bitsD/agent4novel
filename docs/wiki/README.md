@@ -167,6 +167,7 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [013 完整设定生成与一次通过](./013-setting-generation-review.md) | [#13](https://github.com/12bitsD/agent4novel/issues/13) | mixed | 设定生成、页内编辑、同版本原子通过、失败对账 |
 | [014 Agent CLI 与遥测](./014-agent-cli-telemetry.md) | [#14](https://github.com/12bitsD/agent4novel/issues/14) | mixed | 作品 CLI、run-step 单节点 SP 对照、smoke、安全 telemetry |
 | [016 模型运行配置](./016-model-runtime-provider-config.md) | [#16](https://github.com/12bitsD/agent4novel/issues/16) | mixed | provider、凭据、timeout、生成参数默认与覆盖、ModelRuntime |
+| [018 冲突检测与作者澄清](./018-conflict-clarification.md) | [#18](https://github.com/12bitsD/agent4novel/issues/18) | current | Setting 前非阻断 review note、作者 disposition、stale 与显式上下文 |
 | [019 契约治理](./019-contract-governance.md) | [#19](https://github.com/12bitsD/agent4novel/issues/19) | current | 全 kind/status 内容校验、Store 与公开协议边界 |
 | [020 章纲再生后的比较与选择](./020-beat-variant-compare.md) | [#20](https://github.com/12bitsD/agent4novel/issues/20) | current | 当前 pending beat 的 A/B 比较、选择与 CAS |
 | [021 章节重生](./021-chapter-regeneration.md) | [#21](https://github.com/12bitsD/agent4novel/issues/21) | current | 通过后历史章两阶段重生、历史 Artifact Harness 读取与连续性提示 |
