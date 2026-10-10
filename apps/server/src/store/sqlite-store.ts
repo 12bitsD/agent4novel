@@ -9,6 +9,8 @@ import {
   type AuthorConfigReceipt, type AuthorConfigSave, type AgentFile,
 } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
+import { actOnExtension, proposeExtension, extensionReceipt, extensionResource, isValidApprovedExtensionCandidate } from '../setting-extension.js'
+import { settingExtensionProposalRecordSchema, type SettingExtensionProposalRecord, type SettingExtensionProposeRequest, type SettingExtensionActionRequest, type SettingExtensionReceipt, type SettingExtensionResource } from '@agent4novel/contracts'
 import { assertBucketAddress, assertDirectStatusAllowed } from './invariants.js'
 import { getSqliteErrorCode, initializeSqliteDatabase, SqliteInitializationError, UnsupportedDatabaseError } from './sqlite-schema.js'
 import { StoreContractError, validateStoreValue } from './validation.js'
@@ -141,12 +143,14 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
 
   getWork(id: string): WorkDetail | undefined { return this.read(() => this.readDetail(id)) }
 
+  private artifactVersion(workId: string, kind: ArtifactKind, chapter: number | undefined, artifactId: string, version: number): Artifact | undefined {
+    const row = this.db.prepare(`SELECT * FROM artifacts
+      WHERE work_id = ? AND kind = ? AND chapter IS ? AND id = ? AND version = ?`).get(workId, kind, chapter ?? null, artifactId, version) as ArtifactRow | undefined
+    return row === undefined ? undefined : validateStoreValue(artifactSchema, artifactFromRow(row), 'stored')
+  }
+
   getArtifactVersion(workId: string, kind: ArtifactKind, chapter: number | undefined, artifactId: string, version: number): Artifact | undefined {
-    return this.read(() => {
-      const row = this.db.prepare(`SELECT * FROM artifacts
-        WHERE work_id = ? AND kind = ? AND chapter IS ? AND id = ? AND version = ?`).get(workId, kind, chapter ?? null, artifactId, version) as ArtifactRow | undefined
-      return row === undefined ? undefined : validateStoreValue(artifactSchema, artifactFromRow(row), 'stored')
-    })
+    return this.read(() => this.artifactVersion(workId, kind, chapter, artifactId, version))
   }
 
   listWorks(): WorkSummary[] {
@@ -230,6 +234,65 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
 
   headVersion(workId: string, kind: ArtifactKind, opts?: { chapter?: number }): number | undefined {
     return this.read(() => this.head(workId, kind, opts?.chapter)?.version)
+  }
+
+  private extensionRecord(workId: string, requestId: string): SettingExtensionProposalRecord | undefined {
+    const row = this.db.prepare('SELECT record FROM setting_extension_proposals WHERE work_id = ? AND request_id = ?')
+      .get(workId, requestId) as { record: string } | undefined
+    if (!row) return undefined
+    const record = validateStoreValue(settingExtensionProposalRecordSchema, parseJson(row.record), 'stored')
+    if (record.workId !== workId || record.requestId !== requestId) throw new StoreContractError('invalid-stored-data')
+    return record
+  }
+
+  private putExtensionRecord(record: SettingExtensionProposalRecord): void {
+    const snapshot = validateStoreValue(settingExtensionProposalRecordSchema, record, 'input')
+    this.db.prepare(`INSERT INTO setting_extension_proposals (work_id, request_id, record) VALUES (?, ?, ?)
+      ON CONFLICT (work_id, request_id) DO UPDATE SET record = excluded.record`)
+      .run(snapshot.workId, snapshot.requestId, JSON.stringify(snapshot))
+  }
+
+  proposeSettingExtension(workId: string, request: SettingExtensionProposeRequest): SettingExtensionReceipt {
+    return this.write(() => {
+      this.requireWork(workId)
+      const work = this.readDetail(workId)!
+      const record = proposeExtension(work, request, this.extensionRecord(workId, request.requestId))
+      this.putExtensionRecord(record)
+      return extensionReceipt(record, 'propose')
+    })
+  }
+
+  private actSettingExtension(workId: string, request: SettingExtensionActionRequest, operation: 'approve' | 'cancel'): SettingExtensionReceipt {
+    return this.write(() => {
+      this.requireWork(workId)
+      // All current heads are read under the same IMMEDIATE writer transaction
+      // as both writes; a route/service pre-read cannot satisfy this guard.
+      const work = this.readDetail(workId)!
+      const plan = actOnExtension(work, request, this.extensionRecord(workId, request.requestId), operation)
+      if (plan.artifact) this.insertArtifact(plan.artifact)
+      this.putExtensionRecord(plan.record)
+      return extensionReceipt(plan.record, operation)
+    })
+  }
+
+  approveSettingExtension(workId: string, request: SettingExtensionActionRequest): SettingExtensionReceipt {
+    return this.actSettingExtension(workId, request, 'approve')
+  }
+
+  cancelSettingExtension(workId: string, request: SettingExtensionActionRequest): SettingExtensionReceipt {
+    return this.actSettingExtension(workId, request, 'cancel')
+  }
+
+  getSettingExtension(workId: string, requestId: string): SettingExtensionResource {
+    return this.read(() => {
+      this.requireWork(workId)
+      const record = this.extensionRecord(workId, requestId)
+      const candidate = record?.status === 'approved' && record.candidate !== null
+        ? this.artifactVersion(workId, 'setting', undefined, record.candidate.artifactId, record.candidate.version)
+        : undefined
+      if (record && !isValidApprovedExtensionCandidate(record, candidate)) throw new StoreContractError('invalid-stored-data')
+      return extensionResource(this.readDetail(workId)!, requestId, record)
+    })
   }
 
   getAuthorConfig(workId: string): AuthorConfigReceipt | undefined {

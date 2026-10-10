@@ -11,14 +11,17 @@ import type {
   WorkCreateRequest,
 } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
+import { actOnExtension, proposeExtension, extensionReceipt, extensionResource, isValidApprovedExtensionCandidate } from '../setting-extension.js'
+import { settingExtensionProposalRecordSchema, type SettingExtensionProposalRecord, type SettingExtensionProposeRequest, type SettingExtensionActionRequest, type SettingExtensionReceipt, type SettingExtensionResource } from '@agent4novel/contracts'
 import type { AppendOptions, ArtifactPrecondition, FinalizeArtifactInput, SaveArtifactInput, WorkStore } from './work-store.js'
 
-import { validateStoreValue } from './validation.js'
+import { StoreContractError, validateStoreValue } from './validation.js'
 import { assertBucketAddress, assertDirectStatusAllowed } from './invariants.js'
 
 type Bucket = { kind: ArtifactKind; chapter?: number; versions: Artifact[] }
 
 export class InMemoryStore implements WorkStore {
+  private extensionProposals = new Map<string, SettingExtensionProposalRecord>()
   private works = new Map<string, Work>()
   private buckets = new Map<string, Bucket[]>()
   private nextId(prefix: string): string {
@@ -171,6 +174,67 @@ export class InMemoryStore implements WorkStore {
     const candidate: Bucket = { ...bucket, versions: [...bucket.versions, artifact] }
     this.buckets.set(workId, this.buckets.get(workId)!.map(entry => entry === bucket ? candidate : entry))
     return snapshot
+  }
+
+  private extensionKey(workId: string, requestId: string): string {
+    return JSON.stringify([workId, requestId])
+  }
+
+  private extensionRecord(workId: string, requestId: string): SettingExtensionProposalRecord | undefined {
+    const record = this.extensionProposals.get(this.extensionKey(workId, requestId))
+    return record === undefined ? undefined : validateStoreValue(settingExtensionProposalRecordSchema, record, 'stored')
+  }
+
+  private validateExtensionCandidate(record: SettingExtensionProposalRecord | undefined): void {
+    if (!record || record.status !== 'approved') return
+    const candidate = record.candidate === null ? undefined : this.getArtifactVersion(record.workId, 'setting', undefined, record.candidate.artifactId, record.candidate.version)
+    if (!isValidApprovedExtensionCandidate(record, candidate)) throw new StoreContractError('invalid-stored-data')
+  }
+
+  private requireExtensionWork(workId: string): WorkDetail {
+    const work = this.getWork(workId)
+    if (!work) throw new KnownError('work-not-found', 'work not found')
+    return work
+  }
+
+  proposeSettingExtension(workId: string, request: SettingExtensionProposeRequest): SettingExtensionReceipt {
+    const work = this.requireExtensionWork(workId)
+    const key = this.extensionKey(workId, request.requestId)
+    const record = proposeExtension(work, request, this.extensionRecord(workId, request.requestId))
+    this.extensionProposals.set(key, structuredClone(record))
+    return extensionReceipt(record, 'propose')
+  }
+
+  private actSettingExtension(workId: string, request: SettingExtensionActionRequest, operation: 'approve' | 'cancel'): SettingExtensionReceipt {
+    const work = this.requireExtensionWork(workId)
+    const key = this.extensionKey(workId, request.requestId)
+    const plan = actOnExtension(work, request, this.extensionRecord(workId, request.requestId), operation)
+    // Prepare both replacement values before the commit. This synchronous section
+    // has no callback/yield where another in-memory writer could interleave.
+    if (plan.artifact) {
+      const bucket = this.findBucket(workId, 'setting')!
+      const candidate: Bucket = { ...bucket, versions: [...bucket.versions, structuredClone(plan.artifact)] }
+      const next = this.buckets.get(workId)!.map(entry => entry === bucket ? candidate : entry)
+      const storedRecord = structuredClone(plan.record)
+      this.buckets.set(workId, next)
+      this.extensionProposals.set(key, storedRecord)
+    } else this.extensionProposals.set(key, structuredClone(plan.record))
+    return extensionReceipt(plan.record, operation)
+  }
+
+  approveSettingExtension(workId: string, request: SettingExtensionActionRequest): SettingExtensionReceipt {
+    return this.actSettingExtension(workId, request, 'approve')
+  }
+
+  cancelSettingExtension(workId: string, request: SettingExtensionActionRequest): SettingExtensionReceipt {
+    return this.actSettingExtension(workId, request, 'cancel')
+  }
+
+  getSettingExtension(workId: string, requestId: string): SettingExtensionResource {
+    const work = this.requireExtensionWork(workId)
+    const record = this.extensionRecord(workId, requestId)
+    this.validateExtensionCandidate(record)
+    return extensionResource(work, requestId, record)
   }
 
   setStatus(

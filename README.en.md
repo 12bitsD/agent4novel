@@ -28,6 +28,7 @@ Enter a story idea or import text from TXT, Markdown (`.md`), Word (`.docx`), or
 - Configuring style, genre, payoff, models and generation parameters, with uploaded writing instructions (Prompt) and guidance files (Skill).
 - Selecting saved prose, adding an optional note, and collecting bad examples with their original text and version.
 - Saving works, all artifact versions, configuration, uploaded files and samples locally, with restart and backup recovery.
+- A Harness can use the public API to propose, approve, or cancel an append-only setting extension; historical chapters are not rewritten, and future chapters use only the newly approved version.
 
 ## Quick start
 

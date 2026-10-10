@@ -105,7 +105,7 @@ it('does not retry a migration SQL error and leaves the transaction recoverable'
   expect(migrationAttempts).toBe(1)
   failure.mockRestore()
   initializeSqliteDatabase(db, { busyTimeoutMs: 1, maxAttempts: 2, retryDelayMs: 1 })
-  expect(db.pragma('user_version', { simple: true })).toBe(3)
+  expect(db.pragma('user_version', { simple: true })).toBe(4)
 })
 
 it('retries a controlled busy lock and completes the full initialization', () => {
@@ -116,7 +116,7 @@ it('retries a controlled busy lock and completes the full initialization', () =>
   initializeSqliteDatabase(contender, { busyTimeoutMs: 1, maxAttempts: 20, retryDelayMs: 5 })
 
   expect(observed).toEqual(['SQLITE_BUSY'])
-  expect(contender.pragma('user_version', { simple: true })).toBe(3)
+  expect(contender.pragma('user_version', { simple: true })).toBe(4)
   expect(contender.pragma('journal_mode', { simple: true })).toBe('wal')
   expect(contender.pragma('synchronous', { simple: true })).toBe(2)
   expect(contender.pragma('busy_timeout', { simple: true })).toBe(1)
