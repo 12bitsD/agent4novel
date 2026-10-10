@@ -11,6 +11,8 @@ concurrency:
   cancel-in-progress: true
 env:
   LONGCAT_API_KEY: ''
+  KIMI_API_KEY: ''
+  MOONSHOT_API_KEY: ''
   DEEPSEEK_API_KEY: ''
   A4N_MODEL: ''
   COREPACK_ENABLE_AUTO_PIN: '0'

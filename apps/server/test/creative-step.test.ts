@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
 vi.mock('../src/steps/llm.js', () => ({
   modelRuntime: {
-    defaultModelId: 'deepseek:deepseek-chat',
+    defaultModelId: 'kimi:kimi-k2.8-highspeed',
     requestTimeoutMs: 120_000, generationSettings: () => ({ parameters: {}, options: {} }),
     languageModel: mocks.languageModel,
   },

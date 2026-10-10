@@ -1,7 +1,7 @@
 ---
 wiki_id: "051"
 ticket: 51
-ticket_state: active
+ticket_state: done
 context_state: current
 summary: "开发Agent可用的节点实际调用记录，复用run-step支持review/modify、输入输出和A/B + comment"
 topics: ["node-iteration", "agent-cli", "system-prompt", "context-control", "private-experiment-records"]
@@ -19,7 +19,7 @@ last_context_reviewed: "2026-10-10"
 
 - **读取时机**：开发节点记录、检查实际输入输出、单节点A/B或comment使用方式。
 - **原始目的**：让用户通过Agent方便地review/modify SP/context/Harness、看输入输出、A/B + comment，减少重复操作和无用基础设施。
-- **实际落地**：[#51](https://github.com/12bitsD/agent4novel/issues/51)的最小记录入口已落在 `run-step --record-dir <新目录>`；目录预检、四文件落盘、六节点共同 `callLlm` 捕获和失败/unknown 语义均由CLI/worker测试覆盖。
+- **实际落地**：[#51](https://github.com/12bitsD/agent4novel/issues/51)的最小记录入口已落在 `run-step --record-dir <新目录>`；目录预检、四文件落盘、六节点共同 `callLlm` 捕获和失败/unknown 语义均由CLI/worker测试覆盖。PR54 已合并，issue 已关闭；交付证据入口见“交接结论”。
 - **当前价值**：本票WHAT/AC以GitHub为准，本页给已实现的最小HOW、代码落点和使用边界；普通工程细节自主收敛，不重开已确认的Agent入口与三动作范围。
 - **后续变化**：本票只提供一次运行的私有文件资源；读取、A/B、comment和复跑由Agent/Harness复用现有文件与 `run-step` 完成，不扩成Pipeline、UI、数据库或评测平台。
 - **代码入口**：local-step/step-lab-main负责CLI-worker交接；isolated-runner负责最终节点结果；callLlm是六节点共同SDK调用边界；step-experiment定义请求、响应和四文件schema；`apps/cli/src/step-record.ts`负责私有目录预检/CLI deadline收尾。
@@ -158,4 +158,4 @@ AC映射：AC1/5→S2；AC2→S1；AC3/4/6→S1+S2；AC7→S3；AC8→三片公�
 
 ## 交接结论
 
-loop 已完成到 R3：#51 的最小候选、四文件 Harness 资源、运行 skill 和双语说明保留在隔离worktree；正式双轴 review、提交/PR/CI/merge和 issue 关闭仍待后续交付流程，不把当前候选写成已发布。
+loop 经 R3 与验收补强后已随 PR54、merge `7a19b43` 交付，#51 已关闭；终止证据见 [完成评论](https://github.com/12bitsD/agent4novel/issues/51#issuecomment-6088126923)。起始上下文、轮次和完成审核字段保留当时的发布前快照，其待办不代表当前票态。下一位 Agent 从四文件 schema、`callLlm` 实际调用捕获和现有 `run-step` 继续迭代；完整运行信息只在私有实验目录，未新增作品账本、评阅平台或真实 provider 质量保证。

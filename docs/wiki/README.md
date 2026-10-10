@@ -4,7 +4,7 @@
 
 核心读者是规划、实现、调试和评审本项目的 Agent。默认先按 `.claude/skills/agent4novel-wiki/SKILL.md` 检索并读取 `Agent Context`，只有任务需要时才展开技术方案或历史。
 
-恢复项目进度时，先读 [交接快照的当前里程碑与验证边界](../handoff.md#当前里程碑与验证边界)，再按本页索引进入相关 ticket。首章闭环、续章及完整 MVP 的完成状态分别核对 [#22](https://github.com/12bitsD/agent4novel/issues/22)、[#6](https://github.com/12bitsD/agent4novel/issues/6) 和 [#1](https://github.com/12bitsD/agent4novel/issues/1)。MVP 后的当前排期见 [第二期路线](../plans/mvp-phase2-roadmap.md)，已交付的第一张开发票进入 [#51](https://github.com/12bitsD/agent4novel/issues/51) 与 [Wiki 051](./051-node-iteration-records.md)，当前开发票进入 [#46](https://github.com/12bitsD/agent4novel/issues/46) 与 [Wiki 046](./046-sqlite-concurrent-initialization.md)。
+恢复项目进度时，先读 [交接快照的当前里程碑与验证边界](../handoff.md#当前里程碑与验证边界)，再按本页索引进入相关 ticket。首章闭环、续章及完整 MVP 的完成状态分别核对 [#22](https://github.com/12bitsD/agent4novel/issues/22)、[#6](https://github.com/12bitsD/agent4novel/issues/6) 和 [#1](https://github.com/12bitsD/agent4novel/issues/1)。MVP 后的已交付增量见 [Wiki 051](./051-node-iteration-records.md)、[Wiki 046](./046-sqlite-concurrent-initialization.md)、[Wiki 012](./012-creative-regeneration.md) 和 [Wiki 020](./020-beat-variant-compare.md)。当前 Kimi 候选从 [#60](https://github.com/12bitsD/agent4novel/issues/60) 与 [Wiki 060](./060-kimi-provider.md) 进入；后续顺序见 [第二期路线](../plans/mvp-phase2-roadmap.md)。
 
 ## 读者与内容边界
 
@@ -178,4 +178,5 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [047 阅读排版与组件比例](./047-reading-layout-refinement.md) | [#47](https://github.com/12bitsD/agent4novel/issues/47) | mixed | 阅读列对齐、短章自然高度、控件密度及中屏单列；发布终态以 GitHub 为准 |
 | [049 作者编稿台](./049-author-workbench.md) | [#49](https://github.com/12bitsD/agent4novel/issues/49) | current | 稳定作品壳、材料交接、导航恢复与大纲可见版本 |
 | [046 SQLite 并发首次建库](./046-sqlite-concurrent-initialization.md) | [#46](https://github.com/12bitsD/agent4novel/issues/46) | current | 首次并发初始化的 busy 有界重试、事务恢复与安全诊断 |
-| [051 节点实际输入输出记录与 Agent 迭代](./051-node-iteration-records.md) | [#51](https://github.com/12bitsD/agent4novel/issues/51) | current | `run-step` 实际调用记录、A/B 对照与 comment；当前开发票 |
+| [051 节点实际输入输出记录与 Agent 迭代](./051-node-iteration-records.md) | [#51](https://github.com/12bitsD/agent4novel/issues/51) | current | 已交付的 `run-step` 实际调用记录、A/B 对照与 comment |
+| [060 Kimi API provider 与测试模型切换](./060-kimi-provider.md) | [#60](https://github.com/12bitsD/agent4novel/issues/60) | current | Kimi OpenAI-compatible provider、凭据/Base URL、通用测试模型与回归边界 |

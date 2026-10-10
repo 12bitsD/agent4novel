@@ -21,7 +21,7 @@ const json = (value: unknown, status = 200) => new Response(JSON.stringify(value
 
 
 async function invokeRunStep(args: string[], providerUrl: string) {
-  const child = spawn(cliBin, args, { env: cliTestEnv({ A4N_MODEL: 'longcat:LongCat-2.0', LONGCAT_API_KEY: 'synthetic-step-key', LONGCAT_BASE_URL: providerUrl, A4N_CLI_TIMEOUT_MS: '10000' }), stdio: ['ignore', 'pipe', 'pipe'] })
+  const child = spawn(cliBin, args, { env: cliTestEnv({ A4N_MODEL: 'kimi:kimi-k2.8-highspeed', KIMI_API_KEY: 'synthetic-step-key', KIMI_BASE_URL: providerUrl, A4N_CLI_TIMEOUT_MS: '10000' }), stdio: ['ignore', 'pipe', 'pipe'] })
   let stdout = ''; let stderr = ''
   child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8')
   child.stdout.on('data', chunk => { stdout += chunk })
@@ -48,7 +48,7 @@ it('E6 runs creative regeneration through the executable and captures all four s
     requests.push(source)
     res.setHeader('Content-Type', 'application/json')
     const pack = (title: string) => ({ title, hook: 'new hook', tags: ['canary'], synopsis: 'new synopsis', characters: [], setting: [], payoffs: [], outline: [] })
-    res.end(JSON.stringify({ id: 'creative-record', model: 'LongCat-2.0', choices: [{ index: 0, message: { role: 'assistant', content: JSON.stringify({ directions: [pack('new-A'), pack('new-B')] }) }, finish_reason: 'stop' }] }))
+    res.end(JSON.stringify({ id: 'creative-record', model: 'kimi-k2.8-highspeed', choices: [{ index: 0, message: { role: 'assistant', content: JSON.stringify({ directions: [pack('new-A'), pack('new-B')] }) }, finish_reason: 'stop' }] }))
   })
   server.listen(0, '127.0.0.1'); await once(server, 'listening')
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing provider address')
@@ -63,7 +63,7 @@ it('E6 runs creative regeneration through the executable and captures all four s
     expect(JSON.parse(result.stdout)).toMatchObject({ kind: 'succeeded', stepId: 'creative', recording: { status: 'complete', dir: recordDir } })
     expect(requests).toHaveLength(1)
     const invocation = JSON.parse(readFileSync(join(recordDir, 'invocation.json'), 'utf8'))
-    expect(invocation).toMatchObject({ captured: true, system: 'CLI-REAL-SYSTEM-CANARY', effectiveConfig: { model: 'longcat:LongCat-2.0' } })
+    expect(invocation).toMatchObject({ captured: true, system: 'CLI-REAL-SYSTEM-CANARY', effectiveConfig: { model: 'kimi:kimi-k2.8-highspeed' } })
     for (const value of ['CLI-REAL-SEED-CANARY', 'CLI-REAL-CAPTION-CANARY', 'CLI-OLD-PACKAGE-CANARY', 'CLI-REAL-INSTRUCTION-CANARY']) expect(invocation.prompt).toContain(value)
     expect(JSON.parse(readFileSync(join(recordDir, 'input.json'), 'utf8')).input.regeneration.instructions).toBe('CLI-REAL-INSTRUCTION-CANARY')
     expect(JSON.parse(readFileSync(join(recordDir, 'result.json'), 'utf8')).status).toBe('succeeded')

@@ -19,7 +19,7 @@ it('preserves two approved chapters, historical edits and pending prose across r
     const child = spawn(process.execPath, ['--import', createRequire(import.meta.url).resolve('tsx'),
       fileURLToPath(new URL('../src/start.ts', import.meta.url))], {
       stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, A4N_DATA_DIR: folder, A4N_SEED_DEMO: '0',
-        A4N_HOST: '127.0.0.1', A4N_PORT: '0', A4N_MODEL: '', LONGCAT_API_KEY: '', DEEPSEEK_API_KEY: '' },
+        A4N_HOST: '127.0.0.1', A4N_PORT: '0', A4N_MODEL: '', LONGCAT_API_KEY: '', KIMI_API_KEY: '', MOONSHOT_API_KEY: '', DEEPSEEK_API_KEY: '' },
     })
     server = child
     child.stderr!.on('data', chunk => { errors += String(chunk) })

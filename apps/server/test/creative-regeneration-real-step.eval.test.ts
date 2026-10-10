@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({ generateObject: vi.fn(), languageModel: vi.fn(
 vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
 vi.mock('../src/steps/llm.js', () => ({
   modelRuntime: {
-    defaultModelId: 'deepseek:deepseek-chat', requestTimeoutMs: 120_000,
+    defaultModelId: 'kimi:kimi-k2.8-highspeed', requestTimeoutMs: 120_000,
     generationSettings: () => ({ parameters: {}, options: {} }), languageModel: mocks.languageModel,
   },
 }))
@@ -58,6 +58,6 @@ describe('creative regeneration HTTP with the production Step', () => {
     const call = mocks.generateObject.mock.calls[0]![0] as { system: string; prompt: string }
     expect(call.system).toContain('创意')
     for (const value of ['REAL-SEED-CANARY', 'REAL-CAPTION-CANARY', 'OLD-PACKAGE-CANARY', 'REAL-INSTRUCTION-CANARY']) expect(call.prompt).toContain(value)
-    expect(mocks.languageModel).toHaveBeenCalledWith('deepseek:deepseek-chat')
+    expect(mocks.languageModel).toHaveBeenCalledWith('kimi:kimi-k2.8-highspeed')
   })
 })

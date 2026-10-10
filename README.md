@@ -43,7 +43,7 @@ cd agent4novel
 docker compose up --build -d --wait
 ```
 
-打开 **[localhost:8787](http://localhost:8787)**。未指定模型且未提供任何 API key（模型服务密钥）时，应用使用内置示例，支持编辑和通过操作，不调用 AI。已有密钥时会启用真实模型；未指定模型时优先选择 DeepSeek，其次 LongCat。
+打开 **[localhost:8787](http://localhost:8787)**。未指定模型且未提供任何 API key（模型服务密钥）时，应用使用内置示例，支持编辑和通过操作，不调用 AI。已有密钥时会启用真实模型；未指定模型时按 DeepSeek、LongCat、Kimi 的顺序选择。
 
 用 `docker compose stop` 停止；`docker compose ps` 查看健康状态，`docker compose logs app` 查看启动错误。端口被占用时，运行 `A4N_HTTP_PORT=8790 docker compose up --build -d --wait`，再打开对应端口。Web 与 API 由同一服务提供，只开放本机访问。
 
@@ -82,7 +82,7 @@ Agent 需要检查一次独立节点的真实输入输出时，可给 `run-step`
 
 ### 接入真实模型
 
-支持 **DeepSeek** 和 **LongCat**，从所选服务获取 API key。确认正文显示「已保存」后停止服务：Docker 用 `docker compose stop`，源码运行在终端按 `Ctrl+C`。已有 `.env.local` 时直接编辑，首次配置时创建仅当前用户可读写的文件：
+支持 **DeepSeek**、**LongCat** 和 **Kimi**，从所选服务获取 API key。确认正文显示「已保存」后停止服务：Docker 用 `docker compose stop`，源码运行在终端按 `Ctrl+C`。已有 `.env.local` 时直接编辑，首次配置时创建仅当前用户可读写的文件：
 
 ```bash
 cp .env.example .env.local
@@ -95,6 +95,7 @@ chmod 600 .env.local
 | --- | --- | --- |
 | DeepSeek | `deepseek:deepseek-chat` | `DEEPSEEK_API_KEY` |
 | LongCat | `longcat:LongCat-2.0` | `LONGCAT_API_KEY` |
+| Kimi | `kimi:kimi-k2.8-highspeed` | `KIMI_API_KEY`（兼容 `MOONSHOT_API_KEY`） |
 
 Docker 用 `docker compose --env-file .env.local up --build -d --wait` 重启；源码运行用 `pnpm dev`。指定模型但缺少对应密钥时，启动会失败。
 

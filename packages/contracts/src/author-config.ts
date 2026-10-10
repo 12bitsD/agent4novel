@@ -9,7 +9,7 @@ export const authorPreferencesSchema = z.object({
 }).strict()
 export const authorStepConfigSchema = z.object({
   ...generationParametersSchema.shape,
-  model: z.string().regex(/^(deepseek:[a-zA-Z0-9_.-]{1,96}|longcat:LongCat-2\.0)$/).optional(),
+  model: z.string().regex(/^(deepseek:[a-zA-Z0-9_.-]{1,96}|kimi:[a-zA-Z0-9_.-]{1,96}|longcat:LongCat-2\.0)$/).optional(),
   systemPromptRef: z.string().uuid().nullable().optional(),
   skills: z.array(z.string().uuid()).max(authorConfigLimits.skillsPerStep).refine(ids => new Set(ids).size === ids.length).optional(),
   tools: z.array(z.never()).max(0).optional(),
@@ -38,7 +38,7 @@ export const agentFileUploadSchema = z.object({
 }).strict()
 export const agentFileReadSchema = z.object({ file: agentFileSchema, text: z.string().min(1).max(authorConfigLimits.fileBytes) }).strict()
 export const effectiveAuthorStepSchema = z.object({
-  id: authorStepIdSchema, model: authorStepConfigSchema.shape.model.unwrap(), provider: z.enum(['deepseek', 'longcat']), configured: z.boolean(),
+  id: authorStepIdSchema, model: authorStepConfigSchema.shape.model.unwrap(), provider: z.enum(['deepseek', 'longcat', 'kimi']), configured: z.boolean(),
   executionMode: z.enum(['demo', 'live']), generation: generationParametersSchema,
   appliedPreferences: authorPreferencesSchema, systemPrompt: agentFileSchema.nullable(), skills: z.array(agentFileSchema).max(authorConfigLimits.skillsPerStep),
   tools: z.array(z.never()).max(0), directionCount: z.number().int().min(1).max(3),
@@ -51,7 +51,7 @@ export const authorConfigViewSchema = z.object({
     && view.files.some(stored => stored.id === file.id && JSON.stringify(stored) === JSON.stringify(file))
   if (new Set(view.effective.map(s => s.id)).size !== 6 || view.files.some(f => f.workId !== view.workId)
     || new Set(view.files.map(f => f.id)).size !== view.files.length
-    || view.effective.some(s => s.provider !== (s.model.startsWith('longcat:') ? 'longcat' : 'deepseek')
+    || view.effective.some(s => s.provider !== (s.model.startsWith('longcat:') ? 'longcat' : s.model.startsWith('kimi:') ? 'kimi' : 'deepseek')
       || (s.systemPrompt && !matchesLibrary(s.systemPrompt, 'prompt')) || s.skills.some(f => !matchesLibrary(f, 'skill'))
       || new Set(s.skills.map(f => f.id)).size !== s.skills.length)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['effective'], message: 'configuration identity mismatch' })

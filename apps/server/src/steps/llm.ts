@@ -8,9 +8,11 @@ import { KnownError } from '../errors.js'
 
 export const DEFAULT_DEEPSEEK_MODEL_ID = 'deepseek:deepseek-chat' as const
 export const DEFAULT_LONGCAT_MODEL_ID = 'longcat:LongCat-2.0' as const
+export const DEFAULT_KIMI_MODEL_ID = 'kimi:kimi-k2.8-highspeed' as const
 export const DEFAULT_LONGCAT_BASE_URL = 'https://api.longcat.chat/openai/v1'
+export const DEFAULT_KIMI_BASE_URL = 'https://api.moonshot.cn/v1'
 
-export type SupportedModelId = `deepseek:${string}` | typeof DEFAULT_LONGCAT_MODEL_ID
+export type SupportedModelId = `deepseek:${string}` | `kimi:${string}` | typeof DEFAULT_LONGCAT_MODEL_ID
 
 export class ModelConfigError extends Error {
   readonly code = 'llm-config-invalid'
@@ -43,9 +45,10 @@ function value(env: NodeJS.ProcessEnv, name: string): string | undefined {
 
 function parseModelId(raw: string): SupportedModelId {
   if (/^deepseek:[^:]+$/.test(raw)) return raw as `deepseek:${string}`
+  if (/^kimi:[^:]+$/.test(raw)) return raw as `kimi:${string}`
   if (raw === DEFAULT_LONGCAT_MODEL_ID) return raw
   throw new ModelConfigError(
-    `unsupported model id "${raw}"; expected deepseek:<model> or ${DEFAULT_LONGCAT_MODEL_ID}`,
+    `unsupported model id "${raw}"; expected deepseek:<model>, kimi:<model>, or ${DEFAULT_LONGCAT_MODEL_ID}`,
   )
 }
 
@@ -89,6 +92,7 @@ export function createModelRuntime(
 ): ModelRuntime {
   const deepseekKey = value(env, 'DEEPSEEK_API_KEY')
   const longcatKey = value(env, 'LONGCAT_API_KEY')
+  const kimiKey = value(env, 'KIMI_API_KEY') ?? value(env, 'MOONSHOT_API_KEY')
   const explicitModel = value(env, 'A4N_MODEL')
 
   const defaultModelId = explicitModel
@@ -97,10 +101,14 @@ export function createModelRuntime(
       ? DEFAULT_DEEPSEEK_MODEL_ID
       : longcatKey
         ? DEFAULT_LONGCAT_MODEL_ID
-        : DEFAULT_DEEPSEEK_MODEL_ID
+        : kimiKey
+          ? DEFAULT_KIMI_MODEL_ID
+          : DEFAULT_DEEPSEEK_MODEL_ID
 
   const configured = (modelId: SupportedModelId): boolean =>
-    modelId.startsWith('deepseek:') ? Boolean(deepseekKey) : Boolean(longcatKey)
+    modelId.startsWith('deepseek:') ? Boolean(deepseekKey)
+      : modelId.startsWith('kimi:') ? Boolean(kimiKey)
+        : Boolean(longcatKey)
 
   if (explicitModel && !configured(defaultModelId)) {
     const provider = defaultModelId.split(':', 1)[0]
@@ -118,6 +126,14 @@ export function createModelRuntime(
       apiKey: longcatKey ?? UNCONFIGURED_KEY,
       baseURL: baseUrl(env, 'LONGCAT_BASE_URL', DEFAULT_LONGCAT_BASE_URL),
       // LongCat 文档未声明 json_schema；AI SDK 会退回较宽松的 json_object。
+      supportsStructuredOutputs: false,
+      ...(deps.fetch ? { fetch: deps.fetch } : {}),
+    }),
+    kimi: createOpenAICompatible({
+      name: 'kimi',
+      apiKey: kimiKey ?? UNCONFIGURED_KEY,
+      baseURL: baseUrl(env, 'KIMI_BASE_URL', DEFAULT_KIMI_BASE_URL),
+      // Use the shared JSON mode; keep final Zod validation local to the application.
       supportsStructuredOutputs: false,
       ...(deps.fetch ? { fetch: deps.fetch } : {}),
     }),

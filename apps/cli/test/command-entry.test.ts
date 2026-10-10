@@ -252,7 +252,7 @@ describe('CLI command discovery and syntax', { timeout: testTimeoutMs }, () => {
       const seedFile = join(directory, 'seed.txt')
       writeFileSync(seedFile, 'synthetic help seed')
       const result = await invoke(['run-step', 'caption', '--seed-file', seedFile, '--help'], {
-        A4N_MODEL: 'longcat:LongCat-2.0', LONGCAT_API_KEY: 'synthetic-key', LONGCAT_BASE_URL: `${baseUrl}/v1`,
+        A4N_MODEL: 'kimi:kimi-k2.8-highspeed', KIMI_API_KEY: 'synthetic-key', KIMI_BASE_URL: `${baseUrl}/v1`,
       })
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('')

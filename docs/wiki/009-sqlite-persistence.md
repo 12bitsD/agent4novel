@@ -8,7 +8,7 @@ topics: ["sqlite", "persistence", "transactions", "restart-recovery"]
 code_paths: ["apps/server/src/store/**", "apps/server/src/start.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts"]
 symbols: ["WorkStore", "SqliteStore", "AppendOptions", "StoreContractError"]
 inherits: ["019", "006", "002"]
-changed_by: ["033", "007", "008"]
+changed_by: ["033", "007", "008", "046"]
 read_when: ["implement-storage-adapter", "recover-persisted-work", "change-database-schema"]
 last_context_reviewed: "2026-09-30"
 ---

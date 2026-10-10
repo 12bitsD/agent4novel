@@ -6,7 +6,7 @@ import { runIsolatedStep } from '../src/steps/isolated-runner.js'
 import * as fake from '../src/steps/fake-step.js'
 const mocks = vi.hoisted(() => ({ generateObject: vi.fn() }))
 vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
-vi.mock('../src/steps/llm.js', () => ({ modelRuntime: { mode: 'live', defaultModelId: 'deepseek:deepseek-chat', requestTimeoutMs: 120_000, generationSettings: () => ({ parameters: {}, options: {} }), languageModel: () => 'mock-model' } }))
+vi.mock('../src/steps/llm.js', () => ({ modelRuntime: { mode: 'live', defaultModelId: 'kimi:kimi-k2.8-highspeed', requestTimeoutMs: 120_000, generationSettings: () => ({ parameters: {}, options: {} }), languageModel: () => 'mock-model' } }))
 
 async function input() {
   const base = { workId: 'work-synthetic-prose', seed: '合成素材', upstream: {} }

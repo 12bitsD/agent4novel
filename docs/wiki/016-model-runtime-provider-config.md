@@ -3,14 +3,14 @@ wiki_id: "016"
 ticket: 16
 ticket_state: done
 context_state: mixed
-summary: "ModelRuntime 统一模型、凭据、结构化输出和超时；LongCat 默认关闭 thinking，并支持有界生成参数覆盖。"
+summary: "ModelRuntime 统一模型、凭据、结构化输出和超时；支持 DeepSeek、LongCat 与 Kimi。"
 topics: ["model-runtime", "provider-config", "generation-parameters", "thinking", "credentials", "base-url-security", "structured-output", "llm-timeouts"]
-code_paths: ["apps/server/src/index.ts", "apps/server/src/steps/llm.ts", "apps/server/src/steps/llm-call.ts", "apps/server/src/config/local-env.ts", "apps/server/src/start.ts", "apps/server/src/step-lab-main.ts", "apps/cli/src/local-step.ts", "packages/contracts/src/step.ts", "apps/cli/src/client.ts", ".env.example"]
-symbols: ["ModelRuntime", "SupportedModelId", "ModelConfigError", "createModelRuntime", "modelRuntime", "generationSettings", "generationParametersSchema", "callLlm", "run-step", "DEFAULT_CLI_TIMEOUT_MS", "DEFAULT_ADVANCE_TIMEOUT_MS", "A4N_LLM_TIMEOUT_MS", "A4N_CLI_TIMEOUT_MS", "llm-timeout"]
+code_paths: ["apps/server/src/index.ts", "apps/server/src/steps/llm.ts", "apps/server/src/steps/llm-call.ts", "apps/server/src/config/local-env.ts", "apps/server/src/start.ts", "apps/server/src/step-lab-main.ts", "apps/cli/src/local-step.ts", "packages/contracts/src/step.ts", "packages/contracts/src/author-config.ts", "apps/cli/src/client.ts", ".env.example", "compose.yaml"]
+symbols: ["ModelRuntime", "SupportedModelId", "ModelConfigError", "createModelRuntime", "modelRuntime", "DEFAULT_KIMI_MODEL_ID", "DEFAULT_KIMI_BASE_URL", "generationSettings", "generationParametersSchema", "callLlm", "run-step", "DEFAULT_CLI_TIMEOUT_MS", "DEFAULT_ADVANCE_TIMEOUT_MS", "A4N_LLM_TIMEOUT_MS", "A4N_CLI_TIMEOUT_MS", "llm-timeout"]
 inherits: ["014"]
-changed_by: ["013", "005", "033", "007"]
+changed_by: ["013", "005", "033", "007", "060"]
 read_when: ["configure-model-provider", "configure-generation-parameters", "run-isolated-step", "add-model-provider", "debug-llm-runtime", "change-llm-timeout", "audit-credential-safety"]
-last_context_reviewed: "2026-09-30"
+last_context_reviewed: "2026-10-10"
 ---
 
 # 016 — 模型运行配置：统一多 Provider、凭据与超时
@@ -19,10 +19,10 @@ last_context_reviewed: "2026-09-30"
 
 - **读取时机**：配置或新增 provider、切换模型、调整 thinking/temperature/topP、运行独立节点、修改凭据/Base URL、排查结构化输出或 timeout 时读取。
 - **原始目的**：把散落且 DeepSeek-only 的运行时选择收敛到 ModelRuntime，使 Pipeline 与 RealStep 无需感知 provider。
-- **实际落地**：DeepSeek 与 LongCat 2.0 共用 registry；源码server入口安全加载`.env.local`，编译/容器入口只接收运行期环境；共同校验 URL、模型、credential、单次 LLM timeout 和本地 Zod。generationSettings 统一生产与独立节点的生成参数；LongCat 默认 disabled/0.9/0.95，既有接回验证状态见“测试与验证”。
+- **实际落地**：DeepSeek、LongCat 2.0 与 Kimi 共用 registry；源码server入口安全加载`.env.local`，编译/容器入口只接收运行期环境；共同校验 URL、模型、credential、单次 LLM timeout 和本地 Zod。generationSettings 统一生产与独立节点的生成参数；LongCat 默认 disabled/0.9/0.95，Kimi 使用 `kimi:kimi-k2.8-highspeed` 测试模型，既有接回验证状态见“测试与验证”。
 - **当前价值**：本文是 provider 配置、运行时行为、错误语义与验证状态的当前唯一 HOW。
-- **后续变化**：CLI／telemetry／smoke 仍由 [Wiki 014](./014-agent-cli-telemetry.md) 拥有；[Wiki 013](./013-setting-generation-review.md) 新增 Setting，显式禁用该步骤的 SDK 重试并记录新实测。[Wiki 005](./005-beat-generation-review.md) 增加 Beat 独立预算、零 SDK 重试和共享安全错误分类。[Wiki 033](./033-local-docker-ci.md)持有本机容器启动与卷操作，模型HOW仍由本文维护。[Wiki007](./007-author-agent-config.md)持有作品可编辑配置、文件与操作快照，旧Work.config仅兼容来源；本文work ID均为历史进程快照，不代表当前仍存活。
-- **代码入口**：[ModelRuntime](../../apps/server/src/steps/llm.ts)、[LLM call](../../apps/server/src/steps/llm-call.ts)、[generation schema](../../packages/contracts/src/step.ts)、[local env loader](../../apps/server/src/config/local-env.ts)、[独立 worker](../../apps/server/src/step-lab-main.ts)、[CLI timeout](../../apps/cli/src/client.ts)。
+- **后续变化**：CLI／telemetry／smoke 仍由 [Wiki 014](./014-agent-cli-telemetry.md) 拥有；[Wiki 013](./013-setting-generation-review.md) 新增 Setting，显式禁用该步骤的 SDK 重试并记录新实测。[Wiki 005](./005-beat-generation-review.md) 增加 Beat 独立预算、零 SDK 重试和共享安全错误分类。[Wiki 033](./033-local-docker-ci.md)持有本机容器启动与卷操作，模型HOW仍由本文维护。[Wiki007](./007-author-agent-config.md)持有作品可编辑配置、文件与操作快照，旧Work.config仅兼容来源；#60 增加 Kimi OpenAI-compatible provider，测试默认模型为 `kimi:kimi-k2.8-highspeed`；本文work ID均为历史进程快照，不代表当前仍存活。
+- **代码入口**：[ModelRuntime](../../apps/server/src/steps/llm.ts)、[LLM call](../../apps/server/src/steps/llm-call.ts)、[author config contract](../../packages/contracts/src/author-config.ts)、[generation schema](../../packages/contracts/src/step.ts)、[local env loader](../../apps/server/src/config/local-env.ts)、[独立 worker](../../apps/server/src/step-lab-main.ts)、[CLI timeout](../../apps/cli/src/client.ts)。
 
 ## 设计目的
 
@@ -40,17 +40,19 @@ last_context_reviewed: "2026-09-30"
 
 ### 模块边界
 
-shell/CI 与 server 入口加载的 .env.local 进入 ModelRuntime，再由 registry 选择 DeepSeek 或 LongCat；Work.config.model 可做内部覆盖。入口先 loadLocalEnv 再动态 import，测试直接 import 不加载本地文件；Node 不覆盖已有环境变量，所以 shell/CI 优先。callLlm 统一处理 generateObject、生成参数、AbortSignal、本地 Zod 与脱敏 telemetry，start.ts 按 mode 装配 RealStep 或 FakeStep。run-step 使用 server 包的独立 worker 加载配置和生产 Step，不依赖常驻 HTTP server；调用方式见 [Wiki 014](./014-agent-cli-telemetry.md#单节点实验-run-step)。
+shell/CI 与 server 入口加载的 .env.local 进入 ModelRuntime，再由 registry 选择 DeepSeek、LongCat 或 Kimi；Work.config.model 可做内部覆盖。入口先 loadLocalEnv 再动态 import，测试直接 import 不加载本地文件；Node 不覆盖已有环境变量，所以 shell/CI 优先。callLlm 统一处理 generateObject、生成参数、AbortSignal、本地 Zod 与脱敏 telemetry，start.ts 按 mode 装配 RealStep 或 FakeStep。run-step 使用 server 包的独立 worker 加载配置和生产 Step，不依赖常驻 HTTP server；调用方式见 [Wiki 014](./014-agent-cli-telemetry.md#单节点实验-run-step)。
 
 ### 配置契约
 
 | 配置 | 语义 | 默认或边界 |
 |---|---|---|
-| A4N_MODEL | server 启动默认模型 | 可空；支持 deepseek:model 或精确的 longcat:LongCat-2.0 |
+| A4N_MODEL | server 启动默认模型 | 可空；支持 `deepseek:model`、`kimi:model` 或精确的 `longcat:LongCat-2.0` |
 | DEEPSEEK_API_KEY | DeepSeek Bearer credential | 仅 server |
 | DEEPSEEK_BASE_URL | DeepSeek API base | https://api.deepseek.com |
 | LONGCAT_API_KEY | LongCat Bearer credential | 仅 server |
 | LONGCAT_BASE_URL | LongCat OpenAI-compatible base | https://api.longcat.chat/openai/v1 |
+| KIMI_API_KEY | Kimi Bearer credential | 仅 server |
+| KIMI_BASE_URL | Kimi OpenAI-compatible base | https://api.moonshot.cn/v1 |
 | A4N_LLM_TIMEOUT_MS | server 单次 provider 调用上限 | 代码默认 120000；整数 1000..900000；.env.example 为 LongCat 建议值 300000 |
 | A4N_BASE_URL | CLI 到 agent4novel server 的地址 | 默认 http://localhost:8787；不是 provider URL |
 | A4N_CLI_TIMEOUT_MS | CLI HTTP 请求或独立 worker 总等待上限的全局覆盖 | 未覆盖时普通 300000、advance 1820000、Beat 通过 30000／再生 920000／恢复 GET 10000、run-step 920000；整数 1000..3600000；--timeout-ms 优先 |
@@ -65,8 +67,9 @@ shell/CI 与 server 入口加载的 .env.local 进入 ModelRuntime，再由 regi
 
 1. 设置 A4N_MODEL 时，先校验模型 ID，再要求对应 provider key 存在；失败抛 ModelConfigError，不进入 demo、不降级。
 2. 未设置 A4N_MODEL 时，有 DeepSeek key 就选 deepseek:deepseek-chat。
-3. 只有 LongCat key 时选 longcat:LongCat-2.0。
-4. 两个 key 都没有时进入 demo，所有已注册步骤使用 FakeStep，不触发远程调用。
+3. 没有 DeepSeek key 但有 LongCat key 时选 longcat:LongCat-2.0。
+4. 只有 Kimi key 时选 kimi:kimi-k2.8-highspeed。
+5. 三个 key 都没有时进入 demo，所有已注册步骤使用 FakeStep，不触发远程调用。
 
 旧Work.config.model仅在作者revision0作为兼容覆盖；保存作者配置后只使用author document及启动默认。当前作品通过[作者配置](./007-author-agent-config.md)公开UI/API保存作品默认及节点覆盖；live模式保存前核对所选模型和对应key，无效配置安全400且不调用模型；操作使用开始时快照，不自动改用另一家provider。
 
@@ -80,7 +83,7 @@ shell/CI 与 server 入口加载的 .env.local 进入 ModelRuntime，再由 regi
 |---|---|---|---|
 | model | 已注册 provider:model | 通过 --config-file 设置 | 选择本次独立运行的模型 |
 | directionCount | 整数 1..3 | 通过 --config-file 设置 | Creative 生成数量，省略为 2 |
-| thinking | enabled / disabled | --thinking on / off | 仅 LongCat-2.0 可显式设置；DeepSeek 设置此项会失败 |
+| thinking | enabled / disabled | --thinking on / off | 仅 LongCat-2.0 可显式设置；DeepSeek/Kimi 设置此项会失败 |
 | temperature | 有限数字 0..1 | --temperature | 采样温度 |
 | topP | 有限数字，大于 0 且不大于 1 | --top-p | 累积概率采样阈值；wire 字段为 top_p |
 
@@ -115,6 +118,7 @@ live 模式会把生成所需的 prompt、作品素材和上游产物发送给�
 |---|---|---|---|
 | DeepSeek | @ai-sdk/deepseek | Chat Completions | adapter 能力加本地 Zod |
 | LongCat 2.0 | @ai-sdk/openai-compatible | /chat/completions | json_object 响应模式加本地 Zod |
+| Kimi | @ai-sdk/openai-compatible | /chat/completions | json_object 响应模式加本地 Zod；wire model 为 `kimi-k2.8-highspeed` |
 
 LongCat 公共 Chat 文档未承诺 json_schema。其 provider 配置因此设置 supportsStructuredOutputs=false，让 AI SDK 发送 response_format type=json_object；最终正确性由生产 Step 的 Zod schema 判断。
 
@@ -152,7 +156,7 @@ Pipeline 不做 provider 自动重试，也不做跨 provider failover：
 
 ### 自动化边界
 
-ModelRuntime 测试以合成 key 与 fake fetch 覆盖选择、缺 key、非法 ID、URL 安全和 timeout；LongCat transport 断言 Bearer、精确模型 ID、/chat/completions 与 json_object。Step 测试通过 languageModel seam 覆盖作品 override、成功、timeout 和非法输出；CLI 测试覆盖 REST、乐观锁、smoke、logs 与独立 timeout。
+ModelRuntime 测试以合成 key 与 fake fetch 覆盖选择、缺 key、非法 ID、URL 安全和 timeout；LongCat 与 Kimi transport 断言 Bearer、精确模型 ID、/chat/completions 与 json_object。Step 测试通过 languageModel seam 覆盖作品 override、成功、timeout 和非法输出；CLI 测试覆盖 REST、乐观锁、smoke、logs 与独立 timeout。#60 的通用 server/contracts/CLI/Web fixture 使用 `kimi:kimi-k2.8-highspeed`，LongCat/DeepSeek 专用测试仅保护既有 adapter 和 thinking 语义。
 
 2026-09-13 接回的 [llm.test.ts](../../apps/server/test/llm.test.ts)、[isolated-runner.test.ts](../../apps/server/test/isolated-runner.test.ts)、[step-transport.test.ts](../../apps/cli/test/step-transport.test.ts) 覆盖 LongCat 默认及显式参数、DeepSeek thinking 拒绝、config/flag 优先级、topK 拒绝、worker 模型选择与安全 generation 遥测。本轮 contracts/server/CLI 共 280 测、web 64 测通过；四包 typecheck 与 workspace build 通过。仅保留 SDK 的 json_object 已知提示和 Vite 单 chunk 大于 500 kB 提示。命令、RED/GREEN 与剩余项见 [本轮验证记录](../experiments/caption-adoption-2026-09-13/plan.md#验证记录)；独立评阅和最终文档检查结果见该记录，没有新增真实 provider 调用或模型质量结论。
 
@@ -179,6 +183,15 @@ ModelRuntime 测试以合成 key 与 fake fetch 覆盖选择、缺 key、非法 
 - 不做持久化 store、后台 job、队列或异步 advance。
 
 ## 上下文演进
+
+### 2026-10-10 — #60 增加 Kimi OpenAI-compatible provider
+
+- **触发证据**：用户要求新增 Kimi API endpoint，并将测试模型统一指定为 `kimi-k2.8-highspeed`。
+- **原假设**：#16 只需 DeepSeek 与 LongCat，新增模型可继续等待后续 provider 票。
+- **决定**：在现有 ModelRuntime registry 注册 Kimi；内部 ID 使用 `kimi:<model>`，本票测试固定 `kimi:kimi-k2.8-highspeed`，wire model 使用无前缀 `kimi-k2.8-highspeed`；默认 base URL 为 `https://api.moonshot.cn/v1`，凭据为 server-only `KIMI_API_KEY`，兼容读取 `MOONSHOT_API_KEY`。
+- **影响**：author-config provider enum、isolated-runner/telemetry 安全模型识别和 Web 选择扩展为 Kimi；Kimi 复用 OpenAI-compatible JSON mode 与本地 Zod，不复用 LongCat thinking 参数；通用测试迁移到 Kimi，旧 provider 专用测试保留。
+- **依据**：Kimi 官方快速开始说明其 API 兼容 OpenAI Chat Completions、base URL 和 Bearer API key，见 [Kimi API 快速开始](https://platform.kimi.com/docs/get-api-key)。
+- **上下文处理**：preserve #16 的 provider-neutral 边界、URL/key 脱敏和无 failover；replace 仅更新 provider 列表、默认测试模型和配置表。
 
 ### 2026-09-30 — 容器通过运行期环境继承模型配置
 

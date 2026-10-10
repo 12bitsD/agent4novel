@@ -8,7 +8,7 @@ topics: ["agent-cli", "isolated-step", "system-prompt", "llm-telemetry", "workfl
 code_paths: ["apps/cli/src/client.ts", "apps/cli/src/commands.ts", "apps/cli/src/main.ts", "apps/cli/src/local-step.ts", "apps/server/src/step-lab-main.ts", "apps/server/src/steps/isolated-runner.ts", "packages/contracts/src/step-experiment.ts", "packages/contracts/src/telemetry.ts", "apps/server/src/steps/llm-call.ts", ".claude/skills/agent4novel-drive/SKILL.md"]
 symbols: ["createClient", "CliError", "run-step", "runLocalStep", "runIsolatedStep", "stepExperimentRequestSchema", "smoke", "LlmTelemetry", "recordTelemetry", "telemetryFor", "callLlm"]
 inherits: ["004", "011"]
-changed_by: ["016", "013", "005", "025", "022", "006"]
+changed_by: ["016", "013", "005", "025", "022", "006", "051"]
 read_when: ["drive-workflow-from-cli", "run-isolated-step", "compare-system-prompts", "debug-llm-failure", "change-cli-command", "change-telemetry", "run-end-to-end-smoke"]
 last_context_reviewed: "2026-09-29"
 ---

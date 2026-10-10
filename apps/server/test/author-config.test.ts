@@ -8,6 +8,7 @@ import Database from 'better-sqlite3'
 import { SqliteStore } from '../src/store/sqlite-store.js'
 import { createProductionApp } from '../src/runtime/production-app.js'
 import { AuthorConfigService } from '../src/config/author-config-service.js'
+import { createModelRuntime, DEFAULT_KIMI_MODEL_ID } from '../src/steps/llm.js'
 import { agentFileSchema, authorConfigViewSchema, advanceOutcomeDtoSchema } from '@agent4novel/contracts'
 
 const configView = async (response: Response) => authorConfigViewSchema.parse(await response.json())
@@ -37,6 +38,14 @@ describe('author configuration at the production boundary', () => {
       expect(after.effective[0]!.generation.temperature).not.toBe(0.7)
       expect(after.effective[0]!.directionCount).toBe(2)
       expect(service.snapshot(f.store.getWork(f.work.id)!).caption!.systemPrompt).not.toContain('LEGACY_GUIDANCE')
+    } finally { f.store.close() }
+  })
+  it('reports Kimi as Kimi in the effective author configuration', () => {
+    const f = fixture()
+    try {
+      const service = new AuthorConfigService(f.store, f.store, f.dir, createModelRuntime({ KIMI_API_KEY: 'synthetic-kimi-key' }))
+      service.save(f.work.id, { requestId: randomUUID(), expectedRevision: 0, document: { preferences: {}, defaults: { model: DEFAULT_KIMI_MODEL_ID }, steps: {} } })
+      expect(service.get(f.work.id).effective[0]).toMatchObject({ model: DEFAULT_KIMI_MODEL_ID, provider: 'kimi', configured: true, executionMode: 'live' })
     } finally { f.store.close() }
   })
   it('rejects the assembled system budget before saving or generating any artifact', async () => {

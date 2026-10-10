@@ -8,7 +8,7 @@ topics: ["beat", "chapter-planning", "human-review", "conditional-write", "agent
 code_paths: ["packages/contracts/src/beat.ts", "packages/contracts/src/beat-submission.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/store/in-memory-store.ts", "apps/server/src/routes/works.ts", "apps/server/src/steps/llm-call.ts", "apps/web/src/pages/Workspace.tsx", "apps/cli/src/commands.ts"]
 symbols: ["BeatContent", "BeatEditDraft", "BeatCommandObservation", "regenerateBeat", "matchesBeatSubmission", "writeOutcome", "request-rejected", "beat-approved"]
 inherits: ["004", "013", "014"]
-changed_by: ["022", "006"]
+changed_by: ["022", "006", "020"]
 read_when: ["implement-beat", "change-beat-schema", "review-beat-plan", "debug-beat-submission", "design-agent-observability"]
 last_context_reviewed: "2026-09-29"
 ---

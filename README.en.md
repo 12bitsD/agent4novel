@@ -43,7 +43,7 @@ cd agent4novel
 docker compose up --build -d --wait
 ```
 
-Open **[localhost:8787](http://localhost:8787)**. With neither a model selected nor any provider API key, the app uses built-in examples for editing and approval without calling AI. Existing keys enable real-model calls; without an explicit model, DeepSeek takes priority over LongCat.
+Open **[localhost:8787](http://localhost:8787)**. With neither a model selected nor any provider API key, the app uses built-in examples for editing and approval without calling AI. Existing keys enable real-model calls; without an explicit model, DeepSeek takes priority over LongCat and Kimi.
 
 Stop with `docker compose stop`. Check health with `docker compose ps` and startup errors with `docker compose logs app`. If the port is occupied, run `A4N_HTTP_PORT=8790 docker compose up --build -d --wait` and open that port. One service provides Web and API, accessible only from this computer.
 
@@ -82,7 +82,7 @@ The directory contains `input.json`, `invocation.json`, `result.json`, and `meta
 
 ### Connect a real model
 
-**DeepSeek** and **LongCat** are supported; obtain an API key from your chosen provider. Wait until prose is shown as saved, then stop Docker with `docker compose stop`, or press `Ctrl+C` in the terminal running from source. Edit an existing `.env.local` directly; for first-time setup, create a file readable and writable only by your operating-system user:
+**DeepSeek**, **LongCat**, and **Kimi** are supported; obtain an API key from your chosen provider. Wait until prose is shown as saved, then stop Docker with `docker compose stop`, or press `Ctrl+C` in the terminal running from source. Edit an existing `.env.local` directly; for first-time setup, create a file readable and writable only by your operating-system user:
 
 ```bash
 cp .env.example .env.local
@@ -95,6 +95,7 @@ Fill in one of the following configurations in `.env.local`, leaving the other s
 | --- | --- | --- |
 | DeepSeek | `deepseek:deepseek-chat` | `DEEPSEEK_API_KEY` |
 | LongCat | `longcat:LongCat-2.0` | `LONGCAT_API_KEY` |
+| Kimi | `kimi:kimi-k2.8-highspeed` | `KIMI_API_KEY` (also accepts `MOONSHOT_API_KEY`) |
 
 Restart Docker with `docker compose --env-file .env.local up --build -d --wait`, or use `pnpm dev` for source runs. Selecting a model without its corresponding key causes startup to fail.
 

@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。最后更新：2026-10-10。本机 MVP 已发布；#35/PR45、#47/PR48 与 #49/PR50 已关闭/合并（本轮 GitHub 回读）。当前进入 MVP 后第二期；#12 与 #20 已按 Loop 完成、合并并关闭，#51 与 #46 也已合并关闭。下一步是 #21 章节重生与 #18 冲突设计的产品对齐；上下文分别见 [Wiki020](./wiki/020-beat-variant-compare.md) 与对应 issue。#17 按 [第二期路线](./plans/mvp-phase2-roadmap.md) 保持候选；#28/#29 与长篇质量评估保持后置。
+> 用途：context compaction / 新会话接力。最后更新：2026-10-10。本机 MVP 已发布；#35/PR45、#47/PR48 与 #49/PR50 已关闭/合并（本轮 GitHub 回读）。当前进入 MVP 后第二期；#12 与 #20 已按 Loop 完成、合并并关闭，#51 与 #46 也已合并关闭。当前新增 #60 Kimi provider 扩展；完成后继续 #21 章节重生与 #18 冲突设计的产品对齐。#17 按 [第二期路线](./plans/mvp-phase2-roadmap.md) 保持候选；#28/#29 与长篇质量评估保持后置。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -34,7 +34,8 @@
 - **#3c / issue #11** 预处理重构（wiki 011 ✅）：caption（提炼稿，落库即 approved）→ creative（单次 generateObject 直出 N 个创意稿，gateAfter = 创意海报比较视图）；保存/选定两命令；interview 机制整体移除；全应用多巴胺设计系统（亮暗双主题）
 - **#4** 大纲生成（wiki 004 ✅）：**推翻「分章每章一句话」**，大纲 = 弧线（冲突生命周期：标题/核心冲突/冲突发展/矛盾解决）+ 剧情点（标题/概要/落点）两层，与章节解耦；选定创意稿后 web 自动续跑 advance；保存 = pending + 通用 /approve 通过；读模型 5 态（selected 移除，加 awaiting-outline-review/outline-approved）
 - **#14** Agent 可用性基建（wiki 014 ✅）：`apps/cli` 的作品命令、`bin/a4n` 纯 JSON 输出与 smoke 探针；select/save-outline 自动回填 headVersion。LLM 遥测进程内账本，advance 内联 telemetry、logs 回看；systemHash 让 prompt 版本可追。历史 outline 截断促使上限从 8000 调至 16000，并加入 SKILL 篇幅纪律；这不保证所有模型请求成功。当前命令与独立实验入口见 [Wiki 014](./wiki/014-agent-cli-telemetry.md)。
-- **#16** 可配置 ModelRuntime + LongCat provider（[wiki 016](./wiki/016-model-runtime-provider-config.md) ✅）：RealStep 内统一 provider 路由、server-only 本地配置与请求超时；接入 LongCat OpenAI-compatible Chat Completions。2026-08-29 已完成独立生产 Step 真机验证，并留下完整 CLI smoke 的失败与重入结论；所有 work ID 都来自已结束的内存进程，当前不可继续使用，证据边界只看 wiki 016 与 LongCat research。
+- **#16** 可配置 ModelRuntime + DeepSeek、LongCat provider（[Wiki 016](./wiki/016-model-runtime-provider-config.md)）：RealStep 内统一 provider 路由、server-only 本地配置与请求超时；历史真实 Step 证据仍只看 Wiki 016 与 LongCat research。
+- **#60 当前候选** Kimi provider 扩展（[Wiki 060](./wiki/060-kimi-provider.md)）：工作区已加入 `kimi:kimi-k2.8-highspeed`、官方 OpenAI-compatible `/v1` endpoint、通用 fixture 迁移、Compose 运行期环境传递和旧 provider 回归保留；issue 仍 open，尚无 PR、CI 或远端回读，不把当前实现写成已交付。
 - **#13** 完整设定（[Wiki 013](./wiki/013-setting-generation-review.md)）：大纲通过后一次生成；六字段通用卡片、有限 Markdown、页内编辑、专用命令同 id/version 原子通过，不追加 V2。Store 读写快照隔离、生成提交条件、Web 未知结果恢复和 CLI 完整请求已落地。本票原末端 `setting-approved` 已由 #5/#22 延伸至首章正文，#6 再接入逐章循环；具体交付证据分别看各票 Wiki 和完成评论。
 
 - **#25** CLI 帮助零副作用与严格参数：顶级/子命令 `--help`、`-h` 在 I/O 前返回，非法语法返回安全 usage。保留业务结果与人工关卡；上下文及验收见 [Wiki 025](./wiki/025-cli-command-safety.md)。
@@ -116,7 +117,7 @@ CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化
 
 #22 已合入 main；其原 source、固定点和候选审核记录均属于已交付历史，入口为 [Wiki 022](./wiki/022-prose-generation-review.md)。新票从当前 main 核对基线，不能把旧票授权或审核结论当成新票完成证据。
 
-**当前交付 #12 创意稿整步再生**。#1、#6、#19、#9、#33、#7、#8、#35、#47、#49、#51、#46 已合并关闭，无需重复交付；#12 当前候选已完成实现与本地门禁，待正式双轴 review、PR/CI 和远端回读。第二期按 [路线计划](./plans/mvp-phase2-roadmap.md) 顺序推进；#20、#21、#18、#17 不提前关闭，#28/#29 保持第三期后置。普通工程细节由 Agent 自主收敛，涉及产品范围、不可逆数据影响、新权限或费用时再请求用户决定。
+**当前交付 #60 Kimi provider 扩展**。#1、#6、#19、#9、#33、#7、#8、#35、#47、#49、#51、#46、#12、#20 已合并关闭，无需重复交付；#60 当前候选已完成实现与本地门禁，待正式双轴 review、PR/CI 和远端回读。第二期按 [路线计划](./plans/mvp-phase2-roadmap.md) 顺序推进；#21、#18、#17 不提前关闭，#28/#29 保持第三期后置。普通工程细节由 Agent 自主收敛，涉及产品范围、不可逆数据影响、新权限或费用时再请求用户决定。
 
 | 交付批次 | 可验收结果 | 后续衔接 |
 |---|---|---|

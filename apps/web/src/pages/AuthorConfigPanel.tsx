@@ -98,7 +98,7 @@ export default function AuthorConfigPanel({ workId, onGuard }: { workId: string;
       <div className="config-fields">
       <label className="config-field">{prefix}模型 <select style={fieldStyle} aria-label={`${prefix}模型`} value={c.model ?? ''} onChange={e => change(target, 'model', e.target.value || undefined)}>
         <option value="">{target === 'defaults' ? '跟随启动配置' : '继承作品默认'}</option>
-        <option value="deepseek:deepseek-chat">DeepSeek Chat</option><option value="deepseek:deepseek-reasoner">DeepSeek Reasoner</option><option value="longcat:LongCat-2.0">LongCat 2.0</option>
+        <option value="deepseek:deepseek-chat">DeepSeek Chat</option><option value="deepseek:deepseek-reasoner">DeepSeek Reasoner</option><option value="longcat:LongCat-2.0">LongCat 2.0</option><option value="kimi:kimi-k2.8-highspeed">Kimi K2.8 Highspeed</option>
       </select></label>
       <label className="config-field">Prompt <select style={fieldStyle} aria-label={`${prefix}Prompt`} value={c.systemPromptRef === null ? '__none' : c.systemPromptRef ?? ''} onChange={e => change(target, 'systemPromptRef', e.target.value === '__none' ? null : e.target.value || undefined)}>
         <option value="">{target === 'defaults' ? '内置任务指导' : '继承作品默认'}</option><option value="__none">仅内置任务指导</option>

@@ -1,7 +1,7 @@
 ---
 wiki_id: "020"
 ticket: 20
-ticket_state: active
+ticket_state: done
 context_state: current
 summary: "当前 pending beat 再生后的 A/B 比较、显式选择与版本安全"
 topics: ["beat-regeneration", "variant-compare", "cas", "author-review"]
@@ -19,7 +19,7 @@ last_context_reviewed: "2026-10-10"
 
 - **读取时机**：修改当前章 beat 再生、比较、选择、CLI 或未知结果恢复时读取本页。
 - **原始目的**：作者重新生成章纲后，要能看清再生前快照与新结果，并决定使用哪一份，避免覆盖人工修改。
-- **实际落地**：当前 pending beat 再生成功后追加 B 并返回 A/B；选择 B 保留 B 为 pending；选择 A 追加 A-copy C 为 pending；所有选择都需要后续显式通过。
+- **实际落地**：当前 pending beat 再生成功后追加 B 并返回 A/B；选择 B 保留 B 为 pending；选择 A 追加 A-copy C 为 pending；所有选择都需要后续显式通过。PR57 已合并，issue 已关闭；交付证据入口见“交接结论”。
 - **当前价值**：本票只覆盖当前章节的 pending beat，不是通用历史服务，不允许已通过 beat 回退，不自动修改下游 prose。
 - **后续变化**：暂无后续票改变本页范围；#21 另行处理通过后章节重生。
 - **代码入口**：先读 `packages/contracts/src/beat-variant.ts`、`apps/server/src/pipeline/pipeline.ts`、`apps/server/src/routes/works.ts`、`apps/web/src/pages/Workspace.tsx` 和 `apps/cli/src/commands.ts`。
@@ -127,4 +127,4 @@ Round 1 曾发现 Web unknown 的核对按钮先将 ref 置为 `reconciling`，�
 
 ## 交接结论
 
-当前实现的核心版本语义已经落地，但本票在 Round 2 文档、回归、双轴复审、attestation、PR/CI 和 issue 关闭前仍不能标记 done。下一位 Agent 应先运行受保护 eval 和完整本地门禁，再核对本页与 `docs/schema.md`、双语 README、handoff 的事实一致性。不得把 #12 Docker Hub 限流或 #21/#18 的未决产品设计写成 #20 的完成条件。
+PR57 已以 `e0b2e43` 合入，#20 已关闭；交付、CI 与 C7 终止证据见 [完成评论](https://github.com/12bitsD/agent4novel/issues/20#issuecomment-6090215524)。本页完成审核字段保留发布前快照，其 pending 表述不代表当前票态。后续修改继续继承当前 pending beat、A/B/C、显式通过和 unknown readback 边界，针对新候选重跑相应验收；#21 的通过后章节重生与 #18 的产品设计另行对齐。

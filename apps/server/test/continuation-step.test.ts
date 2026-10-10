@@ -8,7 +8,7 @@ import { resetTelemetry, telemetryFor } from '../src/steps/telemetry.js'
 
 const mocks = vi.hoisted(() => ({ generateObject: vi.fn() }))
 vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
-vi.mock('../src/steps/llm.js', () => ({ modelRuntime: { mode: 'live', defaultModelId: 'deepseek:deepseek-chat', requestTimeoutMs: 120_000, generationSettings: () => ({ parameters: {}, options: {} }), languageModel: () => 'mock-model' } }))
+vi.mock('../src/steps/llm.js', () => ({ modelRuntime: { mode: 'live', defaultModelId: 'kimi:kimi-k2.8-highspeed', requestTimeoutMs: 120_000, generationSettings: () => ({ parameters: {}, options: {} }), languageModel: () => 'mock-model' } }))
 
 async function source() {
   const base = { workId: 'work-continuation', seed: '合成素材', upstream: {} }

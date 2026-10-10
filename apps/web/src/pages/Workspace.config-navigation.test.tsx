@@ -15,7 +15,7 @@ const first = { id: base.workId, title: '配置导航', seed: '脑洞', config: 
 const second = { ...first, currentChapter: 2, artifacts: [...first.artifacts, beat(2, false)], workflowState: 'awaiting-beat-review', allowedActions: ['approve', 'regenerate'],
   chapters: [{ ...first.chapters[0], allowedActions: ['save-draft'] }, { chapter: 2, title: '章节 2', beatStatus: 'pending', proseStatus: null, allowedActions: ['approve', 'regenerate'], needsContinuityReview: false }] }
 const initialConfig = (): AuthorConfigView => ({ workId: base.workId, revision: 0, document: { preferences: {}, defaults: {}, steps: {} }, files: [],
-  effective: authorStepIds.map(id => ({ id, model: 'deepseek:deepseek-chat', provider: 'deepseek', configured: false, executionMode: 'demo', generation: {}, appliedPreferences: {}, systemPrompt: null, skills: [], tools: [], directionCount: 2 })) })
+  effective: authorStepIds.map(id => ({ id, model: 'kimi:kimi-k2.8-highspeed', provider: 'kimi', configured: false, executionMode: 'demo', generation: {}, appliedPreferences: {}, systemPrompt: null, skills: [], tools: [], directionCount: 2 })) })
 const json = (body: unknown) => new Response(JSON.stringify(body))
 const startReceipt = { kind: 'advanced', stepId: 'beat', state: { workId: base.workId, stage: 'awaiting-approval', nextStepId: null, pendingGate: { kind: 'beat', chapter: 2 } }, telemetry: [] }
 function deferred<T>() {

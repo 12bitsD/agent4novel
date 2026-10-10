@@ -79,7 +79,7 @@ export async function callLlm<T>(args: {
     stepId: args.stepId,
     ...(args.chapter !== undefined ? { chapter: args.chapter } : {}),
     attemptId: args.attemptId,
-    model: /^(deepseek:[a-zA-Z0-9_.-]{1,96}|longcat:LongCat-2\.0)$/.test(model) ? model : 'unrecognized-model',
+    model: /^(deepseek:[a-zA-Z0-9_.-]{1,96}|kimi:[a-zA-Z0-9_.-]{1,96}|longcat:LongCat-2\.0)$/.test(model) ? model : 'unrecognized-model',
     ...(currentRequest() ? { requestId: currentRequest()!.requestId } : {}),
     promptChars: args.prompt.length,
     promptHash: hash12(args.prompt),

@@ -6,7 +6,7 @@ import { authorStepIds, type AuthorConfigView } from '@agent4novel/contracts'
 import Workspace from './Workspace.js'
 
 const config = (): AuthorConfigView => ({ workId: 'work-test', revision: 0, document: { preferences: {}, defaults: {}, steps: {} }, files: [],
-  effective: authorStepIds.map(id => ({ id, model: 'deepseek:deepseek-chat', provider: 'deepseek', configured: false, executionMode: 'demo', generation: {},
+  effective: authorStepIds.map(id => ({ id, model: 'kimi:kimi-k2.8-highspeed', provider: 'kimi', configured: false, executionMode: 'demo', generation: {},
     appliedPreferences: {}, systemPrompt: null, skills: [], tools: [], directionCount: 2 })) })
 const work = { id: 'work-test', title: 'test work', seed: 'source', config: {}, createdAt: '2026-09-30', artifacts: [], workflowState: 'ready-to-generate', nextStepId: 'caption', allowedActions: ['generate'] }
 function button(host: HTMLElement, text: string) { return Array.from(host.querySelectorAll('button')).find(b => b.textContent === text)! }

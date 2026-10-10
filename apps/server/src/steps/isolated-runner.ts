@@ -23,7 +23,7 @@ const consumes: Record<StepExperimentRequest['stepId'], ArtifactKind[]> = {
 export async function runIsolatedStep(request: StepExperimentRequest): Promise<StepExperimentResponse> {
   const runId = `experiment-${randomUUID()}`
   const selectedModel = request.config?.model ?? modelRuntime.defaultModelId
-  const model = /^(deepseek:[a-zA-Z0-9_.-]{1,96}|longcat:LongCat-2\.0)$/.test(selectedModel) ? selectedModel : 'unrecognized-model'
+  const model = /^(deepseek:[a-zA-Z0-9_.-]{1,96}|kimi:[a-zA-Z0-9_.-]{1,96}|longcat:LongCat-2\.0)$/.test(selectedModel) ? selectedModel : 'unrecognized-model'
   const base = { runId, stepId: request.stepId, executionMode: 'live' as const, model }
   let recorder: StepRecorder | undefined
   let parsed: StepExperimentRequest | undefined

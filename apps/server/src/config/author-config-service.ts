@@ -173,7 +173,7 @@ export class AuthorConfigService {
         if (this.runtime.mode === 'live') this.runtime.languageModel(model)
       } catch { throw invalid() }
       configs[id] = config
-      return { id, model, provider: model.startsWith('longcat:') ? 'longcat' as const : 'deepseek' as const,
+      return { id, model, provider: model.startsWith('longcat:') ? 'longcat' as const : model.startsWith('kimi:') ? 'kimi' as const : 'deepseek' as const,
         configured: this.runtime.mode === 'live', executionMode: this.runtime.mode, generation, appliedPreferences,
         systemPrompt: prompt, skills, tools: [], directionCount: config.directionCount ?? 2 }
     })

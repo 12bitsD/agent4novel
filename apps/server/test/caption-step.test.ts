@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
 vi.mock('../src/steps/llm.js', () => ({
   modelRuntime: {
-    defaultModelId: 'deepseek:deepseek-chat',
+    defaultModelId: 'kimi:kimi-k2.8-highspeed',
     requestTimeoutMs: 120_000, generationSettings: () => ({ parameters: {}, options: {} }),
     languageModel: mocks.languageModel,
   },
@@ -73,8 +73,8 @@ describe('caption RealStep', () => {
 
   it('config.model overrides the default model id', async () => {
     mocks.generateObject.mockResolvedValue({ object: validCaption, usage: {}, finishReason: 'stop' })
-    await runStep(step, baseInput, { model: 'deepseek:other' })
-    expect(mocks.languageModel).toHaveBeenCalledWith('deepseek:other')
+    await runStep(step, baseInput, { model: 'kimi:other' })
+    expect(mocks.languageModel).toHaveBeenCalledWith('kimi:other')
   })
 
   it('truncates oversized seed at the prompt assembly point', async () => {

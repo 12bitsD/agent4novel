@@ -9,7 +9,7 @@ import { beatArtifactSchema, proseArtifactSchema, workViewSchema } from '@agent4
 
 it('runs the executable through two chapters, revisits the first, and explicitly starts the third without duplicating work', async () => {
   const server = spawn(process.execPath, ['--import', createRequire(import.meta.url).resolve('tsx'), fileURLToPath(new URL('./fixtures/prose-cli-server.ts', import.meta.url)), '--continuation'],
-    { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, A4N_MODEL: '', LONGCAT_API_KEY: '', DEEPSEEK_API_KEY: '' } })
+    { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, A4N_MODEL: '', LONGCAT_API_KEY: '', KIMI_API_KEY: '', MOONSHOT_API_KEY: '', DEEPSEEK_API_KEY: '' } })
   const folder = await mkdtemp(join(tmpdir(), 'a4n-continuation-cli-'))
   let output = ''; let errors = ''
   server.stderr.on('data', chunk => { errors += String(chunk) })

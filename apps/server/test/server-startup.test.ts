@@ -16,7 +16,7 @@ describe('safe production startup', () => {
     try {
       if (source === 'storage') writeFileSync(dataDir, 'not a directory')
       const env = { ...process.env, A4N_DATA_DIR: dataDir, A4N_SEED_DEMO: '0', A4N_HOST: '127.0.0.1', A4N_PORT: '0',
-        A4N_MODEL: '', LONGCAT_API_KEY: '', DEEPSEEK_API_KEY: '', LONGCAT_BASE_URL: '', DEEPSEEK_BASE_URL: '' }
+        A4N_MODEL: '', LONGCAT_API_KEY: '', KIMI_API_KEY: '', MOONSHOT_API_KEY: '', DEEPSEEK_API_KEY: '', LONGCAT_BASE_URL: '', KIMI_BASE_URL: '', DEEPSEEK_BASE_URL: '' }
       if (source === 'server') env.A4N_PORT = 'private-token-port'
       if (source === 'provider') env.A4N_MODEL = 'private-token-model'
       const result = spawnSync(process.execPath, ['--import', tsx, startup], { env, encoding: 'utf8', timeout: 5_000 })

@@ -1,7 +1,7 @@
 ---
 wiki_id: "046"
 ticket: 46
-ticket_state: active
+ticket_state: done
 context_state: current
 summary: "首次并发打开 SQLite 空库时，对可重试锁竞争做有界初始化重试并保留安全诊断"
 topics: ["sqlite", "concurrency", "initialization", "reliability"]
@@ -19,7 +19,7 @@ last_context_reviewed: "2026-10-10"
 
 - **读取时机**：修改 SQLite 首次打开、迁移、WAL 设置、空书架 seed 或多进程存储竞争时，先读本页和 [Wiki009](./009-sqlite-persistence.md)。
 - **原始目的**：两个进程同时首次打开空数据库时，偶发一个进程收到 `unexpected-error`，而另一个进程完成 seed；已知解释是初始化/WAL 阶段的 SQLite 锁竞争。
-- **实际落地**：`SqliteStore` 首次打开将外键、schema/migration、WAL 和 `synchronous=FULL` 放入同一个有界初始化重试封装；只重试显式 `SQLITE_BUSY*`，并通过安全诊断暴露阶段、错误码、attempts 和 retryable。未知 schema、损坏库、迁移错误、CAS 和终止恢复语义保持不变。
+- **实际落地**：`SqliteStore` 首次打开将外键、schema/migration、WAL 和 `synchronous=FULL` 放入同一个有界初始化重试封装；只重试显式 `SQLITE_BUSY*`，并通过安全诊断暴露阶段、错误码、attempts 和 retryable。未知 schema、损坏库、迁移错误、CAS 和终止恢复语义保持不变。PR55 已合并，issue 已关闭；交付证据入口见“交接结论”。
 - **当前价值**：#51 的节点实验目录与作品 SQLite 数据库保持分离；本票只修复作品数据库初始化可靠性，不建立实验记录平台。
 - **后续变化**：暂无。
 - **代码入口**：`SqliteStore` 构造函数、`initializeSqliteDatabase`、`initializeSqliteSchema`、`createWorksIfEmpty`、`test/sqlite-initialization.test.ts` 和 `test/sqlite-process.test.ts`。
@@ -112,4 +112,4 @@ pnpm build
 
 ## 交接结论
 
-实现 Loop 已完成到 R3，候选尚未发布。后续必须按完成审核清单重新冻结候选、取得双轴 review、完成 PR/CI/main 远端回读，并在 GitHub 完成评论后关闭 #46；在此之前不得宣称第二期可靠性或整个第二期完成。
+实现 Loop 经 R3 后已随 PR55、merge `261b05e` 交付，#46 已关闭；终止证据见 [完成评论](https://github.com/12bitsD/agent4novel/issues/46#issuecomment-6088653824)。本页完成审核字段保留发布前快照。下一位 Agent 可继承有界 `SQLITE_BUSY*` 初始化重试与安全诊断；运行期通用重试、其他 SQLite 错误或整个第二期完成仍不能由本票证据推出。
