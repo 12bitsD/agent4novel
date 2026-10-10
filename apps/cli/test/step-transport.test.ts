@@ -13,8 +13,8 @@ const hash = (text: string) => createHash('sha256').update(text).digest('hex').s
 const caption = { inputStage: '主线', summary: '合成故事的开发价值', elements: [], gaps: [] }
 
 async function invoke(args: string[], providerUrl: string, env: NodeJS.ProcessEnv = {}) {
-  const child = spawn(bin, args, { env: cliTestEnv({ A4N_MODEL: 'longcat:LongCat-2.0',
-    LONGCAT_API_KEY: 'synthetic-step-key', LONGCAT_BASE_URL: providerUrl, DEEPSEEK_API_KEY: '',
+  const child = spawn(bin, args, { env: cliTestEnv({ A4N_MODEL: 'kimi:kimi-k2.8-highspeed',
+    KIMI_API_KEY: 'synthetic-step-key', KIMI_BASE_URL: providerUrl, LONGCAT_API_KEY: '', DEEPSEEK_API_KEY: '',
     A4N_LLM_TIMEOUT_MS: '5000', A4N_CLI_TIMEOUT_MS: '10000', ...env,
   }), stdio: ['ignore', 'pipe', 'pipe'] })
   let stdout = ''; let stderr = ''
@@ -31,8 +31,9 @@ describe('run-step through a local mock provider', () => {
     const recordDir = join(directory, 'run-a')
     const server = createServer(async (req, res) => {
       let source = ''; for await (const chunk of req) source += chunk
+      expect(JSON.parse(source)).toMatchObject({ model: 'kimi-k2.8-highspeed', response_format: { type: 'json_object' } })
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ id: 'mock-record', model: 'LongCat-2.0', choices: [{ index: 0,
+      res.end(JSON.stringify({ id: 'mock-record', model: 'kimi-k2.8-highspeed', choices: [{ index: 0,
         message: { role: 'assistant', content: JSON.stringify(caption) }, finish_reason: 'stop' }] }))
     })
     server.listen(0, '127.0.0.1'); await once(server, 'listening')
@@ -41,14 +42,15 @@ describe('run-step through a local mock provider', () => {
       const seedFile = join(directory, 'seed.txt'); writeFileSync(seedFile, 'recorded cli seed')
       const spFile = join(directory, 'sp.md'); writeFileSync(spFile, 'recorded cli system')
       const result = await invoke(['run-step', 'caption', '--seed-file', seedFile, '--system-prompt-file', spFile, '--record-dir', recordDir,
-        '--thinking', 'off', '--temperature', '0.4', '--top-p', '0.6'], `http://127.0.0.1:${address.port}/v1`)
+        '--temperature', '0.4', '--top-p', '0.6'], `http://127.0.0.1:${address.port}/v1`)
       expect(result.code, result.stderr).toBe(0)
-      expect(JSON.parse(result.stdout)).toMatchObject({ kind: 'succeeded', recording: { status: 'complete', dir: recordDir } })
+      expect(JSON.parse(result.stdout)).toMatchObject({ kind: 'succeeded', model: 'kimi:kimi-k2.8-highspeed', recording: { status: 'complete', dir: recordDir } })
       expect(readdirSync(recordDir).sort()).toEqual(['input.json', 'invocation.json', 'meta.json', 'result.json'])
       const invocation = JSON.parse(readFileSync(join(recordDir, 'invocation.json'), 'utf8'))
       const recordedResult = JSON.parse(readFileSync(join(recordDir, 'result.json'), 'utf8'))
-      expect(invocation).toMatchObject({ captured: true, system: 'recorded cli system', prompt: '作者原始素材:\nrecorded cli seed\n\n请输出提炼稿。',
-        generation: { thinking: 'disabled', temperature: 0.4, topP: 0.6 }, maxOutputTokens: 8000 })
+      expect(invocation).toMatchObject({ captured: true, model: 'kimi:kimi-k2.8-highspeed', effectiveConfig: { model: 'kimi:kimi-k2.8-highspeed' },
+        system: 'recorded cli system', prompt: '作者原始素材:\nrecorded cli seed\n\n请输出提炼稿。',
+        generation: { temperature: 0.4, topP: 0.6 }, maxOutputTokens: 8000 })
       expect(recordedResult).toMatchObject({ status: 'succeeded', content: caption })
       expect(statSync(recordDir).mode & 0o777).toBe(0o700)
       for (const file of ['input.json', 'invocation.json', 'meta.json', 'result.json']) expect(statSync(join(recordDir, file)).mode & 0o777).toBe(0o600)
@@ -61,11 +63,12 @@ describe('run-step through a local mock provider', () => {
     const server = createServer(async (req, res) => {
       let source = ''; for await (const chunk of req) source += chunk
       const request = JSON.parse(source) as { messages: { role: string; content: string }[] }
+      expect(request).toMatchObject({ model: 'kimi-k2.8-highspeed' })
       requests.push(request)
       const system = request.messages.find(message => message.role === 'system')?.content ?? ''
       const text = system.includes('B版') ? 'B版正文：第二段更具体。' : 'A版正文：第二段仍需调整。'
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ id: 'mock-iteration-loop', model: 'LongCat-2.0', choices: [{ index: 0,
+      res.end(JSON.stringify({ id: 'mock-iteration-loop', model: 'kimi-k2.8-highspeed', choices: [{ index: 0,
         message: { role: 'assistant', content: JSON.stringify({ text }) }, finish_reason: 'stop' }] }))
     })
     server.listen(0, '127.0.0.1'); await once(server, 'listening')
@@ -156,7 +159,7 @@ describe('run-step through a local mock provider', () => {
       let source = ''; for await (const chunk of req) source += chunk
       requests.push(JSON.parse(source))
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ id: 'mock-prose-two', model: 'LongCat-2.0', choices: [{ index: 0,
+      res.end(JSON.stringify({ id: 'mock-prose-two', model: 'kimi-k2.8-highspeed', choices: [{ index: 0,
         message: { role: 'assistant', content: JSON.stringify({ text: '第二章正文。' }) }, finish_reason: 'stop' }] }))
     })
     server.listen(0, '127.0.0.1'); await once(server, 'listening')
@@ -172,8 +175,9 @@ describe('run-step through a local mock provider', () => {
       const providerUrl = `http://127.0.0.1:${address.port}/v1`
       const result = await invoke(['run-step', 'prose', '--input-file', file], providerUrl)
       expect(result.code, result.stderr).toBe(0)
-      expect(JSON.parse(result.stdout)).toMatchObject({ kind: 'succeeded', stepId: 'prose', content: { text: '第二章正文。' }, telemetry: [{ chapter: 2, ok: true }] })
+      expect(JSON.parse(result.stdout)).toMatchObject({ kind: 'succeeded', stepId: 'prose', model: 'kimi:kimi-k2.8-highspeed', content: { text: '第二章正文。' }, telemetry: [{ chapter: 2, model: 'kimi:kimi-k2.8-highspeed', ok: true }] })
       expect(requests).toHaveLength(1)
+      expect(requests[0]).toMatchObject({ model: 'kimi-k2.8-highspeed' })
       expect(requests[0]!.messages.find(message => message.role === 'user')?.content).toContain(JSON.stringify(previousChapter))
       for (const invalid of [{ ...input, chapter: 1 }, { ...input, chapter: 3 }, { ...input, upstream: { ...input.upstream, previousChapter: undefined } }]) {
         writeFileSync(file, JSON.stringify(invalid))
@@ -193,21 +197,21 @@ describe('run-step through a local mock provider', () => {
       let source = ''; for await (const chunk of req) source += chunk
       requests.push(JSON.parse(source))
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ id: 'mock-model-override', model: 'LongCat-2.0', choices: [{ index: 0,
+      res.end(JSON.stringify({ id: 'mock-model-override', model: 'kimi-k2.8-highspeed', choices: [{ index: 0,
         message: { role: 'assistant', content: JSON.stringify(caption) }, finish_reason: 'stop' }] }))
     })
     server.listen(0, '127.0.0.1'); await once(server, 'listening')
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
     try {
       const seedFile = join(directory, 'seed.txt'); writeFileSync(seedFile, 'synthetic model override seed')
-      const configFile = join(directory, 'config.json'); writeFileSync(configFile, JSON.stringify({ model: 'longcat:LongCat-2.0' }))
+      const configFile = join(directory, 'config.json'); writeFileSync(configFile, JSON.stringify({ model: 'kimi:kimi-k2.8-highspeed' }))
       const args = ['run-step', 'caption', '--seed-file', seedFile, '--config-file', configFile]
       const providerUrl = `http://127.0.0.1:${address.port}/v1`
       const result = await invoke(args, providerUrl, { A4N_MODEL: 'deepseek:deepseek-chat' })
       expect(result.code).toBe(0)
-      expect(JSON.parse(result.stdout)).toMatchObject({ kind: 'succeeded', model: 'longcat:LongCat-2.0', content: caption })
+      expect(JSON.parse(result.stdout)).toMatchObject({ kind: 'succeeded', model: 'kimi:kimi-k2.8-highspeed', content: caption })
       expect(requests).toHaveLength(1)
-      expect(requests[0]).toMatchObject({ model: 'LongCat-2.0' })
+      expect(requests[0]).toMatchObject({ model: 'kimi-k2.8-highspeed' })
       writeFileSync(configFile, JSON.stringify({ model: 'deepseek:deepseek-chat' }))
       const unavailable = await invoke(args, providerUrl)
       expect(unavailable.code).toBe(1)
@@ -217,7 +221,7 @@ describe('run-step through a local mock provider', () => {
     } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
   }, 20000)
 
-  it('sends explicit thinking and sampling controls from the executable to the provider', async () => {
+  it('sends LongCat-specific thinking and sampling controls from the executable to the provider', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'a4n-step-controls-'))
     const requests: unknown[] = []
     const server = createServer(async (req, res) => {
@@ -232,8 +236,10 @@ describe('run-step through a local mock provider', () => {
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
     try {
       const seedFile = join(directory, 'seed.txt'); writeFileSync(seedFile, 'synthetic generation controls seed')
+      const providerUrl = `http://127.0.0.1:${address.port}/v1`
       const result = await invoke(['run-step', 'caption', '--seed-file', seedFile,
-        '--thinking', 'off', '--temperature', '0.9', '--top-p', '0.95'], `http://127.0.0.1:${address.port}/v1`)
+        '--thinking', 'off', '--temperature', '0.9', '--top-p', '0.95'], providerUrl,
+        { A4N_MODEL: 'longcat:LongCat-2.0', LONGCAT_API_KEY: 'synthetic-longcat-key', LONGCAT_BASE_URL: providerUrl, KIMI_API_KEY: '' })
       expect(result.code).toBe(0)
       expect(requests).toHaveLength(1)
       expect(requests[0]).toMatchObject({ thinking: { type: 'disabled' }, temperature: 0.9, top_p: 0.95 })
@@ -241,7 +247,7 @@ describe('run-step through a local mock provider', () => {
     } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
   }, 20000)
 
-  it('uses config-file controls and lets flags override only the supplied fields', async () => {
+  it('uses LongCat config-file controls and lets flags override only the supplied fields', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'a4n-step-config-controls-'))
     const requests: unknown[] = []
     const server = createServer(async (req, res) => {
@@ -260,10 +266,11 @@ describe('run-step through a local mock provider', () => {
       const args = ['run-step', 'caption', '--seed-file', seedFile, '--config-file', configFile]
       const providerUrl = `http://127.0.0.1:${address.port}/v1`
       writeFileSync(configFile, JSON.stringify({ thinking: 'enabled', temperature: 0.4, topP: 0.6 }))
-      expect((await invoke(args, providerUrl)).code).toBe(0)
-      expect((await invoke([...args, '--thinking', 'off', '--temperature', '0.9'], providerUrl)).code).toBe(0)
+      const longCatEnv = { A4N_MODEL: 'longcat:LongCat-2.0', LONGCAT_API_KEY: 'synthetic-longcat-key', LONGCAT_BASE_URL: providerUrl, KIMI_API_KEY: '' }
+      expect((await invoke(args, providerUrl, longCatEnv)).code).toBe(0)
+      expect((await invoke([...args, '--thinking', 'off', '--temperature', '0.9'], providerUrl, longCatEnv)).code).toBe(0)
       writeFileSync(configFile, JSON.stringify({ thinking: 'disabled', temperature: 0, topP: 1 }))
-      expect((await invoke([...args, '--thinking', 'on'], providerUrl)).code).toBe(0)
+      expect((await invoke([...args, '--thinking', 'on'], providerUrl, longCatEnv)).code).toBe(0)
       expect(requests).toHaveLength(3)
       expect(requests[0]).toMatchObject({ thinking: { type: 'enabled' }, temperature: 0.4, top_p: 0.6 })
       expect(requests[1]).toMatchObject({ thinking: { type: 'disabled' }, temperature: 0.9, top_p: 0.6 })
@@ -317,7 +324,7 @@ describe('run-step through a local mock provider', () => {
       let source = ''; for await (const chunk of req) source += chunk
       requests.push(JSON.parse(source))
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ id: 'mock-caption', model: 'LongCat-2.0', choices: [{ index: 0,
+      res.end(JSON.stringify({ id: 'mock-caption', model: 'kimi-k2.8-highspeed', choices: [{ index: 0,
         message: { role: 'assistant', content: JSON.stringify(caption) }, finish_reason: 'stop' }],
         usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 } }))
     })
@@ -336,7 +343,7 @@ describe('run-step through a local mock provider', () => {
         expect(output).toMatchObject({ kind: 'succeeded', stepId: 'caption', executionMode: 'live', content: caption })
         expect(output.telemetry).toHaveLength(1)
         expect(output.telemetry[0]).toMatchObject({ systemHash: hash(system), promptHash: hash('作者原始素材:\n合成素材\n\n请输出提炼稿。'), ok: true })
-        expect(output.telemetry[0].generation).toEqual({ thinking: 'disabled', temperature: 0.9, topP: 0.95 })
+        expect(output.telemetry[0].generation).toEqual({})
         expect(result.stdout).not.toContain('synthetic-step-key')
         results.push(output)
       }
@@ -344,7 +351,9 @@ describe('run-step through a local mock provider', () => {
       expect(requests[0]!.messages.find(m => m.role === 'user')).toEqual(requests[1]!.messages.find(m => m.role === 'user'))
       expect(requests.map(r => r.max_tokens)).toEqual([8000, 8000])
       for (const request of requests) {
-        expect(request).toMatchObject({ thinking: { type: 'disabled' }, temperature: 0.9, top_p: 0.95 })
+        expect(request).not.toHaveProperty('thinking')
+        expect(request).not.toHaveProperty('temperature')
+        expect(request).not.toHaveProperty('top_p')
         expect(request).not.toHaveProperty('top_k')
       }
       expect(requests[0]!.messages.find(m => m.role === 'system')?.content).toContain('V1 合成提炼指令')
@@ -394,7 +403,7 @@ describe('run-step through a local mock provider', () => {
       const seedFile = join(directory, 'seed.txt'); writeFileSync(seedFile, 'private-seed-sentinel')
       const result = await invoke(['run-step', 'caption', '--seed-file', seedFile], `http://127.0.0.1:${address.port}/v1`)
       expect(result.code).toBe(1); expect(result.stdout).toBe('')
-      expect(JSON.parse(result.stderr)).toMatchObject({ kind: 'failed', code: 'llm-unavailable', stepId: 'caption', telemetry: [{ ok: false }] })
+      expect(JSON.parse(result.stderr)).toMatchObject({ kind: 'failed', code: 'llm-unavailable', stepId: 'caption', model: 'kimi:kimi-k2.8-highspeed', telemetry: [{ model: 'kimi:kimi-k2.8-highspeed', ok: false }] })
       expect(result.stderr).not.toContain('private-provider-sentinel')
       expect(result.stderr).not.toContain('private-seed-sentinel')
       expect(result.stderr).not.toContain('synthetic-step-key')

@@ -19,7 +19,7 @@ const port = await new Promise((resolve, reject) => {
   })
 })
 // The smoke never loads .env.local, and inherited supplier settings cannot enable a live call.
-const env = { ...process.env, A4N_HTTP_PORT: String(port), A4N_MODEL: '', LONGCAT_API_KEY: '', DEEPSEEK_API_KEY: '',
+const env = { ...process.env, A4N_HTTP_PORT: String(port), A4N_MODEL: '', LONGCAT_API_KEY: '', DEEPSEEK_API_KEY: '', KIMI_API_KEY: '', MOONSHOT_API_KEY: '',
   LONGCAT_BASE_URL: '', DEEPSEEK_BASE_URL: '', A4N_LLM_TIMEOUT_MS: '120000', A4N_SEED_DEMO: '0' }
 async function command(file, args, { json = false, quiet = false, binary = false, input } = {}) {
   const result = await new Promise((resolve, reject) => {

@@ -23,14 +23,14 @@ const provider = createServer(async (req, res) => {
     assert.ok(request.messages.some(message => message.role === 'system' && message.content.length > 20))
     const system = request.messages.find(message => message.role === 'system').content
     assert.ok(system.includes('AUTHOR_GUIDANCE_SENTINEL'))
-    assert.equal(request.model, 'LongCat-2.0')
+    assert.equal(request.model, 'kimi-k2.8-highspeed')
     assert.equal(request.temperature, 0.25)
     assert.equal(request.top_p, 0.8)
     systems.push(system)
     requests += 1
     assert.ok(requests <= 2)
     res.writeHead(200, { 'content-type': 'application/json' })
-    res.end(JSON.stringify({ id: 'synthetic-completion', object: 'chat.completion', model: 'LongCat-2.0',
+    res.end(JSON.stringify({ id: 'synthetic-completion', object: 'chat.completion', model: 'kimi-k2.8-highspeed',
       choices: [{ index: 0, message: { role: 'assistant', content: JSON.stringify(requests === 1 ? caption : creative) }, finish_reason: 'stop' }],
       usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 } }))
   } catch { res.writeHead(500); res.end('{}') }
@@ -43,8 +43,8 @@ try {
   child = spawn(process.execPath, [join(root, 'apps/server/dist/start.js')], {
     cwd: folder, stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, A4N_DATA_DIR: join(folder, 'data'), A4N_HOST: '127.0.0.1', A4N_PORT: '0', A4N_SEED_DEMO: '0',
-      A4N_SERVE_WEB: '1', A4N_MODEL: 'longcat:LongCat-2.0', LONGCAT_API_KEY: 'synthetic-local-test', DEEPSEEK_API_KEY: '',
-      LONGCAT_BASE_URL: `http://127.0.0.1:${providerPort}`, DEEPSEEK_BASE_URL: '', A4N_LLM_TIMEOUT_MS: '10000' },
+      A4N_SERVE_WEB: '1', A4N_MODEL: 'kimi:kimi-k2.8-highspeed', KIMI_API_KEY: 'synthetic-local-test', DEEPSEEK_API_KEY: '',
+      KIMI_BASE_URL: `http://127.0.0.1:${providerPort}`, DEEPSEEK_BASE_URL: '', A4N_LLM_TIMEOUT_MS: '10000' },
   })
   let output = ''; let stderr = ''
   child.stderr.on('data', data => { stderr += data })
@@ -77,7 +77,7 @@ try {
   await writeFile(promptPath, 'AUTHOR_GUIDANCE_SENTINEL: concise writing.')
   const prompt = await cli(['upload-prompt', work.id, '--file', promptPath, '--request-id', randomUUID()])
   await writeFile(configPath, JSON.stringify({ requestId: randomUUID(), expectedRevision: 0,
-    document: { preferences: { genre: 'mock-genre' }, defaults: { model: 'longcat:LongCat-2.0', systemPromptRef: prompt.id, temperature: 0.25, topP: 0.8 }, steps: {} } }))
+    document: { preferences: { genre: 'mock-genre' }, defaults: { model: 'kimi:kimi-k2.8-highspeed', systemPromptRef: prompt.id, temperature: 0.25, topP: 0.8 }, steps: {} } }))
   await cli(['save-agent-config', work.id, '--file', configPath])
   assert.equal((await cli(['agent-config', work.id])).revision, 1)
   const outcome = await cli(['advance', work.id])
