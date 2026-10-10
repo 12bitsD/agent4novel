@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { settingExtensionRoutes } from './routes/setting-extensions.js'
 import { worksRoutes } from './routes/works.js'
 import type { Pipeline } from './pipeline/pipeline.js'
 import type { WorkStore } from './store/work-store.js'
@@ -29,6 +30,7 @@ export function createApp(deps: AppDeps): Hono {
   app.get('/api/config', (c) => contractJson(c, appConfigSchema, deps.meta))
   app.get('/api/health', (c) => contractJson(c, healthSchema, { status: 'ok' }))
   app.route('/', worksRoutes(deps))
+  app.route('/', settingExtensionRoutes(deps.store))
   if (deps.authorConfig) app.route('/', authorConfigRoutes(deps.authorConfig))
   if (deps.badExamples) app.route('/', badExampleRoutes(deps.badExamples))
   if (deps.webRoot) app.use('*', staticWeb(deps.webRoot))

@@ -88,7 +88,7 @@ describe('immutable bad examples', () => {
       f.store.saveAuthorConfig(f.work.id, { requestId: randomUUID(), expectedRevision: 0, document: { preferences: { style: '合成风格' }, defaults: {}, steps: {} } })
       const before = f.store.getWork(f.work.id), config = f.store.getAuthorConfig(f.work.id)
       f.store.close()
-      const raw = new Database(f.path); raw.exec('DROP INDEX bad_example_work_chapter; DROP TABLE bad_examples; PRAGMA user_version = 2'); raw.close()
+      const raw = new Database(f.path); raw.exec('DROP TABLE setting_extension_proposals; DROP INDEX bad_example_work_chapter; DROP TABLE bad_examples; PRAGMA user_version = 2'); raw.close()
       const reopened = new SqliteStore(f.path)
       try { expect(reopened.getWork(f.work.id)).toEqual(before); expect(reopened.getAuthorConfig(f.work.id)).toEqual(config); expect(reopened.markBadExample(f.work.id, f.input).text).toBe('同段') }
       finally { reopened.close() }

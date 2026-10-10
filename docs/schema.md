@@ -97,12 +97,13 @@ Web/CLI 在消费端解析公开响应并核对资源身份。错误体畸形、
 
 ## SQLite 持久化：#9
 
-生产使用 [`SqliteStore`](../apps/server/src/store/sqlite-store.ts) 实现 `WorkStore`；`InMemoryStore` 继续用于行为测试。SQLite v3 由 [`sqlite-schema.ts`](../apps/server/src/store/sqlite-schema.ts) 定义；继承 v1 的两张 `STRICT` 表持有作品与每个产物版本，不按 kind 拆表。v2 新增作者配置与版本文件元数据两表，文本不入数据库；v3再新增不可变坏例表。
+生产使用 [`SqliteStore`](../apps/server/src/store/sqlite-store.ts) 实现 `WorkStore`；`InMemoryStore` 继续用于行为测试。SQLite v4 由 [`sqlite-schema.ts`](../apps/server/src/store/sqlite-schema.ts) 定义；继承 v1 的两张 `STRICT` 表持有作品与每个产物版本，不按 kind 拆表。v2 新增作者配置与版本文件元数据两表，v3 再新增不可变坏例表，v4 新增独立的设定扩展操作表。
 
 | 表 | 列与存储形态 |
 | --- | --- |
 | `works` | `id` 主键；`title`、`seed`、`created_at` 非空文本；`config` 为通过共享 AgentConfig 校验的 JSON 文本 |
 | `artifacts` | `id` 主键；`work_id` 外键指向 `works.id`；`kind`、`version`、`human_status`、`created_at`；`chapter` 为可空整数；`content` 为 JSON 文本；可空 `inputs` 为生成输入引用的 JSON 文本 |
+| `setting_extension_proposals` | `(work_id, request_id)` 主键；`record` 为严格 JSON 操作记录，保存原始请求、基准引用、服务端生成的单个扩展、状态和候选引用；不是 canonical Setting 存储 |
 
 - SQL 校验六种 kind、两种 human status、JSON 语法以及版本为正安全整数。作品级 kind 的 chapter 必须为 SQL `NULL`；Beat/Prose 的 chapter 必须为正安全整数。返回 JavaScript 时 `NULL` chapter 恢复为字段缺省。
 - 两个部分唯一索引分别约束 `(work_id, kind, version) WHERE chapter IS NULL` 和 `(work_id, kind, chapter, version) WHERE chapter IS NOT NULL`，防止普通含 NULL 唯一约束遗漏作品级重复版本。
@@ -117,7 +118,7 @@ Web/CLI 在消费端解析公开响应并核对资源身份。错误体畸形、
 
 ### Schema 版本与恢复边界
 
-数据库版本使用 `PRAGMA user_version = 3`。初始化在取得写锁后重新读取版本和结构，只对真正无用户对象的 v0 空库建表；已有 v1/v2 必须精确匹配已知表与索引定义，再事务迁移到 v3；v3 同样严格核对结构。未来版本、未知旧结构或不匹配结构使启动失败，不删库、不降级、不悄悄退回内存。当前未提供历史库修复、导入或旧内存实例迁移工具。
+数据库版本使用 `PRAGMA user_version = 4`。初始化在取得写锁后重新读取版本和结构，只对真正无用户对象的 v0 空库建表；已有 v1/v2/v3 必须精确匹配已知表与索引定义，再事务迁移到 v4；v4 同样严格核对结构。未来版本、未知旧结构或不匹配结构使启动失败，不删库、不降级、不悄悄退回内存。当前未提供历史库修复、导入或旧内存实例迁移工具。
 
 连接启用外键、WAL、`synchronous = FULL` 和 5 秒 busy timeout。默认数据目录与备份/恢复操作见 [Wiki 009](./wiki/009-sqlite-persistence.md)。同一数据目录中的已提交作品、产物版本、通过状态和 inputs 可在服务重启后读取；未保存页面草稿、进程内遥测、正在运行的模型调用不在该持久化范围。
 
@@ -262,6 +263,18 @@ type SettingApiError = ApiError & { issues?: ValidationIssue[] }
 `expectedHeadVersion` 与状态检查须在同一原子操作中执行。并发或重复请求不能再次覆盖已通过内容；校验或冲突失败不修改原记录。网络响应丢失时应回读确认服务器状态，不能把传输失败等同于服务器未提交。
 
 Setting 的状态迁移是单向的：首次生成创建 pending，专用完成命令将同一版本置为 approved。通用 `setStatus` 不接受 Setting，已通过内容不能退回 pending 后再次完成。
+
+### 设定扩展：#17
+
+通过后的设定只允许由显式的 `propose → approve/cancel` 操作追加一个新 `extensions` section。`SettingExtensionProposal` 持久化在 `setting_extension_proposals`，不是 pending canonical Setting；草稿不携带客户端 ID，section/item ID 在 propose 时由服务端生成并在 approve 后保持不变。approve 只接受 `requestId` 与 `expectedBase`，在同一 Store 事务中重检当前 approved Setting 基准和所有当前 Beat/Prose head 的 pending guard，再追加一个新的 approved Setting Artifact，`inputs` 记录旧基准。失败不部分追加，cancel 不写 Artifact。
+
+公开资源为 `GET /api/works/:id/setting-extensions/:requestId`，动作分别为 `POST /api/works/:id/setting-extensions`、`.../:requestId/approve` 和 `.../:requestId/cancel`。资源区分 `none/pending/approved/cancelled/stale`；`stale` 是读时投影，不改变持久状态。impact 只统计当前通过正文章数、当前 pending Beat/Prose 章数及连续性提示，不执行语义冲突检测。历史章节的 `inputs` 不变，后续新章节从最新 approved Setting 读取。requestId 重放只返回原回执；传输不确定时由调用方 GET 回读，不自动重 POST。原始 UTF-8 body 超限返回 413，合并后的 Setting 逻辑上限返回 422。
+
+Proposal record 是严格的操作记录：持久化的 `request` 带有同一作品的 `workId`，其 `requestId`、`expectedBase` 必须分别与外层记录一致；`approved` 必须有 candidate，`pending/cancelled` 不得有 candidate。读取 SQLite record 时重新执行这些不变量，损坏记录返回不可用而不是合法资源。扩展草稿的标题、条目标题和条目内容先按原始输入长度校验，再去除首尾空白；proposal resource 与 approved Setting 的末尾 extension 使用同一规范化值。
+
+approved record 的 candidate 通过共享 readback validator 按精确 `artifactId/version` 从当前 store 的历史版本读取，不要求它是当前 Setting head；必须仍属于同一作品、kind 为 `setting`、状态为 `approved`，且版本／ID 匹配。其 `content.extensions` 必须包含 record.extension，`inputs` 必须包含 stored `expectedBase`。pending/cancelled 不读取 candidate；缺失或不匹配的 candidate 是损坏存储，不返回合法 resource。
+
+场景边界：新增尚未出场的人物可以作为 append-only extension 提出并在作者通过后供未来章节使用。修改已经写入正文的世界规则不属于本票能力；应回到 Human 决策或后续票据，不通过该接口覆盖既有事实或自动重写历史章节。
 
 此设计沿用 `Work + Artifact`，没有为每种产物分别建表。当前生产使用 `SqliteStore`，内存实现保留用于测试；物理形状见 SQLite 持久化章节。`materials` 的多素材生命周期尚未定案，不是 #13 的新实体。
 

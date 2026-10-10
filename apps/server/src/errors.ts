@@ -25,6 +25,14 @@ export type KnownErrorCode =
   | 'llm-invalid-output'
   | 'llm-unavailable'
   | 'llm-timeout'
+  | 'setting-extension-base-conflict'
+  | 'setting-extension-request-conflict'
+  | 'setting-extension-stale'
+  | 'setting-extension-chapter-pending'
+  | 'setting-extension-state-conflict'
+  | 'setting-extension-limit'
+  | 'setting-extension-invalid'
+  | 'setting-extension-not-found'
 
 export class KnownError extends Error {
   readonly code: KnownErrorCode

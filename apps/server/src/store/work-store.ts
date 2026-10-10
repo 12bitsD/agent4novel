@@ -1,4 +1,8 @@
-import type { Artifact, ArtifactKind, HumanStatus, JsonValue, Work, WorkDetail, WorkSummary, WorkCreateRequest } from '@agent4novel/contracts'
+import type {
+  Artifact, ArtifactKind, HumanStatus, JsonValue, Work, WorkDetail, WorkSummary, WorkCreateRequest,
+  SettingExtensionActionRequest, SettingExtensionProposeRequest,
+  SettingExtensionReceipt, SettingExtensionResource,
+} from '@agent4novel/contracts'
 
 export type ArtifactPrecondition = {
   kind: ArtifactKind
@@ -30,7 +34,14 @@ export type FinalizeArtifactInput = {
 
 export type SaveArtifactInput = FinalizeArtifactInput & { expectedHumanStatus: HumanStatus }
 
-export interface WorkStore {
+export type SettingExtensionStore = {
+  proposeSettingExtension(workId: string, request: SettingExtensionProposeRequest): SettingExtensionReceipt
+  approveSettingExtension(workId: string, request: SettingExtensionActionRequest): SettingExtensionReceipt
+  cancelSettingExtension(workId: string, request: SettingExtensionActionRequest): SettingExtensionReceipt
+  getSettingExtension(workId: string, requestId: string): SettingExtensionResource
+}
+
+export interface WorkStore extends SettingExtensionStore {
   // Inputs and returned snapshots must not expose mutable store-owned references.
   createWork(input: WorkCreateRequest): Work
   listWorks(): WorkSummary[]
