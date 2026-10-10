@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { beatContentSchema, jsonValueSchema, proseContentSchema, settingContentSchema, workViewSchema, proseCommandResponseSchema, advanceOutcomeDtoSchema } from '@agent4novel/contracts'
+import { beatContentSchema, beatArtifactSchema, beatCommandResponseSchema, jsonValueSchema, proseContentSchema, proseArtifactSchema, proseCommandResponseSchema, settingContentSchema, workViewSchema, advanceOutcomeDtoSchema } from '@agent4novel/contracts'
 import { Pipeline, type ArtifactStep, type PipelineInput } from '../src/pipeline/pipeline.js'
 import { InMemoryStore } from '../src/store/in-memory-store.js'
 import { consumeGuards } from '../src/pipeline/consume-guards.js'
@@ -151,6 +151,144 @@ describe('explicit chapter continuation', () => {
     expect((await app.request(`/api/works/${work.id}/artifacts/prose/approve`, post({ chapter: 2, expectedArtifactId: prose.id, expectedHeadVersion: prose.version, content: prose.content }))).status).toBe(200)
     expect(head('prose', 1).content).toEqual({ text: '上一章作者最新保存的正文。' })
     expect(await (await app.request('/api/works')).json()).toEqual([expect.objectContaining({ chapterCount: 2 })])
+  })
+
+  it('replans a historical chapter through two explicit gates and exposes immutable history to Harness', async () => {
+    const { work, pipeline, app, start, head, approveChapter, seen, store } = await ready()
+    await pipeline.startChapter(work.id, start(2)); await approveChapter(2)
+    await pipeline.startChapter(work.id, start(3)); await approveChapter(3)
+
+    const initialView = workViewSchema.parse(await (await app.request(`/api/works/${work.id}`)).json())
+    const oldBeat = beatArtifactSchema.parse(structuredClone(initialView.artifacts.find(artifact => artifact.kind === 'beat' && artifact.chapter === 1)))
+    const oldProse = proseArtifactSchema.parse(structuredClone(initialView.artifacts.find(artifact => artifact.kind === 'prose' && artifact.chapter === 1)))
+    const later = [2, 2, 3, 3].map((chapter, index) => structuredClone(initialView.artifacts.find(artifact => artifact.kind === (index % 2 === 0 ? 'beat' : 'prose') && artifact.chapter === chapter)))
+    const binding = { mode: 'chapter-regeneration' as const,
+      expectedBeat: { artifactId: oldBeat.id, version: oldBeat.version },
+      expectedProse: { artifactId: oldProse.id, version: oldProse.version } }
+    const beatRequest = { chapter: 1, expectedArtifactId: oldBeat.id, expectedHeadVersion: oldBeat.version,
+      content: oldBeat.content, instructions: '重新安排本章冲突节奏', regeneration: binding }
+    const beforeBeatCallCount = seen.filter(item => item.kind === 'beat').length
+    const beatResponse = await app.request(`/api/works/${work.id}/artifacts/beat/regenerate`, post(beatRequest))
+    expect(beatResponse.status).toBe(200)
+    const beatBody = beatCommandResponseSchema.parse(await beatResponse.json())
+    expect(beatBody).toMatchObject({ artifact: { chapter: 1, version: 2, humanStatus: 'pending' }, command: { regeneration: binding },
+      workflow: { workflowState: 'awaiting-beat-review', allowedActions: ['approve', 'regenerate'] } })
+    const replannedBeat = { artifact: beatArtifactSchema.parse(beatBody.artifact) }
+    expect(head('prose', 1)).toEqual(oldProse)
+    expect(seen.filter(item => item.kind === 'beat')).toHaveLength(beforeBeatCallCount + 1)
+    expect((await app.request(`/api/works/${work.id}`)).status).toBe(200)
+    const afterBeatView = workViewSchema.parse(await (await app.request(`/api/works/${work.id}`)).json())
+    expect(afterBeatView.chapters.find(chapter => chapter.chapter === 1)?.allowedActions).toEqual(['approve', 'regenerate'])
+
+    const afterFirstBeatCallCount = seen.filter(item => item.kind === 'beat').length
+    expect((await app.request(`/api/works/${work.id}/artifacts/beat/regenerate`, post(beatRequest))).status).toBe(409)
+    expect(seen.filter(item => item.kind === 'beat')).toHaveLength(afterFirstBeatCallCount)
+    const wrongBeatIdRequest = { ...beatRequest, expectedArtifactId: 'wrong-beat-id', regeneration: { ...binding, expectedBeat: { artifactId: 'wrong-beat-id', version: oldBeat.version } } }
+    expect((await app.request(`/api/works/${work.id}/artifacts/beat/regenerate`, post(wrongBeatIdRequest))).status).toBe(409)
+    expect(seen.filter(item => item.kind === 'beat')).toHaveLength(afterFirstBeatCallCount)
+    const pendingBeatRequest = { ...beatRequest, expectedArtifactId: replannedBeat.artifact.id, expectedHeadVersion: replannedBeat.artifact.version,
+      content: replannedBeat.artifact.content, regeneration: { ...binding, expectedBeat: { artifactId: replannedBeat.artifact.id, version: replannedBeat.artifact.version } } }
+    expect((await app.request(`/api/works/${work.id}/artifacts/beat/regenerate`, post(pendingBeatRequest))).status).toBe(409)
+    expect(seen.filter(item => item.kind === 'beat')).toHaveLength(afterFirstBeatCallCount)
+
+    const proseRequest = { chapter: 1, expectedArtifactId: oldProse.id, expectedHeadVersion: oldProse.version,
+      content: oldProse.content, instructions: '', regeneration: { ...binding, expectedBeat: { artifactId: replannedBeat.artifact.id, version: replannedBeat.artifact.version } } }
+    const beforeProseCallCount = seen.filter(item => item.kind === 'prose').length
+    await expect(pipeline.regenerateProse(work.id, proseRequest)).rejects.toMatchObject({ cause: { code: 'prose-gate-not-ready' } })
+    expect(seen.filter(item => item.kind === 'prose')).toHaveLength(beforeProseCallCount)
+    expect(head('prose', 1)).toEqual(oldProse)
+
+    await approveBeat(store, work.id, { chapter: 1, expectedArtifactId: replannedBeat.artifact.id, expectedHeadVersion: replannedBeat.artifact.version, content: replannedBeat.artifact.content })
+    const proseResponse = await app.request(`/api/works/${work.id}/artifacts/prose/regenerate`, post(proseRequest))
+    expect(proseResponse.status).toBe(200)
+    const proseBody = proseCommandResponseSchema.parse(await proseResponse.json())
+    expect(proseBody).toMatchObject({ artifact: { chapter: 1, version: 2, humanStatus: 'pending' }, command: { regeneration: proseRequest.regeneration },
+      workflow: { workflowState: 'awaiting-prose-review', allowedActions: ['save-draft', 'approve', 'regenerate'] } })
+    const replannedProse = { artifact: proseArtifactSchema.parse(proseBody.artifact) }
+    expect(replannedProse.artifact.inputs).toContainEqual({ kind: 'beat', chapter: 1, artifactId: replannedBeat.artifact.id, version: replannedBeat.artifact.version })
+    await approveProse(store, work.id, { chapter: 1, expectedArtifactId: replannedProse.artifact.id, expectedHeadVersion: replannedProse.artifact.version, content: proseContentSchema.parse(replannedProse.artifact.content) })
+
+    const afterProseCallCount = seen.filter(item => item.kind === 'prose').length
+    expect((await app.request(`/api/works/${work.id}/artifacts/prose/regenerate`, post(proseRequest))).status).toBe(409)
+    expect(seen.filter(item => item.kind === 'prose')).toHaveLength(afterProseCallCount)
+    const wrongProseIdRequest = { ...proseRequest, expectedArtifactId: 'wrong-prose-id', regeneration: { ...proseRequest.regeneration, expectedProse: { artifactId: 'wrong-prose-id', version: oldProse.version } } }
+    expect((await app.request(`/api/works/${work.id}/artifacts/prose/regenerate`, post(wrongProseIdRequest))).status).toBe(409)
+    expect(seen.filter(item => item.kind === 'prose')).toHaveLength(afterProseCallCount)
+
+    const after = workViewSchema.parse(await (await app.request(`/api/works/${work.id}`)).json())
+    expect(after.chapters.find(chapter => chapter.chapter === 1)?.allowedActions).toContain('regenerate-chapter')
+    expect(after.chapters.slice(1).map(chapter => chapter.needsContinuityReview)).toEqual([true, true])
+    expect([head('beat', 2), head('prose', 2), head('beat', 3), head('prose', 3)]).toEqual(later)
+
+    for (const artifact of [oldBeat, oldProse]) {
+      const response = await app.request(`/api/works/${work.id}/artifacts/${artifact.kind}/${artifact.chapter}/versions/${artifact.version}?artifactId=${encodeURIComponent(artifact.id)}`)
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual(artifact)
+    }
+    const stale = await app.request(`/api/works/${work.id}/artifacts/beat/regenerate`, post(beatRequest))
+    expect(stale.status).toBe(409)
+    expect(head('beat', 1).version).toBe(2)
+  })
+  it('does not infer a completed beat gate when the old prose source reference is absent', async () => {
+    const { work, pipeline, store, app, head, seen } = await ready()
+    const beat = beatArtifactSchema.parse(head('beat', 1))
+    const prose = proseArtifactSchema.parse(head('prose', 1))
+    const noSource = store.saveArtifact({ workId: work.id, kind: 'prose', chapter: 1, expectedArtifactId: prose.id, expectedHeadVersion: prose.version,
+      expectedHumanStatus: 'approved', content: prose.content })
+    const view = workViewSchema.parse(await (await app.request(`/api/works/${work.id}`)).json())
+    const chapter = view.chapters.find(chapter => chapter.chapter === 1)
+    expect(chapter?.allowedActions).toContain('regenerate-chapter')
+    expect(chapter?.allowedActions).not.toContain('regenerate-chapter-prose')
+    const request = { chapter: 1, expectedArtifactId: noSource.id, expectedHeadVersion: noSource.version, content: proseContentSchema.parse(noSource.content), instructions: '',
+      regeneration: { mode: 'chapter-regeneration' as const, expectedBeat: { artifactId: beat.id, version: beat.version }, expectedProse: { artifactId: noSource.id, version: noSource.version } } }
+    const before = seen.filter(item => item.kind === 'prose').length
+    await expect(pipeline.regenerateProse(work.id, request)).rejects.toMatchObject({ cause: { code: 'prose-gate-not-ready' } })
+    expect(seen.filter(item => item.kind === 'prose')).toHaveLength(before)
+  })
+  it('regenerates ordinary pending Beat and Prose gates in all three historical chapters', async () => {
+    const { work, pipeline, app, start, head, approveChapter, store } = await ready()
+    await pipeline.startChapter(work.id, start(2)); await approveChapter(2)
+    await pipeline.startChapter(work.id, start(3)); await approveChapter(3)
+
+    for (const chapter of [1, 2, 3]) {
+      const oldBeat = beatArtifactSchema.parse(head('beat', chapter))
+      const oldProse = proseArtifactSchema.parse(head('prose', chapter))
+      const binding = { mode: 'chapter-regeneration' as const,
+        expectedBeat: { artifactId: oldBeat.id, version: oldBeat.version },
+        expectedProse: { artifactId: oldProse.id, version: oldProse.version } }
+      const chapterBeat = await pipeline.regenerateBeat(work.id, { chapter, expectedArtifactId: oldBeat.id, expectedHeadVersion: oldBeat.version,
+        content: oldBeat.content, instructions: '产生历史章纲 pending', regeneration: binding })
+      const pendingBeat = beatArtifactSchema.parse(chapterBeat.artifact)
+      expect(workViewSchema.parse(await (await app.request(`/api/works/${work.id}`)).json()).chapters.find(item => item.chapter === chapter)?.allowedActions)
+        .toContain('regenerate')
+
+      const ordinaryBeatResponse = await app.request(`/api/works/${work.id}/artifacts/beat/regenerate`, post({ chapter,
+        expectedArtifactId: pendingBeat.id, expectedHeadVersion: pendingBeat.version,
+        content: pendingBeat.content, instructions: '普通章纲再生' }))
+      expect(ordinaryBeatResponse.status).toBe(200)
+      const ordinaryBeat = beatCommandResponseSchema.parse(await ordinaryBeatResponse.json())
+      expect(ordinaryBeat.workflow.workflowState).toBe('awaiting-beat-review')
+      expect(ordinaryBeat.command.regeneration).toBeUndefined()
+      const regeneratedBeat = beatArtifactSchema.parse(ordinaryBeat.artifact)
+      await approveBeat(store, work.id, { chapter, expectedArtifactId: regeneratedBeat.id, expectedHeadVersion: regeneratedBeat.version, content: regeneratedBeat.content })
+
+      const chapterProse = await pipeline.regenerateProse(work.id, { chapter, expectedArtifactId: oldProse.id, expectedHeadVersion: oldProse.version,
+        content: oldProse.content, instructions: '产生历史正文 pending', regeneration: { ...binding,
+          expectedBeat: { artifactId: regeneratedBeat.id, version: regeneratedBeat.version } } })
+      const pendingProse = proseArtifactSchema.parse(chapterProse.artifact)
+      expect(workViewSchema.parse(await (await app.request(`/api/works/${work.id}`)).json()).chapters.find(item => item.chapter === chapter)?.allowedActions)
+        .toContain('regenerate')
+
+      const ordinaryProseResponse = await app.request(`/api/works/${work.id}/artifacts/prose/regenerate`, post({ chapter,
+        expectedArtifactId: pendingProse.id, expectedHeadVersion: pendingProse.version,
+        content: pendingProse.content, instructions: '普通正文再生' }))
+      expect(ordinaryProseResponse.status).toBe(200)
+      const ordinaryProse = proseCommandResponseSchema.parse(await ordinaryProseResponse.json())
+      expect(ordinaryProse.workflow.workflowState).toBe('awaiting-prose-review')
+      expect(ordinaryProse.command.regeneration).toBeUndefined()
+      const regeneratedProse = proseArtifactSchema.parse(ordinaryProse.artifact)
+      await approveProse(store, work.id, { chapter, expectedArtifactId: regeneratedProse.id, expectedHeadVersion: regeneratedProse.version, content: regeneratedProse.content })
+    }
   })
   it.each(['initial', 'rewrite'] as const)('discards chapter two Prose %s after its previous Prose is edited during the model call', async mode => {
     let mutate = async () => {}

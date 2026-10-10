@@ -8,9 +8,9 @@ topics: ["prose", "human-review", "autosave", "conditional-write", "agent-observ
 code_paths: ["packages/contracts/src/prose.ts", "packages/contracts/src/prose-submission.ts", "apps/server/src/steps/prose-step.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts", "apps/web/src/pages/ProseReview.tsx", "apps/cli/src/commands.ts"]
 symbols: ["ProseContent", "ProseSubmission", "recoverProseSubmission", "regenerateProse", "save-prose", "awaiting-prose-review", "prose-approved"]
 inherits: ["005", "013", "014", "016", "025"]
-changed_by: ["006", "009", "008", "041"]
+changed_by: ["006", "009", "008", "041", "021"]
 read_when: ["implement-prose", "review-prose", "debug-prose-submission", "change-prose-autosave", "continue-chapter"]
-last_context_reviewed: "2026-10-03"
+last_context_reviewed: "2026-10-10"
 ---
 
 # 022 — 第一章正文生成、编辑、整章重写与通过
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-10-03"
 - **原始目的**：由作者最终通过的章纲和设定写出正文，让作者直接修改或重写后独立把关；WHAT/AC 看 [#22](https://github.com/12bitsD/agent4novel/issues/22)。
 - **实际落地**：已接通真实/fake Prose Step、六步生产链、HTTP/Web/CLI 保存与审阅；完成状态、刷新及书架重入均可读回。2026-09-29 回读 #22 已关闭；发布与终止核验结果见 [完成评论](https://github.com/12bitsD/agent4novel/issues/22#issuecomment-5875092744)，本页保留当次发布前审核证据；当前多章推进与浏览由 [Wiki 006](./006-chapter-continuation.md) 扩展。
 - **当前价值**：继承 #5 的按章身份、条件写入、冻结请求与保守恢复；正文自动保存到服务端、刷新恢复，approved 默认阅读且可显式进入编辑，保存保留 approved。旧页内草稿/只读假设的变化原因见“上下文演进”。本页技术方案、非目标及完成审核中的“只到第一章／无下一章”属于 #22 当时范围，当前章循环不受此历史限制。
-- **后续变化**：首章闭环及本机 MVP 均已交付，当前验证与待修复边界见 [Wiki001](./001-mvp-acceptance.md#2026-10-03-清点与复审)；[Wiki 006](./006-chapter-continuation.md) 承接显式下一章、前章输入、跨章阅读与编辑隔离；[Wiki 009](./009-sqlite-persistence.md) 承接已保存正文的服务重启恢复，本页内存限制属于 #22 当时边界。设定检索 tools [#28](https://github.com/12bitsD/agent4novel/issues/28) 与作品 Wiki 异步更新 [#29](https://github.com/12bitsD/agent4novel/issues/29) 保持后置。[Wiki008](./008-bad-example-collection.md)为已保存pending/approved正文增加手工选段与不可变坏例，未保存/unknown先确认，不改变正文状态。当前进度及验证边界统一见 [交接快照](../handoff.md#当前里程碑与验证边界)。
+- **后续变化**：首章闭环及本机 MVP 均已交付，当前验证与待修复边界见 [Wiki001](./001-mvp-acceptance.md#2026-10-03-清点与复审)；[Wiki 006](./006-chapter-continuation.md) 承接显式下一章、前章输入、跨章阅读与编辑隔离；[Wiki 009](./009-sqlite-persistence.md) 承接已保存正文的服务重启恢复，本页内存限制属于 #22 当时边界。设定检索 tools [#28](https://github.com/12bitsD/agent4novel/issues/28) 与作品 Wiki 异步更新 [#29](https://github.com/12bitsD/agent4novel/issues/29) 保持后置。[Wiki008](./008-bad-example-collection.md)为已保存pending/approved正文增加手工选段与不可变坏例，未保存/unknown先确认，不改变正文状态。当前进度及验证边界统一见 [交接快照](../handoff.md#当前里程碑与验证边界)。 [Wiki021](./021-chapter-regeneration.md) 新增通过后当前/历史章的两阶段重生，保留旧版本与后续章节；不改变本页原始交付证据。
 - **代码入口**：先看共享正文契约及提交恢复，随后对应 Step/Pipeline、HTTP、Web 和 CLI。当前形状最终维护于 [schema](../schema.md)。
 
 ## 设计目的

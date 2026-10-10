@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { artifactEnvelopeSchema } from './artifact-envelope.js'
+import { artifactEnvelopeSchema, chapterRegenerationBindingSchema } from './artifact-envelope.js'
 
 export const beatLimits = {
   title: 256, id: 96, text: 20_000, totalText: 100_000, items: 128,
@@ -54,6 +54,10 @@ export const beatRequestHeadSchema = z.object({
   chapter: z.number().int().positive().safe(), expectedArtifactId: z.string().min(1).max(128), expectedHeadVersion: z.number().int().positive().safe(),
 }).strict()
 export const beatApproveRequestSchema = beatRequestHeadSchema.extend({ content: beatReviewDraftSchema }).strict()
-export const beatRegenerateRequestSchema = beatRequestHeadSchema.extend({ content: beatEditDraftSchema, instructions: z.string().max(beatLimits.instructions) }).strict()
+export const beatRegenerateRequestSchema = beatRequestHeadSchema.extend({ content: beatEditDraftSchema, instructions: z.string().max(beatLimits.instructions), regeneration: chapterRegenerationBindingSchema.optional() }).strict().superRefine((request, ctx) => {
+  if (request.regeneration && (request.expectedArtifactId !== request.regeneration.expectedBeat.artifactId || request.expectedHeadVersion !== request.regeneration.expectedBeat.version)) {
+    ctx.addIssue({ code: 'custom', path: ['regeneration'], message: '章纲重生绑定必须匹配请求基线' })
+  }
+})
 export type BeatApproveRequest = z.infer<typeof beatApproveRequestSchema>
 export type BeatRegenerateRequest = z.infer<typeof beatRegenerateRequestSchema>

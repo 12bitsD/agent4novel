@@ -111,13 +111,19 @@ Beat和Prose都要求正安全整数chapter。Beat的upstream为`{outline, setti
 
 Beat 文件是 `{ chapter, expectedArtifactId, expectedHeadVersion, content }`，chapter绑定已存在目标章的正安全整数，再生额外要求 `instructions`（允许空串）。通过需要完整内容，再生允许尚未填完的字段；两者都保留已有卡片 ID，新卡省略 ID。文件上限 1 MiB，不能用 regenerate 创建不存在的章纲。结果返回 `artifact/command/workflow/telemetry`；错误在 stderr 给结构化 JSON 并非零退出，包含恢复状态与可执行动作。结果未知时最多自动 GET 一次，不自动 POST；不可据空日志、LLM ok 或新版存在就认定旧命令成功。详细规则只读 [Wiki 005](../../../docs/wiki/005-beat-generation-review.md#7-创作界面保留旧内容只有确认结果才替换)。
 
-Prose文件沿用章号/id/version基线，content为`{text}`；save额外必须有`expectedHumanStatus:'pending'|'approved'`，regenerate额外有instructions。文件≤1MiB且为严格UTF-8/JSON。save追加新id/version并保留基线状态；pending可保存空草稿，approved保存与approve都要求非空全文。approve保持原id/version/createdAt；approved不能重新approve或regenerate，修改使用save。保留请求文件，遇到409先回读而非回填新基线。CLI对unknown最多自动GET一次，用共享恢复契约核对保存的下一版本、状态和逐字符全文；不自动重复POST。恢复冲突时由作者决定是否加载服务器版本，详细契约见 [Wiki 022](../../../docs/wiki/022-prose-generation-review.md)。
+Prose文件沿用章号/id/version基线，content为`{text}`；save额外必须有`expectedHumanStatus:'pending'|'approved'`，regenerate额外有instructions。文件≤1MiB且为严格UTF-8/JSON。save追加新id/version并保留基线状态；pending可保存空草稿，approved保存与approve都要求非空全文。approve保持原id/version/createdAt；approved不能重新approve；普通整章重写只用于pending，修改approved正文使用save。已完成章的两阶段重生是例外，见下方#21规则。保留请求文件，遇到409先回读而非回填新基线。CLI对unknown最多自动GET一次，用共享恢复契约核对保存的下一版本、状态和逐字符全文；不自动重复POST。恢复冲突时由作者决定是否加载服务器版本，详细契约见 [Wiki 022](../../../docs/wiki/022-prose-generation-review.md)。
 
 `start-chapter`文件形如`{"chapter":2,"expectedPreviousProseId":"<前章正文ID>","expectedPreviousProseVersion":2}`，为严格UTF-8 JSON且≤1MiB。命令只发送校验后的三字段请求；目标必须为连续下一章且前章正文approved。结果未知时不自动回读或重发，先手动get检查；不得改成新的章号或最新基线猜测重试。已存在目标只返回当前状态，不重复生成或覆盖。后续章使用该章Beat/Prose命令把关，advance只推进工作章。详细行为见 [Wiki 006](../../../docs/wiki/006-chapter-continuation.md)。
 
 #19 起，公开响应和六类产物内容统一校验。`invalid-response`、畸形错误包或资源身份不匹配不证明写入失败，即使 HTTP 为 4xx；保留原请求，按对应命令回读，不自动重发。合法命令错误中的 `writeOutcome: unknown` 优先于 HTTP 状态。独立 `run-step` 的成功内容也按 stepId 校验；共享边界与安全失败见 [Wiki 019](../../../docs/wiki/019-contract-governance.md)。
 
 `advance`或`start-chapter`返回`kind: "failed"`时，先读内联telemetry或运行logs，再根据retryable及writeOutcome决定后续动作；unknown先回读，不能因报错就认定没有落库。再次advance按当前关卡状态推进，已落库产物不会自动重跑。Pipeline不自动重试；Setting、Beat、Prose还显式设置SDK maxRetries:0，其他步骤沿用SDK默认请求重试行为。
+
+## 已完成章的两阶段重生
+
+#21 为已有 approved Beat/Prose 的当前章或历史章增加明确的章级动作；先从 `get` 的目标 chapter `allowedActions` 判断，不能根据全局 workflow 猜测历史章权限。`regenerate-chapter` 阶段复用 `regenerate-beat` 文件命令，额外携带 `regeneration:{mode:"chapter-regeneration",expectedBeat:{artifactId,version},expectedProse:{artifactId,version}}`，普通请求的 beat ID/version 必须与 expectedBeat 相同。只追加 pending Beat，旧正文和后续章保留；通过新 Beat 后目标章出现 `regenerate-chapter-prose`，同一绑定改为新 Beat/旧 Prose，复用 `regenerate-prose`（普通 prose ID/version 与 expectedProse 相同）。新 Prose 仍须显式通过，不自动生成后续章。未知结果沿已有冻结请求/readback流程，禁止自动换成最新基线。
+
+旧版本可由 Harness 读取 `GET /api/works/:id/artifacts/{beat|prose}/{chapter}/versions/:version?artifactId=...`，必须同时指定已知的kind、chapter、artifactId、version；返回完整Artifact，404不证明旧请求没有执行。此入口不是历史列表或回退操作。缺少旧正文 beat 输入来源时不得推断章纲重生已经完成，第二阶段保持不可用。方案和机器验收入口见 [Wiki021](../../../docs/wiki/021-chapter-regeneration.md)。
 
 ## 遥测:分析每次 LLM 调用
 
@@ -146,7 +152,7 @@ Web首次生成遇到unknown（包括HTTP200业务结果）时保留原类型/�
 
 ## 工作流状态机(读模型,GET /works/:id)
 
-生产先完成caption → creative → outline → setting，再逐章执行Beat → Prose双关卡。currentChapter表示工作章，chapters给各章状态、allowedActions和needsContinuityReview；读取历史章不改变工作进度。生成间隙为ready-to-generate，用nextStepId判断下一步；每章prose-approved后停止，只有start-chapter才开始下一章。旧定义保留outline-approved/setting-approved/beat-approved。Beat专用通过API只定稿；Web显式“通过章纲并生成正文”动作才继续生成，CLI单独advance。页面打开／刷新／切章不生成。pending正文允许save-draft/approve/regenerate，approved允许save-draft，当前完成章另有start-next-chapter，历史章不提供此动作。实际输入在生成中变化时提交被拒绝；先回读当前产物与诊断，再明确重试。
+生产先完成caption → creative → outline → setting，再逐章执行Beat → Prose双关卡。currentChapter表示工作章，chapters给各章状态、allowedActions和needsContinuityReview；读取历史章不改变工作进度。生成间隙为ready-to-generate，用nextStepId判断下一步；每章prose-approved后停止，只有start-chapter才开始下一章。旧定义保留outline-approved/setting-approved/beat-approved。Beat专用通过API只定稿；Web显式“通过章纲并生成正文”动作才继续生成，CLI单独advance。页面打开／刷新／切章不生成。pending正文允许save-draft/approve/regenerate，approved允许save-draft；已完成的当前章和历史章另可有regenerate-chapter，重生章纲通过后为regenerate-chapter-prose。当前完成章另有start-next-chapter，历史章不提供起章动作。实际输入在生成中变化时提交被拒绝；先回读当前产物与诊断，再明确重试。
 
 ## 每次测试的标准动作
 

@@ -1,12 +1,13 @@
 import { chapterActions } from './chapter-view.js'
 import { beatApproveRequestSchema, beatRegenerateRequestSchema, beatArtifactSchema, recoverBeatSubmission, beatCommandErrorSchema, beatCommandResponseSchema, beatVariantSelectionResponseSchema, httpErrorSchema } from '@agent4novel/contracts'
-import type { BeatArtifact, BeatEditDraft, BeatSubmission, ValidationIssue, WorkView, BeatRecovery, BeatVariantComparison, BeatVariantSelectionRequest } from '@agent4novel/contracts'
+import type { BeatArtifact, BeatEditDraft, BeatSubmission, ChapterRegenerationBinding, ValidationIssue, WorkView, BeatRecovery, BeatVariantComparison, BeatVariantSelectionRequest } from '@agent4novel/contracts'
 
 export type BeatEditorDraft = Omit<BeatEditDraft, 'writingPlan'> & { writingPlan: Array<BeatEditDraft['writingPlan'][number] & { localKey: string }> }
 export type BeatReviewState = {
   baseline: BeatArtifact; draft: BeatEditorDraft; instructions: string; mode: 'preview' | 'edit'
   phase: 'editing' | 'submitting' | 'regenerating' | 'reconciling' | 'comparing' | 'uncertain' | 'conflict' | 'approved'
   submitted?: BeatSubmission; hasUnknownWrite: boolean; issues: ValidationIssue[]; notice?: string
+  regeneration?: ChapterRegenerationBinding
   comparison?: BeatVariantComparison; variantSubmission?: BeatVariantSelectionRequest
   response?: { status: number; body: unknown }; observedWork?: WorkView; remote?: BeatArtifact; recovery?: BeatRecovery; canResume?: boolean
 }
@@ -31,7 +32,7 @@ export function toBeatSubmission(state: BeatReviewState, operation: BeatSubmissi
   const request = { chapter: state.baseline.chapter, expectedArtifactId: state.baseline.id, expectedHeadVersion: state.baseline.version,
     content: { ...state.draft, writingPlan: state.draft.writingPlan.map(({ localKey: _key, ...item }) => item) },
   }
-  return operation === 'approve-beat' ? { operation, request } : { operation, request: { ...request, instructions: state.instructions } }
+  return operation === 'approve-beat' ? { operation, request } : { operation, request: { ...request, instructions: state.instructions, ...(state.regeneration ? { regeneration: state.regeneration } : {}) } }
 }
 export function isBeatDirty(state: BeatReviewState): boolean {
   return state.instructions.length > 0 || JSON.stringify(toBeatSubmission(state, 'approve-beat').request.content) !== JSON.stringify(state.baseline.content)
@@ -100,8 +101,10 @@ export function reduceBeatReview(state: BeatReviewState, action: BeatReviewActio
         : recovery.resolution === 'conflict' ? '服务器版本已变化。请保留本页内容，核对后明确选择载入。' : `本次未写入（${failure.success ? failure.data.code : 'request-rejected'}），本页修改已保留。${budget ? `完整输入 ${budget.actualLength} / ${budget.limit} 字符，未调用模型。请缩减输入或检查模型配置。` : ''}`,
     }
   }
-  if (state.phase !== 'editing') return state
+  const chapterRegenerationStart = state.regeneration !== undefined && state.phase === 'approved'
+  if (state.phase !== 'editing' && state.phase !== 'approved') return state
   if (action.type === 'start') {
+    if (state.phase === 'approved' && !chapterRegenerationStart) return state
     const submission = toBeatSubmission(state, action.operation)
     const parsed = (submission.operation === 'approve-beat' ? beatApproveRequestSchema : beatRegenerateRequestSchema).safeParse(submission.request)
     if (!parsed.success) return { ...state, mode: 'edit', issues: parsed.error.issues.map(({ path, code }) => ({ path, code, message: '请填写有效内容并检查长度限制' })) }

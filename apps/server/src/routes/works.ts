@@ -31,7 +31,7 @@ import { observeBeat, BeatCommandError, beatFailureCode } from '../beat-command.
 import { approveProse, saveProse } from '../prose-review.js'
 import { observeProse, ProseCommandError, proseFailureCode, proseResponseError } from '../prose-command.js'
 import { safeLog } from '../safe-log.js'
-import { chapterSummaries, currentChapterOf } from '../chapter-view.js'
+import { chapterSummaries, chapterWorkflow, currentChapterOf } from '../chapter-view.js'
 
 // id 规整(#4 决策 6):已有 id 保留(上下移/编辑不动标识),新项(无 id)按「现存最大序号 +1」
 // 补注入,保持与生成时相同的位置编号格式(删除后按位置重排会撞号,故取 max+1)
@@ -188,6 +188,24 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
     }
   })
 
+  // Historical chapter artifacts are an explicit Harness read surface. The
+  // current work view intentionally exposes only heads; this route requires
+  // both the immutable identity and version so a caller cannot accidentally
+  // treat a newer head as the requested history.
+  app.get('/api/works/:id/artifacts/:kind/:chapter/versions/:version', c => {
+    const parsed = z.object({
+      kind: z.enum(['beat', 'prose']), chapter: z.coerce.number().int().positive().safe(),
+      version: z.coerce.number().int().positive().safe(), artifactId: z.string().min(1).max(128),
+    }).strict().safeParse({
+      kind: c.req.param('kind'), chapter: c.req.param('chapter'), version: c.req.param('version'), artifactId: c.req.query('artifactId'),
+    })
+    if (!parsed.success) return c.json(errorBody('invalid-input', 'invalid historical artifact reference'), 400)
+    if (!store.getWork(c.req.param('id'))) return c.json(errorBody('work-not-found', 'work not found'), 404)
+    const artifact = store.getArtifactVersion(c.req.param('id'), parsed.data.kind, parsed.data.chapter, parsed.data.artifactId, parsed.data.version)
+    if (!artifact) return c.json(errorBody('artifact-not-found', 'artifact version not found'), 404)
+    return contractJson(c, artifactSchema, artifact)
+  })
+
   app.use('/api/works/:id/artifacts/beat/*', async (_c, next) => withRequest(crypto.randomUUID(), meta?.demo ?? true, next))
   const rejectBeatRequest = (c: Context, code: 'bad-json' | 'invalid-input' | 'unsupported-chapter' | 'payload-too-large') => {
     const scope = currentRequest()!
@@ -223,8 +241,9 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
         ? await approveBeat(store, workId, beatApproveRequestSchema.parse(parsed.data))
         : await pipeline.regenerateBeat(workId, beatRegenerateRequestSchema.parse(parsed.data))
       const state = pipeline.getState(workId)
+      const targetWorkflow = operation === 'regenerate' ? chapterWorkflow(store.getWork(workId)!, head.data.chapter, pipeline.repeatChapters) : null
       return c.json(beatCommandResponseSchema.parse({ ...result,
-        workflow: { ...workflowOf(state, pipeline.failureOf(workId), pipeline.completionKind), nextStepId: state.nextStepId },
+        workflow: targetWorkflow ?? { ...workflowOf(state, pipeline.failureOf(workId), pipeline.completionKind), nextStepId: state.nextStepId },
         telemetry: currentRequest()!.telemetry,
       }))
     } catch (err) {
@@ -302,8 +321,9 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
           : await pipeline.regenerateProse(workId, proseRegenerateRequestSchema.parse(parsed.data))
       try {
         const state = pipeline.getState(workId)
+        const targetWorkflow = operation === 'regenerate' ? chapterWorkflow(store.getWork(workId)!, head.data.chapter, pipeline.repeatChapters) : null
         return c.json(proseCommandResponseSchema.parse({ ...result,
-          workflow: { ...workflowOf(state, pipeline.failureOf(workId), pipeline.completionKind), nextStepId: state.nextStepId },
+          workflow: targetWorkflow ?? { ...workflowOf(state, pipeline.failureOf(workId), pipeline.completionKind), nextStepId: state.nextStepId },
           telemetry: currentRequest()!.telemetry,
         }))
       } catch (cause) {

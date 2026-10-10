@@ -8,9 +8,9 @@ topics: ["beat", "chapter-planning", "human-review", "conditional-write", "agent
 code_paths: ["packages/contracts/src/beat.ts", "packages/contracts/src/beat-submission.ts", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/store/in-memory-store.ts", "apps/server/src/routes/works.ts", "apps/server/src/steps/llm-call.ts", "apps/web/src/pages/Workspace.tsx", "apps/cli/src/commands.ts"]
 symbols: ["BeatContent", "BeatEditDraft", "BeatCommandObservation", "regenerateBeat", "matchesBeatSubmission", "writeOutcome", "request-rejected", "beat-approved"]
 inherits: ["004", "013", "014"]
-changed_by: ["022", "006", "020"]
+changed_by: ["022", "006", "020", "021"]
 read_when: ["implement-beat", "change-beat-schema", "review-beat-plan", "debug-beat-submission", "design-agent-observability"]
-last_context_reviewed: "2026-09-29"
+last_context_reviewed: "2026-10-10"
 ---
 
 # 005 — 第一章章纲生成、编辑、重新生成与通过
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-09-29"
 - **原始目的**：生成当前第一章的完整写作计划，由作者编辑或整份再生，最终通过后再供正文使用；WHAT/AC 以 [issue #5](https://github.com/12bitsD/agent4novel/issues/5) 为准。
 - **实际落地**：[PR #23](https://github.com/12bitsD/agent4novel/pull/23) 已合并 main，生产第五步、真实/fake Beat、Web 编辑与再生、同版本通过、UUID 身份及 CLI 文件命令已落地；#5 已 CLOSED。`beat-approved` 和无正文断言是本票五步交付时的范围，首章正文由 [Wiki 022](./022-prose-generation-review.md) 接手，后续逐章生成和浏览再由 [Wiki 006](./006-chapter-continuation.md) 扩展。
 - **当前价值**：继承 Beat 四部分契约、按章身份、同版本通过、冻结请求与保守恢复；“本轮范围与计划”、仅第一章限制、五步状态表、旧 smoke 和完成证据只描述 #5 当时的候选。当前形状／协议见 [schema](../schema.md#beat5-当前契约)，原技术评审与决定见 [评审记录](../plans/005-beat-technical-review.md)。
-- **后续变化**：[Wiki 022](./022-prose-generation-review.md) 扩展至 `prose-approved`，Web 显式“通过章纲并生成正文”在确认 Beat 通过后生成一次正文；Beat 专用 API 仍只定稿，打开／刷新页面不生成。[Wiki 006](./006-chapter-continuation.md) 将 Beat/Prose 双关卡推广到各章，并在后续章生成时消费上一章实际内容；正文自动保存与 approved 可编辑的例外不改变 Beat 通过后只读；比较 #20、章节重生 #21 与后续排期见 [handoff](../handoff.md)。
+- **后续变化**：[Wiki 022](./022-prose-generation-review.md) 扩展至 `prose-approved`，Web 显式“通过章纲并生成正文”在确认 Beat 通过后生成一次正文；Beat 专用 API 仍只定稿，打开／刷新页面不生成。[Wiki 006](./006-chapter-continuation.md) 将 Beat/Prose 双关卡推广到各章，并在后续章生成时消费上一章实际内容；正文自动保存与 approved 可编辑的例外不改变 Beat 通过后只读；比较 #20、章节重生 #21 与后续排期见 [handoff](../handoff.md)。 [Wiki021](./021-chapter-regeneration.md) 新增通过后当前/历史章的两阶段重生，保留旧版本与后续章节；不改变本页原始交付证据。
 - **代码入口**：现有 [Pipeline](../../apps/server/src/pipeline/pipeline.ts)、[WorkStore](../../apps/server/src/store/work-store.ts)、[路由](../../apps/server/src/routes/works.ts)；完整落点见下表，内容／命令协议均已有运行时 schema。
 
 ## 设计目的

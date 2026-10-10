@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。最后更新：2026-10-10。本机 MVP 已发布；#35/PR45、#47/PR48 与 #49/PR50 已关闭/合并（本轮 GitHub 回读）。当前进入 MVP 后第二期；#12 与 #20 已按 Loop 完成、合并并关闭，#51 与 #46 也已合并关闭。当前新增 #60 Kimi provider 扩展；完成后继续 #21 章节重生与 #18 冲突设计的产品对齐。#17 按 [第二期路线](./plans/mvp-phase2-roadmap.md) 保持候选；#28/#29 与长篇质量评估保持后置。
+> 用途：context compaction / 新会话接力。最后更新：2026-10-10。本机 MVP 已发布；#35/PR45、#47/PR48 与 #49/PR50 已关闭/合并（本轮 GitHub 回读）。当前进入 MVP 后第二期；#12、#20、#51、#46 已合并关闭。#60 Kimi provider 已合并关闭。当前按 Loop 实施 #21 章节重生：允许历史章重生，后续章保留并只提示连续性；下一票是 #18 冲突设计。#17 按 [第二期路线](./plans/mvp-phase2-roadmap.md) 保持候选；#28/#29 与长篇质量评估保持后置。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -16,7 +16,7 @@
 
 ## 当前里程碑与验证边界
 
-此前 #49 的范围与工程证据从 [Wiki049](./wiki/049-author-workbench.md) 进入，已随 PR50 合入。六种材料的保存差异、显式续章、原文/UTF-16、配置和坏例保护继续有效。新大纲通过绑定作者所见 ID/版本；旧通用通过命令仍读取服务端当前 head。创建幂等、详细书架摘要、日期、任意历史全文和浏览器历史协议未新增。当前第二期的范围、顺序和非目标集中在 [第二期路线](./plans/mvp-phase2-roadmap.md)。
+此前 #49 的范围与工程证据从 [Wiki049](./wiki/049-author-workbench.md) 进入，已随 PR50 合入。六种材料的保存差异、显式续章、原文/UTF-16、配置和坏例保护继续有效。新大纲通过绑定作者所见 ID/版本；旧通用通过命令仍读取服务端当前 head。通用任意历史全文和浏览器历史协议未新增；#21 仅新增按精确 ID/version 读取 Beat/Prose 历史版本。当前第二期的范围、顺序和非目标集中在 [第二期路线](./plans/mvp-phase2-roadmap.md)。
 
 **本机 MVP 已发布，整体验证与边界从 [Wiki001](./wiki/001-mvp-acceptance.md) 进入。** 2026-10-03 回读 #1 及 #6/#19/#9/#33/#7/#8 均已关闭，对应 PR 均已合并；[PR40](https://github.com/12bitsD/agent4novel/pull/40) 对应源提交的 CI 与 [main CI](https://github.com/12bitsD/agent4novel/actions/runs/36727036119) 均成功。文档 #41/PR42、修复 #43/PR44 与视觉 #35/PR45 也已关闭/合并；#47/#49 的后续交接分别见 Wiki047 与 Wiki049。#35 的 [main CI](https://github.com/12bitsD/agent4novel/actions/runs/37100590655/attempts/2) 最终成功；其首轮 SQLite 并发初始化失败由 #46 独立跟踪，重试通过不表示该竞争已修复。关闭记录证明交付状态，不能消除未来新发现。
 
@@ -35,7 +35,7 @@
 - **#4** 大纲生成（wiki 004 ✅）：**推翻「分章每章一句话」**，大纲 = 弧线（冲突生命周期：标题/核心冲突/冲突发展/矛盾解决）+ 剧情点（标题/概要/落点）两层，与章节解耦；选定创意稿后 web 自动续跑 advance；保存 = pending + 通用 /approve 通过；读模型 5 态（selected 移除，加 awaiting-outline-review/outline-approved）
 - **#14** Agent 可用性基建（wiki 014 ✅）：`apps/cli` 的作品命令、`bin/a4n` 纯 JSON 输出与 smoke 探针；select/save-outline 自动回填 headVersion。LLM 遥测进程内账本，advance 内联 telemetry、logs 回看；systemHash 让 prompt 版本可追。历史 outline 截断促使上限从 8000 调至 16000，并加入 SKILL 篇幅纪律；这不保证所有模型请求成功。当前命令与独立实验入口见 [Wiki 014](./wiki/014-agent-cli-telemetry.md)。
 - **#16** 可配置 ModelRuntime + DeepSeek、LongCat provider（[Wiki 016](./wiki/016-model-runtime-provider-config.md)）：RealStep 内统一 provider 路由、server-only 本地配置与请求超时；历史真实 Step 证据仍只看 Wiki 016 与 LongCat research。
-- **#60 当前候选** Kimi provider 扩展（[Wiki 060](./wiki/060-kimi-provider.md)）：工作区已加入 `kimi:kimi-k2.8-highspeed`、官方 OpenAI-compatible `/v1` endpoint、通用 fixture 迁移、Compose 运行期环境传递和旧 provider 回归保留；issue 仍 open，尚无 PR、CI 或远端回读，不把当前实现写成已交付。
+- **#60** Kimi provider 扩展（[Wiki 060](./wiki/060-kimi-provider.md)）已合并关闭：工作区加入 `kimi:kimi-k2.8-highspeed`、官方 OpenAI-compatible `/v1` endpoint、通用 fixture 迁移、Compose 运行期环境传递和旧 provider 回归保留；PR #61、CI run 38058140948 与远端完成评论已回读。
 - **#13** 完整设定（[Wiki 013](./wiki/013-setting-generation-review.md)）：大纲通过后一次生成；六字段通用卡片、有限 Markdown、页内编辑、专用命令同 id/version 原子通过，不追加 V2。Store 读写快照隔离、生成提交条件、Web 未知结果恢复和 CLI 完整请求已落地。本票原末端 `setting-approved` 已由 #5/#22 延伸至首章正文，#6 再接入逐章循环；具体交付证据分别看各票 Wiki 和完成评论。
 
 - **#25** CLI 帮助零副作用与严格参数：顶级/子命令 `--help`、`-h` 在 I/O 前返回，非法语法返回安全 usage。保留业务结果与人工关卡；上下文及验收见 [Wiki 025](./wiki/025-cli-command-safety.md)。
@@ -104,7 +104,7 @@
 - LongCat 文档未保证 JSON Schema structured output；当前走 `json_object` + 本地 zod 校验。历史三步证据见 Wiki 016，Setting 新样例见 Wiki 013；成功样例不是上游协议保证。
 - #7已提供作者配置UI/API；旧Work.config只作revision0兼容来源，保存后以作者document为唯一编辑来源。全局凭据/启动配置仍见 [Wiki016](./wiki/016-model-runtime-provider-config.md)，文件/版本/操作快照见[Wiki007](./wiki/007-author-agent-config.md)。
 - run-step 不持久化实验账本、不自动跑上游，也不校验所供content是否来自作品最新版；成功只证明通过生产schema，raw模型输出和reasoning不对外返回。Beat/Prose后续章需显式提供恰好前一章的内容；CLI配置不会写回作品。
-- #6 提供各章当前版本浏览，不提供任意历史版本回看；章纲版本比较仍归 #20。渐进展示/分段提炼等独立优化留 #12。
+- #6 提供各章当前版本浏览；#21 增加按精确 artifact ID/version 读取 Beat/Prose 历史版本，不提供历史列表或回退。章纲当前 pending 版本比较仍归 #20。渐进展示/分段提炼等独立优化留 #12。
 - #5 专属版本比较归 #20，正文后回流与章节重生归 #21；本期只允许通过前整份章纲再生。上条 #6/#12 是旧的通用优化分工，不覆盖这次已确认拆分。
 - #5 已修复序号身份复用、共享原始错误日志和首次 Web advance 无限等待。2026-09-08 完整 production live smoke 两次卡在 Creative（截断／schema），不属于 Beat 成功证据；独立 Beat live 样例也是历史结果。#5 当次 fake/mock 回归通过；浏览器确认 pending 章纲及意见输入，原生刷新取消／确认受工具限制未验证，不能用 mounted 测试代替。证据边界统一见 Wiki 005。
 - 「演示模式」是 UI 词非领域词，未进 CONTEXT.md。
@@ -117,7 +117,7 @@ CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化
 
 #22 已合入 main；其原 source、固定点和候选审核记录均属于已交付历史，入口为 [Wiki 022](./wiki/022-prose-generation-review.md)。新票从当前 main 核对基线，不能把旧票授权或审核结论当成新票完成证据。
 
-**当前交付 #60 Kimi provider 扩展**。#1、#6、#19、#9、#33、#7、#8、#35、#47、#49、#51、#46、#12、#20 已合并关闭，无需重复交付；#60 当前候选已完成实现与本地门禁，待正式双轴 review、PR/CI 和远端回读。第二期按 [路线计划](./plans/mvp-phase2-roadmap.md) 顺序推进；#21、#18、#17 不提前关闭，#28/#29 保持第三期后置。普通工程细节由 Agent 自主收敛，涉及产品范围、不可逆数据影响、新权限或费用时再请求用户决定。
+**当前交付 #21 章节重生**。#1、#6、#19、#9、#33、#7、#8、#35、#47、#49、#51、#46、#12、#20、#60 已合并关闭，无需重复交付；#21 当前候选已实现核心行为和定向验证，待完整门禁、双轴 review、PR/CI 和远端回读。第二期按 [路线计划](./plans/mvp-phase2-roadmap.md) 顺序推进；#18、#17 不提前关闭，#28/#29 保持第三期后置。普通工程细节由 Agent 自主收敛，涉及产品范围、不可逆数据影响、新权限或费用时再请求用户决定。
 
 | 交付批次 | 可验收结果 | 后续衔接 |
 |---|---|---|
@@ -132,7 +132,7 @@ CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化
 | #46 SQLite 初始化竞争（已交付） | 首次并发建库只对可重试锁竞争做有界处理，保留安全初始化诊断 | 已合并关闭；不扩展运行期通用重试 |
 | #12 创意稿再生（已交付） | 失败重试、补充想法、整步再生、版本条件与未知结果恢复 | PR56、quality/container CI、远端 main 回读与 issue 关闭均完成 |
 | #20 章纲版本比较与选择（已交付） | 当前 pending beat 的 A/B 比较、B 选择或 A-copy C、显式通过 | PR57、quality/container CI、远端 main 回读与 issue 关闭均完成；不扩展为通用历史 |
-| #21 章节重生（待产品对齐） | 通过后章节的 beat/prose 重生与下游影响 | 先由 Human 确认 current-only、rebirth 形态、后续章节标记和命令边界，再进入实现 Loop |
+| #21 章节重生（实现中） | 历史章两阶段 beat/prose 重生；旧版本和后续章节保留；精确历史 GET 与连续性提示 | Human 已确认历史章范围；实现和验收证据见 [Wiki021](./wiki/021-chapter-regeneration.md)，完成前不关闭 |
 | #18/#17 设定演进（设计／候选） | 冲突分类与通过后设定影响语义 | 先设计，再决定是否进入第二期核心 |
 | #28/#29 扩展（第三期） | 设定查询工具循环、作品 Wiki 档案演进 | 当前均未实现，保持后置 |
 

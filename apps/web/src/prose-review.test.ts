@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { initProseReview, reduceProseReview } from './prose-review.js'
+import { initProseReview, reduceProseReview, type ProseReviewState } from './prose-review.js'
 import type { ProseArtifact, WorkView } from '@agent4novel/contracts'
 
 const baseline: ProseArtifact = { id: 'artifact-test', workId: 'work-test', kind: 'prose', chapter: 1, version: 1, humanStatus: 'pending', createdAt: '2026-09-08',
@@ -53,6 +53,15 @@ describe('Prose editor public state', () => {
     expect(state.submitted?.request.content.text).toBe('  作者修改\n\n下一段\n')
     expect(reduceProseReview(state, { type: 'text', value: '迟到编辑' }).draft.text).toBe('  作者修改\n\n下一段\n')
     expect(baseline.content.text).toBe('模型初稿')
+  })
+  it('starts historical chapter prose regeneration from an approved head with an explicit binding', () => {
+    const approved = { ...baseline, humanStatus: 'approved' as const }
+    const binding = { mode: 'chapter-regeneration' as const,
+      expectedBeat: { artifactId: 'beat-new', version: 2 }, expectedProse: { artifactId: approved.id, version: approved.version } }
+    let state: ProseReviewState = { ...initProseReview(approved), regeneration: binding }
+    state = reduceProseReview(state, { type: 'start', operation: 'regenerate-prose' })
+    expect(state.phase).toBe('regenerating')
+    expect(state.submitted?.operation === 'regenerate-prose' ? state.submitted.request.regeneration : undefined).toEqual(binding)
   })
   it('keeps frozen content and instructions when a later rejection follows an unknown request', () => {
     let state = initProseReview(baseline)

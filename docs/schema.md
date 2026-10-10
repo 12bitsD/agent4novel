@@ -71,7 +71,7 @@ Artifact = {
 
 ## 版本与关卡
 
-- `appendArtifact` 追加新版本（version+1），旧版本保留；当前公开读模型仍只返回各地址的 head。#20 为当前 pending beat 增加受限的 A/B 比较与选择入口：再生响应返回本次 A/B 完整快照，服务端可按 beat 的 id/version 精确读取历史 A 供选择核对；这不是通用历史浏览或回退入口
+- `appendArtifact` 追加新版本（version+1），旧版本保留；当前公开读模型仍只返回各地址的 head。#20 为当前 pending beat 增加受限的 A/B 比较与选择入口。#21 增加通过后历史章重生：请求显式绑定目标 beat/prose 的 id/version，先追加 pending beat，再由作者通过后追加 pending prose；正文阶段还必须能从旧正文的 beat input 引用确认前一关，缺失来源时不推断已完成。后续章不写入，只通过 stale inputs 投影连续性提示。Harness 可用 `GET /api/works/:id/artifacts/{beat|prose}/{chapter}/versions/:version?artifactId=...` 读取精确历史 Artifact；这不是历史列表或回退入口。
 - `humanStatus` 语义：`pending` = 待作者把关（关卡中）；`approved` = 已通过
 - 人工保存语义分节点：caption 落库即 `approved`（无关卡）；creative 保存草稿 = 新版本 + `pending`（`saveCreativeDraft`），显式选定方向 = 单方向新版本 + `approved`（`selectCreativeDirection`）；outline（#4）保存草稿 = 新版本 + `pending`（`saveOutlineDraft`，新增弧线/剧情点的 id 由 server 补注入），通过使用[大纲可见版本通过](#大纲可见版本通过)的专用条件命令，旧通用 `/approve` 保留当前 head 兼容语义；setting（#13）不保存中间草稿，专用完成命令将同 id／version 的内容和状态原子定稿，不追加 V2
 - Prose 保存追加新 ID／版本并保留匹配基线的 `humanStatus`；pending 草稿可为空，approved 内容必须非空。通过仍是同 ID／版本原子定稿。通过后可编辑是 Prose 的明确例外，不改变 Setting／Beat 通过后只读的语义。
@@ -85,9 +85,9 @@ Artifact = {
 
 `Artifact.content` 的传输表示仍是 JSON；有效性由 `artifactContentSchemas` 和 `artifactContentSchemaFor(kind, humanStatus)` 决定。Caption、Creative、Outline、Setting、Beat 使用对应正式内容形态；pending Prose 使用编辑形态，approved Prose 使用非空正式内容。模型输出的无 ID 变体不作为存储形态，服务端注入身份后仍需最终复验。
 
-`artifactSchema` 同时检查内容及 kind/chapter 地址；`workDetailSchema` 和 `workViewSchema` 使用同一归属/唯一 head 规则。每个产物必须属于当前作品，同一 kind/chapter 只出现一个当前版本；本规则不把公开读取扩展成全部历史列表。Config 的未知字段拒绝，不静默丢弃以掩盖协议漂移。
+`artifactSchema` 同时检查内容及 kind/chapter 地址；`workDetailSchema` 和 `workViewSchema` 使用同一归属/唯一 head 规则。每个产物必须属于当前作品，同一 kind/chapter 只出现一个当前版本；历史读取只接受调用方给出的精确 kind、chapter、artifactId、version，不返回历史列表。Config 的未知字段拒绝，不静默丢弃以掩盖协议漂移。
 
-Store 在写入及状态转换前校验候选，保留原有版本与上游条件检查；失败不得创建空 bucket、增加版本或改变状态。读取校验本次返回的内容，快照不暴露内部可变引用。公开 GET 仍只返回各地址 head，不承诺扫描未被读取的历史；SQLite 从磁盘解码时复用同一验证入口，未来历史读取也必须遵守。
+Store 在写入及状态转换前校验候选，保留原有版本与上游条件检查；失败不得创建空 bucket、增加版本或改变状态。读取校验本次返回的内容，快照不暴露内部可变引用。公开作品 GET 仍只返回各地址 head；精确历史 GET 复用同一 Artifact 校验入口，不扫描历史列表、不改变当前 head。SQLite 从磁盘解码时复用同一验证入口。
 
 公开创建、列表、创意稿保存/选择、大纲保存、通用通过、应用配置、推进及各专用命令均复用 `packages/contracts`。HTTP 成功输出也校验；输出失败统一安全 500，不含原始内容，不宣称操作未发生。错误公共联合 `httpErrorSchema` 保留基础错误以及 Beat/Prose command 与遥测扩展。CLI 本地诊断包装和 Step 私有 I/O 不被强行并入 HTTP 错误形。
 
