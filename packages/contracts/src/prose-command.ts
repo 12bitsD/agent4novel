@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { apiErrorSchema, workflowStates } from './artifacts.js'
+import { chapterRegenerationBindingSchema } from './artifact-envelope.js'
 import { proseArtifactSchema, proseContentSchema } from './prose.js'
 import { llmTelemetrySchema } from './telemetry.js'
 
@@ -12,6 +13,7 @@ const common = {
 }
 const execution = z.object({
   ...common, kind: z.literal('execution-result'), target: proseTargetSchema, expectedHead: proseHeadSchema.nullable(),
+  regeneration: chapterRegenerationBindingSchema.optional(),
   writeOutcome: z.enum(['committed', 'not-committed', 'unknown']),
   failureStage: z.enum(['request', 'precondition', 'input', 'model', 'output', 'commit', 'response']).optional(),
   attemptIds: z.array(z.string().min(1)).max(1000),
@@ -19,11 +21,14 @@ const execution = z.object({
 }).strict()
 const rejected = z.object({
   ...common, kind: z.literal('request-rejected'), writeOutcome: z.literal('not-committed'),
+  regeneration: chapterRegenerationBindingSchema.optional(),
   failureStage: z.literal('request'), attemptIds: z.array(z.string()).length(0),
 }).strict()
 export const proseCommandObservationSchema = z.discriminatedUnion('kind', [execution, rejected]).superRefine((v, ctx) => {
   if (v.kind !== 'execution-result') return
   const invalid = (message: string) => ctx.addIssue({ code: 'custom', message })
+  if (v.regeneration && v.operation !== 'regenerate-prose') invalid('章节重生绑定只能用于正文再生')
+  if (v.regeneration && (!v.expectedHead || v.regeneration.expectedProse.artifactId !== v.expectedHead.artifactId || v.regeneration.expectedProse.version !== v.expectedHead.version)) invalid('章节重生正文目标不匹配')
   if ((v.operation === 'generate-prose') !== (v.expectedHead === null)) invalid('基线与命令不匹配')
   if ((v.operation === 'approve-prose' || v.operation === 'save-prose') && v.attemptIds.length) invalid('人工写入不得包含模型尝试')
   if ((v.operation === 'save-prose') !== (v.expectedHead?.humanStatus !== undefined)) invalid('保存必须绑定基线审批状态')

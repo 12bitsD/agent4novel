@@ -8,9 +8,9 @@ topics: ["chapter-continuation", "human-review", "upstream-snapshot", "chapter-n
 code_paths: ["apps/server/src/pipeline/pipeline.ts", "apps/server/src/routes/works.ts", "packages/contracts/src/artifacts.ts", "apps/web/src/pages/Workspace.tsx", "apps/cli/src/commands.ts"]
 symbols: ["startChapter", "currentChapter", "previousChapter", "needsContinuityReview", "start-chapter"]
 inherits: ["022", "005", "004", "014", "025"]
-changed_by: ["019", "009", "043", "035"]
+changed_by: ["019", "009", "043", "035", "021"]
 read_when: ["continue-chapter", "navigate-chapters", "edit-previous-prose", "debug-chapter-context"]
-last_context_reviewed: "2026-10-03"
+last_context_reviewed: "2026-10-10"
 ---
 
 # 006 — 后续章续写与跨章创作
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-10-03"
 - **原始目的**：让已完成首章的作品继续逐章创作，同时保留各章独立关卡；WHAT/AC 以 [#6](https://github.com/12bitsD/agent4novel/issues/6) 为准。
 - **实际落地**：显式起章、可重复的章纲/正文双关卡、上一章输入、章节目录与链接重入、历史正文编辑和衔接提示均已实现；交付状态以 issue/PR 为准。
 - **当前价值**：继承 #22 的正文自动保存、通过后显式编辑、冻结提交与未知结果恢复；把工作进度和当前阅读的章节分开。
-- **后续变化**：#6 已随 PR #32 合并关闭；[Wiki 019](./019-contract-governance.md) 收敛本页多章协议的共享校验；[Wiki 009](./009-sqlite-persistence.md) 接入服务重启恢复，本页当次“内存／重启丢失”限制不再描述当前生产存储。多章行为与原审核证据保留；当前交接见 [handoff](../handoff.md)。
+- **后续变化**：#6 已随 PR #32 合并关闭；[Wiki 019](./019-contract-governance.md) 收敛本页多章协议的共享校验；[Wiki 009](./009-sqlite-persistence.md) 接入服务重启恢复，本页当次“内存／重启丢失”限制不再描述当前生产存储。多章行为与原审核证据保留；当前交接见 [handoff](../handoff.md)。 [Wiki021](./021-chapter-regeneration.md) 新增通过后当前/历史章的两阶段重生，保留旧版本与后续章节；不改变本页原始交付证据。
 - **代码入口**：Pipeline 负责章节循环和实际依赖快照，Store 原子条件写入；公共协议供 HTTP/Web/CLI 使用，Step 接收明确的上一章内容。
 
 

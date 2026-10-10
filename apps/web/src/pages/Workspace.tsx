@@ -257,6 +257,18 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
     setBeat(updated)
     if (!updated.comparison && updated.phase === 'editing') await refresh()
   }
+
+  const runChapterBeatRegeneration = async () => {
+    const view = workRef.current, beat = beatRef.current?.baseline, prose = proseRef.current?.baseline
+    if (!view || !beat || !prose || !chapterActions(view, beat.chapter).includes('regenerate-chapter') || generationBusy.current) return
+    setBeat({ ...beatRef.current!, instructions: '', regeneration: { mode: 'chapter-regeneration',
+      expectedBeat: { artifactId: beat.id, version: beat.version }, expectedProse: { artifactId: prose.id, version: prose.version } }, notice: undefined })
+    generationBusy.current = true; setGenerationStep('beat'); setGenerating(true); setError(null)
+    try { await runBeat('regenerate-beat') } finally {
+      generationBusy.current = false
+      if (mounted.current) setGenerating(false)
+    }
+  }
   const runBeat = async (mode: 'approve-beat' | 'regenerate-beat' | 'confirm' | 'retry') => {
     const current = beatRef.current
     if (!current || ['submitting', 'regenerating', 'reconciling'].includes(current.phase)) return
@@ -278,7 +290,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
       } else setBeat({ ...beatRef.current!, phase: 'uncertain', hasUnknownWrite: true, notice: '选择结果尚未确认，比较内容已冻结；请重试同一份请求。' })
       return
     }
-    if ((mode === 'approve-beat' || mode === 'regenerate-beat') && !chapterActions(workRef.current, current.baseline.chapter).includes(mode === 'approve-beat' ? 'approve' : 'regenerate')) return
+    if ((mode === 'approve-beat' || mode === 'regenerate-beat') && !chapterActions(workRef.current, current.baseline.chapter).includes(mode === 'approve-beat' ? 'approve' : current.regeneration ? 'regenerate-chapter' : 'regenerate')) return
     const next = reduceBeatReview(current, mode === 'confirm' || mode === 'retry' ? { type: mode } : { type: 'start', operation: mode })
     setBeat(next)
     if (mode !== 'confirm' && (!next.submitted || !['submitting', 'regenerating'].includes(next.phase))) return
@@ -306,9 +318,9 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
   const proseAction = (action: ProseReviewAction) => { if (proseRef.current) setProse(reduceProseReview(proseRef.current, action)) }
   const runProse = async (mode: 'approve-prose' | 'regenerate-prose' | 'save-prose' | 'confirm' | 'retry') => {
     const current = proseRef.current
-    if (!current || starting || startUncertain || ['saving', 'submitting', 'regenerating', 'reconciling'].includes(current.phase)) return
+    if (!current || (generationBusy.current && !current.regeneration) || starting || startUncertain || ['saving', 'submitting', 'regenerating', 'reconciling'].includes(current.phase)) return
     if (mode === 'save-prose' && !chapterActions(workRef.current, current.baseline.chapter).includes('save-draft')) return
-    if ((mode === 'approve-prose' || mode === 'regenerate-prose') && !chapterActions(workRef.current, current.baseline.chapter).includes(mode === 'approve-prose' ? 'approve' : 'regenerate')) return
+    if ((mode === 'approve-prose' || mode === 'regenerate-prose') && !chapterActions(workRef.current, current.baseline.chapter).includes(mode === 'approve-prose' ? 'approve' : current.regeneration ? 'regenerate-chapter-prose' : 'regenerate')) return
     const next = reduceProseReview(current, mode === 'confirm' || mode === 'retry' ? { type: mode } : { type: 'start', operation: mode })
     setProse(next)
     if (mode !== 'confirm' && (!next.submitted || !['saving', 'submitting', 'regenerating'].includes(next.phase))) return
@@ -330,6 +342,18 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
     if (!active()) return
     setProse(reduceProseReview(proseRef.current!, { type: 'readback', work: view }))
     if (view?.id === workId) acceptWork(view, false)
+  }
+
+  const runChapterProseRegeneration = async () => {
+    const view = workRef.current, beat = beatRef.current?.baseline, prose = proseRef.current?.baseline
+    if (!view || !beat || !prose || !chapterActions(view, prose.chapter).includes('regenerate-chapter-prose') || generationBusy.current) return
+    setProse({ ...proseRef.current!, instructions: '', regeneration: { mode: 'chapter-regeneration',
+      expectedBeat: { artifactId: beat.id, version: beat.version }, expectedProse: { artifactId: prose.id, version: prose.version } } })
+    generationBusy.current = true; setGenerationStep('prose'); setGenerating(true); setError(null)
+    try { await runProse('regenerate-prose') } finally {
+      generationBusy.current = false
+      if (mounted.current) setGenerating(false)
+    }
   }
 
   const openStartedChapter = (view: WorkView | null, target: number) => {
@@ -422,7 +446,7 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
     outlineArtifact !== undefined
 
   const showSetting = !retainLegacy && setting !== null && (work?.workflowState === 'awaiting-setting-review' || work?.workflowState === 'setting-approved')
-  const showProse = !retainLegacy && prose !== null && (!!chapterSummary || work?.workflowState === 'awaiting-prose-review' || work?.workflowState === 'prose-approved')
+  const showProse = !retainLegacy && prose !== null && beat?.baseline.humanStatus !== 'pending' && (!!chapterSummary || work?.workflowState === 'awaiting-prose-review' || work?.workflowState === 'prose-approved')
   const showBeat = !retainLegacy && beat !== null && !showProse && (!!chapterSummary || work?.workflowState === 'awaiting-beat-review' || work?.workflowState === 'beat-approved')
   // 生成间隙保留已选定的创意稿；动作权限仍由服务器读模型决定。
   const showPoster = !retainedOutline && creative !== null && creativeArtifact !== undefined && (
@@ -521,11 +545,13 @@ function WorkSession({ workId, onBack, requestedChapter, onSelectChapter, onReso
         onChooseVariant={choice => void runBeatVariant(choice)} />}
       {showProse && prose && <ProseReview title={beat?.baseline.content.title ?? chapterLabel(chapter)} state={prose} onAction={proseAction}
         contextLabel={starting || generating ? '正在生成' : isCurrentChapter ? '当前创作' : '历史阅读'}
-        primaryAction={(actions.includes('start-next-chapter') || startUncertain) && <div className="prose-next-action">
-          <button type="button" style={btnPrimary} disabled={starting || generating || isProseDirty(prose) || badExampleGuard.dirty || configGuard.dirty || configGuard.locked} onClick={() => void beginNextChapter()}>
+        primaryAction={(actions.includes('start-next-chapter') || startUncertain || actions.includes('regenerate-chapter') || actions.includes('regenerate-chapter-prose')) && <div className="prose-next-action">
+          {actions.includes('regenerate-chapter') && <button type="button" style={btnPrimary} disabled={starting || generating || isProseDirty(prose)} onClick={() => void runChapterBeatRegeneration()}>重生本章章纲</button>}
+          {actions.includes('regenerate-chapter-prose') && <button type="button" style={btnPrimary} disabled={starting || generating || isProseDirty(prose)} onClick={() => void runChapterProseRegeneration()}>重生本章正文</button>}
+          {(actions.includes('start-next-chapter') || startUncertain) && <button type="button" style={btnPrimary} disabled={starting || generating || isProseDirty(prose) || badExampleGuard.dirty || configGuard.dirty || configGuard.locked} onClick={() => void beginNextChapter()}>
             {starting ? '正在生成下一章章纲…' : startUncertain ? '重试开始下一章' : '开始下一章'}
-          </button>
-          <p className="setting-muted prose-action-hint">先生成下一章章纲。{isProseDirty(prose) ? '请先保存并确认本章修改。' : ''}{badExampleGuard.dirty ? '请先标记坏例或清除选段和备注。' : ''}{configGuard.dirty || configGuard.locked ? '请先保存配置、加载服务器配置或核对原请求。' : ''}</p>
+          </button>}
+          <p className="setting-muted prose-action-hint">{(actions.includes('start-next-chapter') || startUncertain) ? '先生成下一章章纲。' : ''}{(actions.includes('regenerate-chapter') || actions.includes('regenerate-chapter-prose')) ? '章节重生不会自动修改后续章节；新章纲和新正文仍需分别通过。' : ''}{isProseDirty(prose) ? '请先保存并确认本章修改。' : ''}{badExampleGuard.dirty ? '请先标记坏例或清除选段和备注。' : ''}{configGuard.dirty || configGuard.locked ? '请先保存配置、加载服务器配置或核对原请求。' : ''}</p>
         </div>}
         allowCommands={!starting && !startUncertain && !badExampleGuard.locked && (actions.includes('save-draft') || (actions.includes('approve') && actions.includes('regenerate')))}
         onBadExampleGuard={setBadExampleGuard}

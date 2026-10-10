@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { beatCommandObservationSchema } from '@agent4novel/contracts'
-import type { Artifact, BeatExecutionObservation, BeatOperation } from '@agent4novel/contracts'
+import type { Artifact, BeatExecutionObservation, BeatOperation, ChapterRegenerationBinding } from '@agent4novel/contracts'
 import { KnownError } from './errors.js'
 import { z } from 'zod'
 import { currentRequest, recordCommand } from './steps/telemetry.js'
@@ -26,7 +26,7 @@ export function beatResponseError(workId: string, committed: BeatExecutionObserv
 export async function observeBeat<T extends Artifact>(
   workId: string, operation: BeatOperation, expectedHead: BeatExecutionObservation['expectedHead'],
   run: (execution: BeatExecution) => T | Promise<T>,
-  chapter = 1,
+  chapter = 1, regeneration?: ChapterRegenerationBinding,
 ): Promise<{ artifact: T; command: BeatExecutionObservation }> {
   const request = currentRequest()
   const started = Date.now()
@@ -34,7 +34,7 @@ export async function observeBeat<T extends Artifact>(
   const execution: BeatExecution = { stage: 'precondition' }
   const base = () => ({
     kind: 'execution-result' as const, requestId: request?.requestId ?? randomUUID(), operation,
-    target: { workId, kind: 'beat' as const, chapter }, expectedHead,
+    target: { workId, kind: 'beat' as const, chapter }, expectedHead, ...(regeneration ? { regeneration } : {}),
     executionMode: request?.executionMode ?? 'demo' as const, latencyMs: Date.now() - started,
     attemptIds: request?.telemetry.slice(cursor).filter(t => t.stepId === 'beat').map(t => t.attemptId) ?? [],
   })

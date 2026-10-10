@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { initBeatReview, reduceBeatReview, toBeatSubmission } from './beat-review.js'
+import { initBeatReview, reduceBeatReview, toBeatSubmission, type BeatReviewState } from './beat-review.js'
 import type { BeatArtifact, WorkView } from '@agent4novel/contracts'
 
 const baseline: BeatArtifact = { id: 'artifact-test', workId: 'work-test', kind: 'beat', chapter: 1, version: 1, humanStatus: 'pending', createdAt: '2026-09-08',
@@ -58,6 +58,15 @@ describe('Beat editor public state', () => {
     expect(JSON.stringify(toBeatSubmission(state, 'approve-beat'))).not.toContain('localKey')
     expect(reduceBeatReview(state, { type: 'field', field: 'goal', value: '迟到编辑' }).draft.goal).toBe('作者修改')
     expect(baseline.content.goal).toBe('目标')
+  })
+  it('starts historical chapter regeneration from an approved head with an explicit binding', () => {
+    const approved = { ...baseline, humanStatus: 'approved' as const }
+    const binding = { mode: 'chapter-regeneration' as const,
+      expectedBeat: { artifactId: approved.id, version: approved.version }, expectedProse: { artifactId: 'prose-old', version: 1 } }
+    let state: BeatReviewState = { ...initBeatReview(approved), regeneration: binding }
+    state = reduceBeatReview(state, { type: 'start', operation: 'regenerate-beat' })
+    expect(state.phase).toBe('regenerating')
+    expect(state.submitted?.operation === 'regenerate-beat' ? state.submitted.request.regeneration : undefined).toEqual(binding)
   })
   it('keeps frozen content and instructions when a later rejection follows an unknown request', () => {
     let state = initBeatReview(baseline)

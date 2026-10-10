@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { apiErrorSchema, workflowStates } from './artifacts.js'
+import { chapterRegenerationBindingSchema } from './artifact-envelope.js'
 import { beatArtifactSchema } from './beat.js'
 import { llmTelemetrySchema } from './telemetry.js'
 import { beatVariantComparisonSchema } from './beat-variant.js'
@@ -13,6 +14,7 @@ const common = {
 }
 const execution = z.object({
   ...common, kind: z.literal('execution-result'), target: beatTargetSchema, expectedHead: beatHeadSchema.nullable(),
+  regeneration: chapterRegenerationBindingSchema.optional(),
   writeOutcome: z.enum(['committed', 'not-committed', 'unknown']),
   failureStage: z.enum(['request', 'precondition', 'input', 'model', 'output', 'commit', 'response']).optional(),
   attemptIds: z.array(z.string().min(1)).max(1000),
@@ -20,11 +22,14 @@ const execution = z.object({
 }).strict()
 const rejected = z.object({
   ...common, kind: z.literal('request-rejected'), writeOutcome: z.literal('not-committed'),
+  regeneration: chapterRegenerationBindingSchema.optional(),
   failureStage: z.literal('request'), attemptIds: z.array(z.string()).length(0),
 }).strict()
 export const beatCommandObservationSchema = z.discriminatedUnion('kind', [execution, rejected]).superRefine((v, ctx) => {
   if (v.kind !== 'execution-result') return
   const invalid = (message: string) => ctx.addIssue({ code: 'custom', message })
+  if (v.regeneration && v.operation !== 'regenerate-beat') invalid('章节重生绑定只能用于章纲再生')
+  if (v.regeneration && (!v.expectedHead || v.regeneration.expectedBeat.artifactId !== v.expectedHead.artifactId || v.regeneration.expectedBeat.version !== v.expectedHead.version)) invalid('章节重生章纲目标不匹配')
   if ((v.operation === 'generate-beat') !== (v.expectedHead === null)) invalid('基线与命令不匹配')
   if (v.operation === 'approve-beat' && v.attemptIds.length) invalid('人工通过不得包含模型尝试')
   if (new Set(v.attemptIds).size !== v.attemptIds.length) invalid('重复尝试')

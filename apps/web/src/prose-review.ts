@@ -1,11 +1,12 @@
 import { chapterActions, chapterLabel } from './chapter-view.js'
 import { proseApproveRequestSchema, proseRegenerateRequestSchema, proseSaveRequestSchema, proseArtifactSchema, recoverProseSubmission, proseCommandErrorSchema } from '@agent4novel/contracts'
-import type { ProseArtifact, ProseEditDraft, ProseSubmission, ValidationIssue, WorkView, ProseRecovery } from '@agent4novel/contracts'
+import type { ChapterRegenerationBinding, ProseArtifact, ProseEditDraft, ProseSubmission, ValidationIssue, WorkView, ProseRecovery } from '@agent4novel/contracts'
 
 export type ProseReviewState = {
   baseline: ProseArtifact; draft: ProseEditDraft; instructions: string; mode: 'preview' | 'edit'
   phase: 'editing' | 'saving' | 'submitting' | 'regenerating' | 'reconciling' | 'uncertain' | 'conflict' | 'approved'
   submitted?: ProseSubmission; hasUnknownWrite: boolean; issues: ValidationIssue[]; notice?: string
+  regeneration?: ChapterRegenerationBinding
   response?: { status: number; body: unknown }; observedWork?: WorkView; remote?: ProseArtifact; recovery?: ProseRecovery; canResume?: boolean
 }
 export type ProseReviewAction =
@@ -28,7 +29,7 @@ export function toProseSubmission(state: ProseReviewState, operation: ProseSubmi
   }
   return operation === 'approve-prose' ? { operation, request }
     : operation === 'save-prose' ? { operation, request: { ...request, expectedHumanStatus: state.baseline.humanStatus } }
-    : { operation, request: { ...request, instructions: state.instructions } }
+    : { operation, request: { ...request, instructions: state.instructions, ...(state.regeneration ? { regeneration: state.regeneration } : {}) } }
 }
 export function isProseDirty(state: ProseReviewState): boolean {
   return state.instructions.length > 0 || JSON.stringify(toProseSubmission(state, 'approve-prose').request.content) !== JSON.stringify(state.baseline.content)
@@ -85,9 +86,10 @@ export function reduceProseReview(state: ProseReviewState, action: ProseReviewAc
         : recovery.resolution === 'conflict' ? '服务器版本已变化。请保留本页内容，核对后明确选择载入。' : `本次未写入（${failure.success ? failure.data.code : 'request-rejected'}），本页修改已保留。${budget ? `完整输入 ${budget.actualLength} / ${budget.limit} 字符，未调用模型。请缩减输入或检查模型配置。` : ''}`,
     }
   }
+  const chapterRegenerationStart = state.regeneration !== undefined && state.phase === 'approved'
   if (!['editing', 'approved', 'saving'].includes(state.phase)) return state
   if (action.type === 'start') {
-    if (state.phase === 'saving' || (state.baseline.humanStatus === 'approved' && action.operation !== 'save-prose')) return state
+    if (state.phase === 'saving' || (state.baseline.humanStatus === 'approved' && !chapterRegenerationStart && action.operation !== 'save-prose')) return state
     const submission = toProseSubmission(state, action.operation)
     const parsed = (submission.operation === 'approve-prose' ? proseApproveRequestSchema : submission.operation === 'save-prose' ? proseSaveRequestSchema : proseRegenerateRequestSchema).safeParse(submission.request)
     if (!parsed.success) return { ...state, mode: 'edit', issues: parsed.error.issues.map(({ path, code }) => ({ path, code, message: '请填写有效内容并检查长度限制' })) }

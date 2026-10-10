@@ -1,4 +1,4 @@
-import { runStep, perChapterKinds, beatContentSchema, beatArtifactSchema, beatRegenerateRequestSchema, beatVariantSelectionRequestSchema, proseContentSchema, proseRegenerateRequestSchema, creativeContentSchema, creativeRegenerateRequestSchema, startChapterRequestSchema, outlineApprovalRequestSchema, outlineApprovalResponseSchema } from '@agent4novel/contracts'
+import { runStep, perChapterKinds, beatContentSchema, beatArtifactSchema, beatRegenerateRequestSchema, beatVariantSelectionRequestSchema, proseContentSchema, proseArtifactSchema, proseRegenerateRequestSchema, creativeContentSchema, creativeRegenerateRequestSchema, startChapterRequestSchema, outlineApprovalRequestSchema, outlineApprovalResponseSchema } from '@agent4novel/contracts'
 import type {
   AgentConfig,
   Artifact,
@@ -28,7 +28,7 @@ import { prepareBeatReview } from '../beat-review.js'
 import { prepareProseReview } from '../prose-review.js'
 import { assertBeatIds, assignBeatIds } from '../beat-content.js'
 import { safeLog } from '../safe-log.js'
-import { currentChapterOf } from '../chapter-view.js'
+import { chapterWorkflow, currentChapterOf } from '../chapter-view.js'
 export type { AdvanceOutcome, GateRef, PipelineStage, PipelineState } from '@agent4novel/contracts'
 
 // 步骤输入(#3c):pipeline 组装上下文 { workId, seed, upstream }。
@@ -347,9 +347,53 @@ export class Pipeline {
       if (this.advancing.has(workId)) throw new KnownError('advance-in-progress', 'generation already running', { retryable: true })
       this.advancing.add(workId)
       try {
+        if (request.regeneration) {
+          const work = this.store.getWork(workId)
+          if (!work) throw new KnownError('work-not-found', 'work not found')
+          const beat = beatArtifactSchema.safeParse(work.artifacts.find(a => a.kind === 'beat' && a.chapter === request.chapter)).data
+          const prose = proseArtifactSchema.safeParse(work.artifacts.find(a => a.kind === 'prose' && a.chapter === request.chapter)).data
+          if (!beat || !prose || request.expectedArtifactId !== request.regeneration.expectedBeat.artifactId
+            || request.expectedHeadVersion !== request.regeneration.expectedBeat.version
+            || beat.id !== request.regeneration.expectedBeat.artifactId || beat.version !== request.regeneration.expectedBeat.version
+            || prose.id !== request.regeneration.expectedProse.artifactId || prose.version !== request.regeneration.expectedProse.version) {
+            throw new KnownError('version-conflict', 'chapter regeneration head changed')
+          }
+          if (beat.humanStatus !== 'approved' || prose.humanStatus !== 'approved') {
+            throw new KnownError('beat-gate-not-ready', 'chapter regeneration requires approved beat and prose')
+          }
+          const entry = this.definitionFor(request.chapter).find(d => d.outputKind === 'beat' && d.chapter === request.chapter)
+          if (!entry) throw new KnownError('beat-gate-not-ready', 'beat step not configured')
+          const config = this.operationConfigs(workId)[entry.stepId]
+          if (!config) throw new KnownError('config-invalid', 'step configuration is unavailable')
+          execution.stage = 'input'
+          const parsed = beatRegenerateRequestSchema.parse(request)
+          assertBeatIds(parsed.content, beat.content)
+          const input = this.inputsFor(work, entry)
+          const content = { ...parsed.content, writingPlan: parsed.content.writingPlan.map(({ title, content }) => ({ title, content })) }
+          execution.stage = 'model'
+          const output = await runStep(this.steps.get(entry.stepId)!, {
+            workId, seed: work.seed, upstream: input.upstream, chapter: request.chapter,
+            regeneration: { content, instructions: parsed.instructions },
+          }, config)
+          execution.stage = 'output'
+          const generated = beatContentSchema.parse(output.content)
+          const candidate = assignBeatIds({ ...generated, writingPlan: generated.writingPlan.map(item => {
+            const prior = beat.content.writingPlan.find(existing => existing.itemId === item.itemId)
+            return prior && (prior.title !== item.title || prior.content !== item.content)
+              ? item : { title: item.title, content: item.content }
+          }) }, beat.content)
+          execution.stage = 'commit'
+          return beatArtifactSchema.parse(this.store.appendArtifact(workId, 'beat', candidate, { chapter: request.chapter,
+            inputs: input.inputs,
+            preconditions: [...input.preconditions,
+              { kind: 'beat', chapter: request.chapter, head: { artifactId: beat.id, version: beat.version, humanStatus: 'approved' } },
+              { kind: 'prose', chapter: request.chapter, head: { artifactId: prose.id, version: prose.version, humanStatus: 'approved' } },
+            ],
+          }))
+        }
         const { work, baseline, preconditions } = prepareBeatReview(this.store, workId, request)
-        const state = this.getState(workId)
-        if (state.stage !== 'awaiting-approval' || state.pendingGate?.kind !== 'beat' || state.pendingGate.chapter !== request.chapter) {
+        const workflow = chapterWorkflow(work, request.chapter, this.repeatChapters)
+        if (workflow?.workflowState !== 'awaiting-beat-review') {
           throw new KnownError('beat-gate-not-ready', 'beat gate not ready')
         }
         const entry = this.definitionFor(request.chapter).find(d => d.outputKind === 'beat' && d.chapter === request.chapter)
@@ -380,7 +424,7 @@ export class Pipeline {
         comparison = { original: baseline, candidate: artifact }
         return artifact
       } finally { this.advancing.delete(workId) }
-    }, request.chapter)
+    }, request.chapter, request.regeneration)
     return { ...observed, comparison: comparison! }
   }
 
@@ -486,9 +530,48 @@ export class Pipeline {
       if (this.advancing.has(workId)) throw new KnownError('advance-in-progress', 'generation already running', { retryable: true })
       this.advancing.add(workId)
       try {
+        if (request.regeneration) {
+          const work = this.store.getWork(workId)
+          if (!work) throw new KnownError('work-not-found', 'work not found')
+          const beat = beatArtifactSchema.safeParse(work.artifacts.find(a => a.kind === 'beat' && a.chapter === request.chapter)).data
+          const prose = proseArtifactSchema.safeParse(work.artifacts.find(a => a.kind === 'prose' && a.chapter === request.chapter)).data
+          if (!beat || !prose || request.expectedArtifactId !== request.regeneration.expectedProse.artifactId
+            || request.expectedHeadVersion !== request.regeneration.expectedProse.version
+            || beat.id !== request.regeneration.expectedBeat.artifactId || beat.version !== request.regeneration.expectedBeat.version
+            || prose.id !== request.regeneration.expectedProse.artifactId || prose.version !== request.regeneration.expectedProse.version) {
+            throw new KnownError('version-conflict', 'chapter regeneration head changed')
+          }
+          if (beat.humanStatus !== 'approved' || prose.humanStatus !== 'approved') {
+            throw new KnownError('prose-gate-not-ready', 'chapter regeneration requires an approved beat and prose')
+          }
+          const priorBeatInput = prose.inputs?.find(input => input.kind === 'beat' && input.chapter === request.chapter)
+          if (!priorBeatInput || (priorBeatInput.artifactId === beat.id && priorBeatInput.version === beat.version)) {
+            throw new KnownError('prose-gate-not-ready', 'chapter beat has not been replanned or its source is unavailable')
+          }
+          const entry = this.definitionFor(request.chapter).find(d => d.outputKind === 'prose' && d.chapter === request.chapter)
+          if (!entry) throw new KnownError('prose-gate-not-ready', 'prose step not configured')
+          const config = this.operationConfigs(workId)[entry.stepId]
+          if (!config) throw new KnownError('config-invalid', 'step configuration is unavailable')
+          execution.stage = 'input'
+          const parsed = proseRegenerateRequestSchema.parse(request)
+          const input = this.inputsFor(work, entry)
+          execution.stage = 'model'
+          const output = await runStep(this.steps.get(entry.stepId)!, {
+            workId, seed: work.seed, upstream: input.upstream, chapter: request.chapter,
+            regeneration: { content: parsed.content, instructions: parsed.instructions },
+          }, config)
+          execution.stage = 'output'
+          const candidate = proseContentSchema.parse(output.content)
+          execution.stage = 'commit'
+          return this.store.appendArtifact(workId, 'prose', candidate, { chapter: request.chapter, inputs: input.inputs,
+            preconditions: [...input.preconditions,
+              { kind: 'prose', chapter: request.chapter, head: { artifactId: prose.id, version: prose.version, humanStatus: 'approved' } },
+            ],
+          })
+        }
         const { work, baseline, preconditions } = prepareProseReview(this.store, workId, request)
-        const state = this.getState(workId)
-        if (state.stage !== 'awaiting-approval' || state.pendingGate?.kind !== 'prose' || state.pendingGate.chapter !== request.chapter) {
+        const workflow = chapterWorkflow(work, request.chapter, this.repeatChapters)
+        if (workflow?.workflowState !== 'awaiting-prose-review') {
           throw new KnownError('prose-gate-not-ready', 'prose gate not ready')
         }
         const entry = this.definitionFor(request.chapter).find(d => d.outputKind === 'prose' && d.chapter === request.chapter)
@@ -508,7 +591,7 @@ export class Pipeline {
           ...preconditions, ...input.preconditions, { kind: 'prose', chapter: request.chapter, head: { artifactId: baseline.id, version: baseline.version, humanStatus: 'pending' } },
         ] })
       } finally { this.advancing.delete(workId) }
-    }, request.chapter)
+    }, request.chapter, request.regeneration)
   }
 
   // 读模型用:最近一次失败(无 → null)。审批等人工动作也会清掉它。

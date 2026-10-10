@@ -29,6 +29,15 @@ export const artifactInputSchema = z.object({
 })
 export type ArtifactInput = z.infer<typeof artifactInputSchema>
 
+export const artifactRefSchema = z.object({ artifactId: z.string().min(1).max(128), version: z.number().int().positive().safe() }).strict()
+export const chapterRegenerationBindingSchema = z.object({
+  mode: z.literal('chapter-regeneration'),
+  expectedBeat: artifactRefSchema,
+  expectedProse: artifactRefSchema,
+}).strict()
+export type ArtifactRef = z.infer<typeof artifactRefSchema>
+export type ChapterRegenerationBinding = z.infer<typeof chapterRegenerationBindingSchema>
+
 export const artifactEnvelopeSchema = z.object({
   id: z.string().min(1),
   workId: z.string().min(1),
