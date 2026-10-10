@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。最后更新：2026-10-11。本机 MVP 已发布；#35/PR45、#47/PR48 与 #49/PR50 已关闭/合并（本轮 GitHub 回读）。当前进入 MVP 后第二期；#12、#20、#51、#46 已合并关闭。#60 Kimi provider 已合并关闭。#21 章节重生已完成：允许历史章重生，后续章保留并只提示连续性；#21/PR62 已合并关闭。#18 冲突设计已完成：Setting 前非阻断旁路、作者 disposition 和显式上下文。当前按 Loop 实施 #17 设定扩展，第三轮最后修复独立 reviewer 的 P2：proposal/record extension 对账和 approved candidate 历史 readback；尚未完成最终审核、CI 或 issue 收口。#28/#29 与长篇质量评估保持后置。
+> 用途：context compaction / 新会话接力。最后更新：2026-10-11。本机 MVP 已发布；#35/PR45、#47/PR48 与 #49/PR50 已关闭/合并（本轮 GitHub 回读）。当前进入 MVP 后第二期；#12、#20、#51、#46 已合并关闭。#60 Kimi provider 已合并关闭。#21 章节重生已完成：允许历史章重生，后续章保留并只提示连续性；#21/PR62 已合并关闭。#18 冲突设计已完成：Setting 前非阻断旁路、作者 disposition 和显式上下文。#17 设定扩展已按 Loop 完成并合入 main（PR65、CI 与 issue close 已回读）；剩余两个恶意持久 JSON 篡改硬化风险见 Wiki017，不是正常 HTTP 路径。下一步是先对齐 #15 Hono RPC 技术整理；实现尚未获 Human 确认。#28/#29 与长篇质量评估保持后置。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -16,7 +16,7 @@
 
 ## 当前里程碑与验证边界
 
-此前 #49 的范围与工程证据从 [Wiki049](./wiki/049-author-workbench.md) 进入，已随 PR50 合入。六种材料的保存差异、显式续章、原文/UTF-16、配置和坏例保护继续有效。新大纲通过绑定作者所见 ID/版本；旧通用通过命令仍读取服务端当前 head。通用任意历史全文和浏览器历史协议未新增；#21 仅新增按精确 ID/version 读取 Beat/Prose 历史版本。当前第二期的范围、顺序和非目标集中在 [第二期路线](./plans/mvp-phase2-roadmap.md)。#21 的实现、CI、远端 main 和 issue close 已完成；#18 只完成设计，不提供冲突检测代码能力；#17 的第一轮实现见 [Wiki017](./wiki/017-setting-evolution.md)，尚未完成票据交付门禁。
+此前 #49 的范围与工程证据从 [Wiki049](./wiki/049-author-workbench.md) 进入，已随 PR50 合入。六种材料的保存差异、显式续章、原文/UTF-16、配置和坏例保护继续有效。新大纲通过绑定作者所见 ID/版本；旧通用通过命令仍读取服务端当前 head。通用任意历史全文和浏览器历史协议未新增；#21 仅新增按精确 ID/version 读取 Beat/Prose 历史版本。当前第二期的范围、顺序和非目标集中在 [第二期路线](./plans/mvp-phase2-roadmap.md)。#21 的实现、CI、远端 main 和 issue close 已完成；#18 只完成设计，不提供冲突检测代码能力；#17 已由 [PR65](https://github.com/12bitsD/agent4novel/pull/65) 合入并关闭，当前下一票为尚未获 Human 实施确认的 #15 技术整理。
 
 **本机 MVP 已发布，整体验证与边界从 [Wiki001](./wiki/001-mvp-acceptance.md) 进入。** 2026-10-03 回读 #1 及 #6/#19/#9/#33/#7/#8 均已关闭，对应 PR 均已合并；[PR40](https://github.com/12bitsD/agent4novel/pull/40) 对应源提交的 CI 与 [main CI](https://github.com/12bitsD/agent4novel/actions/runs/36727036119) 均成功。文档 #41/PR42、修复 #43/PR44 与视觉 #35/PR45 也已关闭/合并；#47/#49 的后续交接分别见 Wiki047 与 Wiki049。#35 的 [main CI](https://github.com/12bitsD/agent4novel/actions/runs/37100590655/attempts/2) 最终成功；其首轮 SQLite 并发初始化失败由 #46 独立跟踪，重试通过不表示该竞争已修复。关闭记录证明交付状态，不能消除未来新发现。
 
@@ -117,7 +117,7 @@ CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化
 
 #22 已合入 main；其原 source、固定点和候选审核记录均属于已交付历史，入口为 [Wiki 022](./wiki/022-prose-generation-review.md)。新票从当前 main 核对基线，不能把旧票授权或审核结论当成新票完成证据。
 
-**最近交付 #18 冲突检测与作者澄清设计；当前实现 #17 设定扩展**。#1、#6、#19、#9、#33、#7、#8、#35、#47、#49、#51、#46、#12、#20、#21、#60、#18 已合并关闭；#18 本票只收敛设计契约，未增加代码能力。#17 已按 Human 确认的 append-only 范围形成第三轮最后 P2 修复和定向测试，尚未创建 PR、合并、取得 CI 或关闭 issue。第二期按 [路线计划](./plans/mvp-phase2-roadmap.md) 顺序推进；#28/#29 保持第三期后置。普通工程细节由 Agent 自主收敛，涉及产品范围、不可逆数据影响、新权限或费用时再请求用户决定。
+**最近交付 #17 设定扩展**。#1、#6、#19、#9、#33、#7、#8、#35、#47、#49、#51、#46、#12、#20、#21、#60、#18、#17 已合并关闭；#18 本票只收敛设计契约，未增加代码能力。#17 已按 Human 确认的 append-only 范围完成三轮 Loop、独立复验、PR/CI、远端回读和 issue close；两个恶意持久 JSON 篡改硬化风险已留在 Wiki017，不扩展本票。#15 的 r0.2 验收方案已独立校准 PASS，但尚未获 Human 确认开始实施。第二期按 [路线计划](./plans/mvp-phase2-roadmap.md) 顺序推进；#28/#29 保持第三期后置。普通工程细节由 Agent 自主收敛，涉及产品范围、不可逆数据影响、新权限或费用时再请求用户决定。
 
 | 交付批次 | 可验收结果 | 后续衔接 |
 |---|---|---|
@@ -134,7 +134,8 @@ CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化
 | #20 章纲版本比较与选择（已交付） | 当前 pending beat 的 A/B 比较、B 选择或 A-copy C、显式通过 | PR57、quality/container CI、远端 main 回读与 issue 关闭均完成；不扩展为通用历史 |
 | #21 章节重生（已交付） | 历史章两阶段 beat/prose 重生；旧版本和后续章节保留；精确历史 GET 与连续性提示 | PR62 已合并关闭；TDD、双轴 review、CI 和远端完成评论见 [Wiki021](./wiki/021-chapter-regeneration.md) |
 | #18 冲突检测与作者澄清（设计已交付） | Setting 前非阻断 review note、作者 disposition、stale 和显式上下文 | 设计契约已固定；后续实现另行立票；不阻断 Setting、不增加 canonical Setting 字段 |
-| #17 设定演进（实现中） | append-only 扩展提案、原子审批、影响提示、版本输入引用与 SQLite v4 | 第一轮实现已形成；待最终 Loop、PR/CI 和 issue 收口；不支持既有事实编辑/撤销/回退 |
+| #17 设定演进（已交付） | append-only 扩展提案、原子审批、影响提示、版本输入引用与 SQLite v4 | PR65 已合并关闭；三轮 Loop、双轴 review、quality/container CI、远端 main 回读和完成评论见 [Wiki017](./wiki/017-setting-evolution.md)；不支持既有事实编辑/撤销/回退 |
+| #15 Hono RPC 技术整理（待 Human 确认） | Web 通过 `hc<AppType>` 消除手写 DTO 漂移，REST 语义不变 | 受保护 Eval r0.2 已独立校准 PASS；实现前需 Human 确认，避免把技术整理扩成行为变化 |
 | #28/#29 扩展（第三期） | 设定查询工具循环、作品 Wiki 档案演进 | 当前均未实现，保持后置 |
 
 WHAT/AC 和依赖以 [父票 #1](https://github.com/12bitsD/agent4novel/issues/1) 及子票为准；[研究与决定清单](./research/mvp-delivery-options.md) 保存取舍。#33 的 SQLite 恢复 AC 原生依赖 #9；不为纯排期增加其他硬依赖。不迁移或清空旧内存实例；切换且内有重要作品时先保全。配置的实现和验收见Wiki007；坏例已交付见Wiki008，整体验收见Wiki001。SQLite、容器、配置、坏例分别以本票Wiki与远端状态为准。
