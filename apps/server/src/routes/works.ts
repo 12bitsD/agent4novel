@@ -188,6 +188,7 @@ function workflowOf(
 export type WorksRoutesDeps = {
   store: WorkStore
   pipeline: Pipeline
+  // 生产装配按所选 provider 的凭据决定 live/demo；路由只消费该模式，不绑定特定 provider。
   meta?: { demo: boolean }
 }
 

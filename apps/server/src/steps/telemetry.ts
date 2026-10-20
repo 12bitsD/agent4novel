@@ -12,9 +12,8 @@ export function withRequest<T>(requestId: string, demo: boolean, run: (scope: Re
   return requests.run(scope, () => run(scope))
 }
 
-// LLM 遥测账本(#14):进程内环形缓冲,生命周期=进程生命周期(同 store 的阶段假设)。
-// advance 路由在开始/结束各取一次 cursor,把本次推进期间的记录内联进响应;
-// GET /works/:id/telemetry 供事后回看。
+// LLM 遥测按 request scope 内联本次命令响应，并写入进程级环形缓冲供诊断查询。
+// request scope 只覆盖单次请求；进程缓冲不持久化，重启即丢失。
 const CAPACITY = 1000
 let seq = 0
 type Entry = { seq: number; workId: string } & LlmTelemetry

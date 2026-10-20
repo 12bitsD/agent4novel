@@ -9,7 +9,7 @@ import { assignSettingIds } from '../setting-content.js'
 import { assignBeatIds } from '../beat-content.js'
 import { beatStepInputSchema, beatStepOutputSchema } from './beat-io.js'
 
-// 演示模式(无 DEEPSEEK_API_KEY):固定输出,仍走完整 schema 校验链路
+// 显式可替换的 Step seam：固定输出仍走完整 schema 校验，是否采用由装配层决定，不绑定 provider。
 
 export function createFakeCaptionStep(): ArtifactStep {
   return {

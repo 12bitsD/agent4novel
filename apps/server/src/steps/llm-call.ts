@@ -67,7 +67,7 @@ export async function callLlm<T>(args: {
   attemptId: string
   /** 默认 8000;长产物步骤(如 outline)实测会撞顶截断(#14 排查),可上调 */
   maxOutputTokens?: number
-  /** 仅整份设定明确关闭 SDK 重试；其他步骤保留现有 SDK 默认行为。 */
+  /** Setting/Beat/Prose 显式传 0 关闭 SDK 重试；其余步骤省略此参数并沿用 SDK 默认。 */
   maxRetries?: number
   /** Node assembly settings already resolved by the production step. */
   effectiveConfig?: { directionCount?: number }

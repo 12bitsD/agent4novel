@@ -103,7 +103,7 @@
 - LongCat 的 Responses 协议尚未接入；当前只对接其文档明确支持的 OpenAI-compatible Chat Completions。
 - LongCat 文档未保证 JSON Schema structured output；当前走 `json_object` + 本地 zod 校验。历史三步证据见 Wiki 016，Setting 新样例见 Wiki 013；成功样例不是上游协议保证。
 - #7已提供作者配置UI/API；旧Work.config只作revision0兼容来源，保存后以作者document为唯一编辑来源。全局凭据/启动配置仍见 [Wiki016](./wiki/016-model-runtime-provider-config.md)，文件/版本/操作快照见[Wiki007](./wiki/007-author-agent-config.md)。
-- run-step 不持久化实验账本、不自动跑上游，也不校验所供content是否来自作品最新版；成功只证明通过生产schema，raw模型输出和reasoning不对外返回。Beat/Prose后续章需显式提供恰好前一章的内容；CLI配置不会写回作品。
+- run-step 仅在显式指定 `--record-dir` 时创建不可覆盖的私有目录，按 `input.json`、`invocation.json`、`result.json`、`meta.json` 四文件记录单次运行；这不是作品级数据库。它也不自动跑上游、不校验所供 content 是否来自作品最新版；成功只证明通过生产 schema，raw 模型输出和 reasoning 仍不对外返回。Beat/Prose 后续章需显式提供恰好前一章的内容；CLI 配置不会写回作品。
 - #6 提供各章当前版本浏览；#21 增加按精确 artifact ID/version 读取 Beat/Prose 历史版本，不提供历史列表或回退。章纲当前 pending 版本比较仍归 #20。渐进展示/分段提炼等独立优化留 #12。
 - #5 专属版本比较归 #20，正文后回流与章节重生归 #21；本期只允许通过前整份章纲再生。上条 #6/#12 是旧的通用优化分工，不覆盖这次已确认拆分。
 - #5 已修复序号身份复用、共享原始错误日志和首次 Web advance 无限等待。2026-09-08 完整 production live smoke 两次卡在 Creative（截断／schema），不属于 Beat 成功证据；独立 Beat live 样例也是历史结果。#5 当次 fake/mock 回归通过；浏览器确认 pending 章纲及意见输入，原生刷新取消／确认受工具限制未验证，不能用 mounted 测试代替。证据边界统一见 Wiki 005。

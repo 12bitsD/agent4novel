@@ -74,7 +74,7 @@ export class Pipeline {
   private resolveConfig: (work: WorkDetail, stepId: string) => AgentConfig
   private snapshotConfig?: PipelineDeps['snapshotConfig']
   private consumeGuards: Partial<Record<ArtifactKind, (content: JsonValue) => void>>
-  // per-work 内存互斥锁(#3c):并发 advance → 409 advance-in-progress;真正事务/lease 归 #9
+  // per-work 内存互斥只覆盖当前进程；SQLite 的写入前置条件在事务内复核，不能靠这把锁做跨进程 lease。
   private advancing = new Set<string>()
   // 最近一次 advance 失败(供读模型 'failed' 态);成功推进或到达关卡即清除
   private lastFailure = new Map<string, { stepId: string; code: string; retryable: boolean }>()
@@ -345,7 +345,6 @@ export class Pipeline {
     } finally { this.advancing.delete(workId) }
   }
 
-  // 读模型按定义末端区分三步兼容链与四步设定链。
   async regenerateBeat(workId: string, request: BeatRegenerateRequest) {
     let comparison: BeatVariantComparison | undefined
     const observed = await observeBeat(workId, 'regenerate-beat', { artifactId: request.expectedArtifactId, version: request.expectedHeadVersion }, async execution => {
