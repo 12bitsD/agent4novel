@@ -74,14 +74,13 @@ it('production constructor retains safe bounded busy diagnostics', () => {
 
 it('does not retry SQLITE_LOCKED as a busy condition', () => {
   const path = databasePath()
-  const db = open(path)
   const pragma = Database.prototype.pragma
   vi.spyOn(Database.prototype, 'pragma').mockImplementation(function (this: Database.Database, source, options) {
     if (source === 'foreign_keys = ON') throw Object.assign(new Error('locked'), { code: 'SQLITE_LOCKED' })
     return pragma.call(this, source, options)
   })
 
-  expect(() => initializeSqliteDatabase(db, { busyTimeoutMs: 1, maxAttempts: 20, retryDelayMs: 1 })).toThrow(expect.objectContaining({
+  expect(() => new SqliteStore(path)).toThrow(expect.objectContaining({
     stage: 'foreign_keys', sqliteCode: 'SQLITE_LOCKED', attempts: 1, retryable: false,
   }))
 })
@@ -99,12 +98,14 @@ it('does not retry a migration SQL error and leaves the transaction recoverable'
     return exec.call(this, source)
   })
 
-  expect(() => initializeSqliteDatabase(db, { busyTimeoutMs: 1, maxAttempts: 20, retryDelayMs: 1 })).toThrow(expect.objectContaining({
+  expect(() => new SqliteStore(path)).toThrow(expect.objectContaining({
     stage: 'schema', sqliteCode: 'SQLITE_ERROR', attempts: 1, retryable: false,
   }))
   expect(migrationAttempts).toBe(1)
   failure.mockRestore()
-  initializeSqliteDatabase(db, { busyTimeoutMs: 1, maxAttempts: 2, retryDelayMs: 1 })
+  const store = new SqliteStore(path)
+  resources.push(store)
+  expect(store.listWorks()).toEqual([])
   expect(db.pragma('user_version', { simple: true })).toBe(4)
 })
 
@@ -144,11 +145,11 @@ it('keeps unsupported schema failures structured and safe', () => {
   db.exec("CREATE TABLE sentinel (value TEXT); INSERT INTO sentinel VALUES ('preserved'); PRAGMA user_version = 99")
 
   try {
-    initializeSqliteDatabase(db, { busyTimeoutMs: 1, maxAttempts: 5, retryDelayMs: 1 })
+    new SqliteStore(path)
   } catch (error) {
     expect(error).toMatchObject({ stage: 'schema', diagnosticCode: 'unsupported-schema', sqliteCode: null, attempts: 1, retryable: false })
     expect(String(error)).not.toContain(path)
   }
-  expect(() => initializeSqliteDatabase(db, { busyTimeoutMs: 1, maxAttempts: 5, retryDelayMs: 1 })).toThrow(UnsupportedDatabaseError)
+  expect(() => new SqliteStore(path)).toThrow(UnsupportedDatabaseError)
   expect(db.prepare('SELECT * FROM sentinel').all()).toEqual([{ value: 'preserved' }])
 })

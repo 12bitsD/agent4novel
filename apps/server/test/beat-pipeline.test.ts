@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { jsonValueSchema, settingContentSchema, workViewSchema, beatCommandErrorSchema, beatContentSchema, advanceOutcomeDtoSchema } from '@agent4novel/contracts'
+import { jsonValueSchema, settingContentSchema, workViewSchema, beatCommandErrorSchema, beatContentSchema, advanceOutcomeDtoSchema, runStep } from '@agent4novel/contracts'
 import { Pipeline, type ArtifactStep } from '../src/pipeline/pipeline.js'
 import { InMemoryStore } from '../src/store/in-memory-store.js'
 import { consumeGuards } from '../src/pipeline/consume-guards.js'
@@ -311,8 +311,8 @@ describe('first chapter Beat', () => {
     const upstream = Object.fromEntries(store.getWork(work.id)!.artifacts.filter(a => a.kind === 'outline' || a.kind === 'setting').map(a => [a.kind, a.content]))
     const step = fakeSteps.createFakeBeatStep()
     const input = { workId: work.id, seed: work.seed, upstream, chapter: 1 }
-    const first = beatContentSchema.parse((await step.run(input, {})).content)
-    const next = beatContentSchema.parse((await step.run({ ...input, regeneration: { content: first, instructions: '合成修改意见' } }, {})).content)
+    const first = beatContentSchema.parse((await runStep(step, input, {})).content)
+    const next = beatContentSchema.parse((await runStep(step, { ...input, regeneration: { content: first, instructions: '合成修改意见' } }, {})).content)
     expect(first.writingPlan.length).toBeGreaterThan(0)
     expect(first.writingPlan[0]!.itemId).not.toBe(next.writingPlan[0]!.itemId)
     expect(next.goal).toContain('合成修改意见')
