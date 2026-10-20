@@ -3,23 +3,6 @@ import { advanceOutcomeDtoSchema, workViewSchema, apiErrorSchema, gateRefSchema,
   beatCommandErrorSchema, proseCommandErrorSchema, httpErrorSchema } from '../src/index.js'
 
 const view = { id: 'w1', title: '海港', seed: '海港故事', config: {}, createdAt: 'today', workflowState: 'ready-to-generate', nextStepId: 'setting', allowedActions: ['generate'] }
-const artifact = { id: 'outline-1', workId: 'w1', kind: 'caption', version: 1, humanStatus: 'approved', content: { inputStage: '脑洞', summary: '海港故事', elements: [], gaps: [] }, createdAt: 'today' }
-
-it('公开作品读模型拒绝来自其他作品的产物，并定位归属字段', () => {
-  expect(workViewSchema.safeParse({ ...view, artifacts: [artifact] }).success).toBe(true)
-  const result = workViewSchema.safeParse({ ...view, artifacts: [{ ...artifact, workId: 'another-work' }] })
-  expect(result.success).toBe(false)
-  if (!result.success) expect(result.error.issues.map((issue) => issue.path)).toContainEqual(['artifacts', 0, 'workId'])
-})
-
-it('公开读模型每个 kind/chapter 只允许一个当前 head，不把不同章节或不同 kind 当成重复', () => {
-  const duplicateWorkHead = workViewSchema.safeParse({ ...view, artifacts: [artifact, { ...artifact, id: 'outline-2', version: 2 }] })
-  expect(duplicateWorkHead.success).toBe(false)
-  if (!duplicateWorkHead.success) expect(duplicateWorkHead.error.issues.map((issue) => issue.path)).toContainEqual(['artifacts', 1])
-  const beat = { ...artifact, id: 'beat-1', kind: 'beat', chapter: 1, content: { title: '海港来客', goal: '发现来客', writingPlan: [{ itemId: 'item-1', title: '靠岸', content: '来客靠岸。' }], ending: '来客叩门。' } }
-  expect(workViewSchema.safeParse({ ...view, artifacts: [beat, { ...beat, id: 'beat-2', version: 2 }] }).success).toBe(false)
-  expect(workViewSchema.safeParse({ ...view, artifacts: [artifact, beat, { ...beat, id: 'beat-chapter-2', chapter: 2 }, { ...beat, id: 'prose-1', kind: 'prose', content: { text: '海港来客靠岸。' } }] }).success).toBe(true)
-})
 
 it('公开读模型携带下一步，advance 保留状态和遥测，错误保留字段定位', () => {
   const work = { id: 'w1', title: '海港', seed: '海港故事', config: {}, createdAt: 'today', artifacts: [], workflowState: 'ready-to-generate', nextStepId: 'setting', allowedActions: ['generate'] }

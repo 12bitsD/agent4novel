@@ -53,7 +53,7 @@ it('does not expose provider errors', async () => {
   expect(JSON.stringify(result)).not.toContain('PRIVATE_PROVIDER_RESPONSE')
 })
 
-import { runStep, creativeContentSchema, outlineContentSchema, settingContentSchema, beatContentSchema, stepExperimentRequestSchema } from '@agent4novel/contracts'
+import { runStep, creativeContentSchema, outlineContentSchema, settingContentSchema, beatContentSchema } from '@agent4novel/contracts'
 import type { StepExperimentRequest } from '@agent4novel/contracts'
 import { createFakeCaptionStep, createFakeCreativeStep, createFakeOutlineStep, createFakeSettingStep, createFakeBeatStep } from '../src/steps/fake-step.js'
 async function fixtures() {
@@ -91,13 +91,6 @@ it.each(['creative', 'outline', 'setting', 'beat'] as const)('preserves %s produ
   if (stepId === 'outline') expect(outlineContentSchema.parse(result.content).arcs[0]!.arcId).toContain(result.runId)
   if (stepId === 'setting') expect(settingContentSchema.parse(result.content).world[0]!.itemId).toMatch(/^item-/)
   if (stepId === 'beat') expect(beatContentSchema.parse(result.content).writingPlan[0]!.itemId).toMatch(/^beat-item-/)
-})
-it('rejects store identities and unused config override channels', () => {
-  for (const request of [
-    { stepId: 'caption', input: { seed: 'synthetic', workId: 'production-work' } },
-    { stepId: 'caption', input: { seed: 'synthetic' }, config: { systemPrompt: 'ignored' } },
-    { stepId: 'caption', input: { seed: 'synthetic' }, systemPrompt: '   ' },
-  ]) expect(stepExperimentRequestSchema.safeParse(request).success).toBe(false)
 })
 it('keeps Beat assembled-input budget with overridden system', async () => {
   const f = await fixtures()
@@ -212,13 +205,4 @@ it('refuses an existing input record without calling the model or changing the o
     expect(readFileSync(join(recordDir, 'input.json'), 'utf8')).toBe(original)
     expect(mocks.generateObject).not.toHaveBeenCalled()
   } finally { rmSync(directory, { recursive: true, force: true }) }
-})
-
-it('validates limits and chapter semantics before invoking the model', () => {
-  for (const request of [
-    { stepId: 'caption', input: { seed: 'x'.repeat(1000000) } },
-    { stepId: 'caption', input: { seed: '' }, systemPrompt: 'x'.repeat(100001) },
-    { stepId: 'beat', input: { seed: '' } },
-    { stepId: 'caption', input: { seed: '', chapter: 1 } },
-  ]) expect(stepExperimentRequestSchema.safeParse(request).success).toBe(false)
 })

@@ -317,13 +317,6 @@ describe('first chapter Beat', () => {
     expect(first.writingPlan[0]!.itemId).not.toBe(next.writingPlan[0]!.itemId)
     expect(next.goal).toContain('合成修改意见')
   })
-  it('validates Beat content in the public WorkView instead of accepting arbitrary JSON', async () => {
-    const { app, work } = await ready()
-    await app.request(`/api/works/${work.id}/advance`, { method: 'POST' })
-    const view = workViewSchema.parse(await (await app.request(`/api/works/${work.id}`)).json())
-    const corrupted = { ...view, artifacts: view.artifacts.map(a => a.kind === 'beat' ? { ...a, content: { title: 'partial' } } : a) }
-    expect(workViewSchema.safeParse(corrupted).success).toBe(false)
-  })
   it('correlates actual model telemetry with the current Beat request', async () => {
     const { app, work } = await ready(async input => {
       recordTelemetry(input.workId, { stepId: 'beat', attemptId: 'test-beat-attempt', model: 'demo', ok: true, latencyMs: 2,

@@ -37,6 +37,10 @@ describe('step experiment contracts', () => {
     ]) expect(stepExperimentRequestSchema.safeParse(invalid).success).toBe(false)
   })
 
+  it('rejects oversized seed input', () => {
+    expect(stepExperimentRequestSchema.safeParse({ stepId: 'caption', input: { seed: 'x'.repeat(1000000) } }).success).toBe(false)
+  })
+
   it('requires a positive safe chapter address for chapter Steps and forbids it on other nodes', () => {
     // Step-specific upstream content is checked by the isolated worker's production schema.
     for (const stepId of ['beat', 'prose']) for (const chapter of [1, 2, 3]) {
