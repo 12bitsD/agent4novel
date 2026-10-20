@@ -280,7 +280,7 @@ C 类测试迁移可先形成 test-only commit，再接实现 commit；大改、
 
 当前没有收益足够的新生产 symbol 改名候选。尤其不改公开 `requestId`、不统一所有 status、不借用 finalizer/RunSpec 名称。`headVersion` 和 `telemetryCursor` 的移除在 Step 1，不混入命名 commit。
 
-#### Step 3 执行证据（2026-10-20，checkpoint `d2f3373`）
+#### Step 3 执行证据（2026-10-20，checkpoint `0f7f022`）
 
 扫描范围为 `apps/server/src`、`apps/cli/src`、`packages/contracts/src` 的全部生产 TypeScript，以及 `apps/server/scripts/build.mjs`、`apps/cli/bin/a4n`。逐类检索变量、函数、错误文本和注释，并回读跨行实现；具体正则、命中文件与边界裁决另记 `/root/work/agent4novel-refactor-loop/STEP3_REPORT.md`。术语只沿 `CONTEXT.md` 与本节冻结表核对，未新建第二份词汇来源。
 
@@ -398,3 +398,75 @@ M5、M8、M9 是当前待补证据，均已有 owner 和停止前动作；Step 4
 两处合入一个独立的文档/注释 cleanup commit 候选，不与代码、测试或重构混提；只使文档回到当前实现，不改变行为。本 Step 0 未修改这两处。
 
 除上述已明确边界和动作的事项外无额外未决项或假设。GitHub issue/PR 未按禁令访问；本基线不重新判定票面 AC，也不把历史 Wiki 的完成证据当本候选验证结果。
+
+## 9. Step 4 执行证据与停止结论（2026-10-20）
+
+代码/测试定点为 `582f2d0f05838c10c025ae65ee2096eba937cd86`。本节与 `/root/work/agent4novel-refactor-loop/STEP4_REPORT.md` 是 Step 4C 的文档收口；下列测试、typecheck、build、mutation 和 review 均为此前已经取得的核验结果，Step 4C 没有重跑或新增验证。
+
+### 9.1 逐 step checkpoint
+
+表中 checkpoint 按各步完成后的落地提交排列，不与后续报告记录的起始固定点混淆。
+
+| Step | checkpoint | 落地内容与证据入口 |
+|---|---|---|
+| Step 0 | `7426182` | 冻结契约、行为矩阵、资源 owner、测试分类、候选与五道停止门；见本文及 `STEP0_REPORT.md`。 |
+| Step 1A | `24c1614` | 删除无生产调用的 `WorkStore.headVersion` 与 `telemetryCursor`，辅助断言迁到公开读取/遥测入口；见 `STEP1A_REPORT.md`。 |
+| Step 1B | `1ca2257` | 合并四组 B 类重复覆盖，先保留独特输入、路径与正例再删除重复项；见 `STEP1B_REPORT.md`。 |
+| Step 1C | `df483e1` | 将 Beat、Caption 和可迁移的 SQLite 用例迁到公开 seam，不削弱原断言；见 `STEP1C_REPORT.md`。 |
+| Step 1D | `9b50131` | 对齐 SQLite、六步链、retry、遥测、provider/demo、精确历史读取和四文件记录的注释/文档；见 `STEP1D_REPORT.md`。 |
+| Step 2 | `d2f3373` | 以 `commandFailureObservation` 收敛 Beat/Prose 写入结果判定，保留各自公开 wrapper、schema、operation 和错误类型；见 `STEP2_REPORT.md`。 |
+| Step 3 | `0f7f022` | 完成术语与命名审查；未发现值得改生产 symbol 的真实歧义，只落地审查证据；见 `STEP3_REPORT.md`。 |
+| Step 4A | `93e7d2c` | 新增 M5、M8、M9 的记录失败/恢复公开测试场景，当前实现下均 GREEN；见 `STEP4A_REPORT.md`。 |
+| Step 4B continuation | `582f2d0` | 单独补强 M8a 的 `result.json` 显式存在性断言，使跳过 unknown 收尾能得到目标断言 RED；见 `STEP4B_CONTINUATION_REPORT.md`。 |
+
+本节提到的 `STEP*_REPORT.md` 均位于 `/root/work/agent4novel-refactor-loop/`。Step 4B 的生产 mutation 均临时单独注入并在取得证据后恢复，不形成生产 checkpoint；保留的测试补强已单独落在 `582f2d0`。
+
+### 9.2 M1–M9 独立红绿证据入口
+
+| mutation | 公开验证入口 | 已核验证据 |
+|---|---|---|
+| M1：SQLite append 删除 precondition | `apps/server/test/store.test.ts` 的上游变化后拒绝过期写入用例 | `STEP4B_REPORT.md` §3 M1：目标断言 RED，恢复后同命令 GREEN。 |
+| M2：commit/response 后异常错报 `not-committed` | `apps/server/test/beat-pipeline.test.ts`、`prose-routes.test.ts` 的真实写入后故障注入 | nika 在 Step 2 独立完成 Beat 与 Prose RED/GREEN；见 `STEP2_REPORT.md` 的“M2 mutation 红绿证据”。 |
+| M3：CLI 丢弃 validation metadata | `apps/cli/test/validation-issues-entry.test.ts` 的 129 issues 真实进程场景 | `STEP4B_REPORT.md` §3 M3：`issueCount/issuesTruncated` 断言 RED，恢复后 GREEN。 |
+| M4a/b：误接受删除旧卡或外来 Setting 身份 | `packages/contracts/test/beat-submission.test.ts`、`setting-submission.test.ts` | `STEP4B_REPORT.md` §3 M4a/M4b：两项分别 RED/GREEN。 |
+| M5a/b/c：忽略最终 meta 失败、覆盖已有 result、partial 错标 complete | `apps/cli/test/step-record-meta-failure.test.ts`，真实 recorder/writer 与单次 rename `EIO` | 场景来源见 `STEP4A_REPORT.md` §2.1；三项独立 RED/GREEN 见 `STEP4B_REPORT.md` §3 M5a–M5c。 |
+| M6：把 `SQLITE_LOCKED` 纳入初始化 retry | `apps/server/test/sqlite-initialization.test.ts` 的真实 SQLite 错误诊断 | `STEP4B_REPORT.md` §3 M6：attempts/retryable 目标断言 RED，恢复后 GREEN。 |
+| M7：已有目标 Beat 的 start-chapter 重放再次执行生成 | `apps/server/test/chapter-start-baseline.test.ts` 的只读重放用例 | `STEP4B_REPORT.md` §3 M7：重放结果目标断言 RED，恢复后 GREEN。 |
+| M8a/b：worker-failure 跳过 unknown 或覆盖 captured invocation | `apps/cli/test/step-transport.test.ts` 的非 deadline 真实 worker crash 用例 | 场景来源见 `STEP4A_REPORT.md` §2.2；有效独立 RED/GREEN 见 `STEP4B_CONTINUATION_REPORT.md` §4 M8a/M8b。 |
+| M9a/b/c：malformed 错报、stepId 关联漏检、拒绝时改写记录 | `apps/cli/test/step-transport.test.ts` 的 malformed 与 mismatched 两个独立场景 | 场景来源见 `STEP4A_REPORT.md` §2.3；M9a、M9b 及 M9c 两场景分别 RED/GREEN，见 `STEP4B_CONTINUATION_REPORT.md` §4。 |
+
+M8a 的初次尝试只造成读取缺失 `result.json` 的 `ENOENT`，未到达 unknown/incomplete 目标断言，**不计有效 RED**；原始停止记录见 `STEP4B_REPORT.md` §3 M8a。随后只增加显式 result 存在性断言并单独提交 `582f2d0`，重新注入同一 mutation 后取得存在性目标断言 RED，恢复正确实现后同一命令 GREEN。没有把初次 `ENOENT` 或测试补强本身冒充生产行为缺陷。
+
+### 9.3 最终全量、typecheck 与 build
+
+以下是 Step 4 已核验的最终结果，不是 Step 4C 的新运行记录。
+
+| 门禁 | 结果 |
+|---|---|
+| `pnpm --filter @agent4novel/contracts test` | PASS：23 files / 141 tests。 |
+| `pnpm --filter @agent4novel/cli test` | PASS：21 files / 243 tests。 |
+| `pnpm --filter @agent4novel/server test` | PASS：45 files / 483 tests。 |
+| `pnpm --filter @agent4novel/contracts typecheck` | PASS。 |
+| `pnpm --filter @agent4novel/cli typecheck` | PASS。 |
+| `pnpm --filter @agent4novel/server typecheck` | PASS。 |
+| `pnpm --filter @agent4novel/server build` | PASS。 |
+
+contracts 与 CLI 没有 build script，记 N/A；lint/vet/format 仍按第 7.2 节记 N/A，不发明替代门禁。
+
+### 9.4 双轴独立 review
+
+对 `582f2d0` 定点的 Standards 与 Spec 独立 review 均为 **APPROVE**，没有新的或未处理的可执行问题。唯一残余边界仍是第 8.1 节已明确排除的记录读取侧交叉校验：`succeeded/null`、`failed/content` 以及 content 与 `meta.stepId` 的交叉校验属于独立任务，不是本 loop 的未通过项，也不阻塞停止门。
+
+### 9.5 五道停止门同时闭合
+
+| 停止门 | 闭合依据 |
+|---|---|
+| 契约闭合 | 第 3 节行为矩阵与第 8.1 节 schema 冻结边界未被突破；没有借清理、重构或命名改变公开行为、wire 字段或 JSON schema，最终三包全量通过。 |
+| 状态闭合 | 第 4 节的副作用 owner、commit 点、失败归宿和防自动重复说明保持有效；M1/M2/M5/M7/M8/M9 覆盖过期写入、写后未知、部分记录、worker 失败和只读重放等关键边界，没有虚构 exactly-once。 |
+| 规则闭合 | Step 1 只删除已证明的死代码/重复来源并迁移公开断言，Step 2 将同一写入结果公式收敛为一个纯判定，Step 3 未制造第二套术语；没有新增第二套 CAS、submission recovery、retry 或记录策略。 |
+| 证据闭合 | focused 证据、最终三包全量、三包 typecheck 和 server build 均已取得通过结果；M1–M9 各子项分别取得有效 RED 并在恢复后 GREEN，M8a 的无效初次尝试已明确剔除。 |
+| review 定点 | `582f2d0` 的 Standards 与 Spec 双轴独立 review 均 APPROVE，没有尚未处理的可执行问题；唯一残余项是既定独立任务，不是 review 阻塞发现。 |
+
+**停止结论：在本文第 7.5 节定义的范围内，五道停止门已经同时闭合，backend refactor loop 到此停止。** 不再以“还可以更优雅”为由追加重构、测试清理或 mutation。
+
+“refactor loop 停止”不表示 CI 已运行或通过，不表示真实 provider 已验证，不表示真实 finalizer/Highway 已验证，也不表示生产发布已完成；本地测试和 review 不能替代这些外部事实。本 loop 不自动 push。Step 4C 只追加/整理文档，等待 nika 验收，不自行 commit、push、操作 GitHub issue/PR 或发布。
