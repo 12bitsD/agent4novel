@@ -3,6 +3,7 @@ import { proseCommandObservationSchema } from '@agent4novel/contracts'
 import type { Artifact, ProseExecutionObservation, ProseOperation, ChapterRegenerationBinding } from '@agent4novel/contracts'
 import { KnownError } from './errors.js'
 import { z } from 'zod'
+import { commandFailureObservation } from './command-observation.js'
 import { currentRequest, recordCommand } from './steps/telemetry.js'
 
 type Stage = NonNullable<ProseExecutionObservation['failureStage']>
@@ -18,7 +19,7 @@ export class ProseCommandError extends Error {
 export function proseResponseError(workId: string, committed: ProseExecutionObservation, cause: unknown): ProseCommandError {
   const { resultHead: _resultHead, ...executed } = committed
   const request = currentRequest()
-  const command: ProseExecutionObservation = { ...executed, writeOutcome: 'unknown', failureStage: 'response',
+  const command: ProseExecutionObservation = { ...executed, ...commandFailureObservation(cause, 'response'),
     latencyMs: request ? Date.now() - request.startedAt : executed.latencyMs }
   recordCommand(workId, command, proseFailureCode(cause, 'response'))
   return new ProseCommandError(cause, command)
@@ -50,10 +51,8 @@ export async function observeProse<T extends Artifact>(
   } catch (cause) {
     if (cause instanceof KnownError && cause.code === 'input-budget-exceeded') execution.stage = 'input'
     if (proseFailureCode(cause, execution.stage) === 'llm-invalid-output') execution.stage = 'output'
-    const prewrite = cause instanceof KnownError && ['version-conflict', 'upstream-changed', 'artifact-already-approved', 'work-not-found'].includes(cause.code)
     const command: ProseExecutionObservation = {
-      ...base(), writeOutcome: execution.stage === 'response' || (execution.stage === 'commit' && !prewrite) ? 'unknown' : 'not-committed',
-      failureStage: execution.stage,
+      ...base(), ...commandFailureObservation(cause, execution.stage),
     }
     recordCommand(workId, command, proseFailureCode(cause, execution.stage))
     throw new ProseCommandError(cause, command)

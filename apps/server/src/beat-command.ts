@@ -3,6 +3,7 @@ import { beatCommandObservationSchema } from '@agent4novel/contracts'
 import type { Artifact, BeatExecutionObservation, BeatOperation, ChapterRegenerationBinding } from '@agent4novel/contracts'
 import { KnownError } from './errors.js'
 import { z } from 'zod'
+import { commandFailureObservation } from './command-observation.js'
 import { currentRequest, recordCommand } from './steps/telemetry.js'
 
 type Stage = NonNullable<BeatExecutionObservation['failureStage']>
@@ -18,7 +19,7 @@ export class BeatCommandError extends Error {
 export function beatResponseError(workId: string, committed: BeatExecutionObservation, cause: unknown): BeatCommandError {
   const { resultHead: _resultHead, ...executed } = committed
   const request = currentRequest()
-  const command: BeatExecutionObservation = { ...executed, writeOutcome: 'unknown', failureStage: 'response',
+  const command: BeatExecutionObservation = { ...executed, ...commandFailureObservation(cause, 'response'),
     latencyMs: request ? Date.now() - request.startedAt : executed.latencyMs }
   recordCommand(workId, command, 'internal-error')
   return new BeatCommandError(cause, command)
@@ -50,10 +51,8 @@ export async function observeBeat<T extends Artifact>(
   } catch (cause) {
     if (cause instanceof KnownError && cause.code === 'input-budget-exceeded') execution.stage = 'input'
     if (beatFailureCode(cause, execution.stage) === 'llm-invalid-output') execution.stage = 'output'
-    const prewrite = cause instanceof KnownError && ['version-conflict', 'upstream-changed', 'artifact-already-approved', 'work-not-found'].includes(cause.code)
     const command: BeatExecutionObservation = {
-      ...base(), writeOutcome: execution.stage === 'response' || (execution.stage === 'commit' && !prewrite) ? 'unknown' : 'not-committed',
-      failureStage: execution.stage,
+      ...base(), ...commandFailureObservation(cause, execution.stage),
     }
     recordCommand(workId, command, beatFailureCode(cause, execution.stage))
     throw new BeatCommandError(cause, command)
