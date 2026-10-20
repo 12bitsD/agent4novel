@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
 import { once } from 'node:events'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync, statSync, symlinkSync, realpathSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync, statSync, symlinkSync, realpathSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -552,6 +552,7 @@ describe('run-step through a local mock provider', () => {
       })
       expect(readFileSync(join(recordDir, 'invocation.json'), 'utf8')).toBe(crash.invocation)
       expect(stepExperimentRecordInvocationSchema.parse(JSON.parse(readFileSync(join(recordDir, 'invocation.json'), 'utf8')))).toEqual(invocationBefore)
+      expect(existsSync(join(recordDir, 'result.json')), 'worker failure must finalize result.json').toBe(true)
       expect(stepExperimentRecordResultSchema.parse(JSON.parse(readFileSync(join(recordDir, 'result.json'), 'utf8')))).toMatchObject({
         status: 'unknown', content: null, diagnostic: { code: 'worker-failed' },
       })
