@@ -118,7 +118,7 @@ describe('works routes', () => {
     })
     expect(response.status).toBe(409)
     expect(await response.json()).toMatchObject({ code: 'version-conflict' })
-    expect(store.headVersion(work.id, kind)).toBe(2)
+    expect(store.getWork(work.id)!.artifacts.find((artifact) => artifact.kind === kind)?.version).toBe(2)
   })
 
   it('rejects unknown create fields before creating any work', async () => {

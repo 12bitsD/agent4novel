@@ -257,11 +257,4 @@ export class InMemoryStore implements WorkStore {
     const candidate = validateStoreValue(artifactSchema, { ...bucket.versions[index], humanStatus: status }, 'input')
     bucket.versions[index] = candidate
   }
-
-  headVersion(workId: string, kind: ArtifactKind, opts?: { chapter?: number }): number | undefined {
-    const bucket = this.findBucket(workId, kind, opts?.chapter)
-    return bucket && bucket.versions.length > 0
-      ? validateStoreValue(artifactSchema, bucket.versions[bucket.versions.length - 1], 'stored').version
-      : undefined
-  }
 }

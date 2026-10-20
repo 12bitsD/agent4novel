@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect } from 'vitest'
-import { caption, creative, outline as outlineContent, setting as settingContent, beat } from './fixtures/artifact-content.js'
+import { caption, outline as outlineContent, setting as settingContent, beat } from './fixtures/artifact-content.js'
 import { InMemoryStore } from '../src/store/in-memory-store.js'
 import { SqliteStore } from '../src/store/sqlite-store.js'
 
@@ -154,16 +154,6 @@ describe.each(['memory', 'sqlite'] as const)('%s WorkStore contract', adapter =>
     expect(() => store.setStatus(w.id, 'outline', 'approved')).toThrow(/artifact not found/)
   })
 
-  it('headVersion reflects the latest version, undefined when absent', () => {
-    const store = createStore()
-    const w = store.createWork({ seed: 'x' })
-    expect(store.headVersion(w.id, 'creative')).toBeUndefined()
-    store.appendArtifact(w.id, 'creative', creative('v1'))
-    expect(store.headVersion(w.id, 'creative')).toBe(1)
-    store.appendArtifact(w.id, 'creative', creative('v2'))
-    expect(store.headVersion(w.id, 'creative')).toBe(2)
-  })
-
   it('refuses to append a generated result after an upstream head changed', () => {
     const store = createStore()
     const work = store.createWork({ seed: 'x' })
@@ -179,7 +169,7 @@ describe.each(['memory', 'sqlite'] as const)('%s WorkStore contract', adapter =>
       }],
     })).toThrow(expect.objectContaining({ code: 'upstream-changed' }))
     expect(store.getWork(work.id)).toEqual(before)
-    expect(store.headVersion(work.id, 'setting')).toBeUndefined()
+    expect(store.getWork(work.id)!.artifacts.find((artifact) => artifact.kind === 'setting')?.version).toBeUndefined()
   })
 
   it('finalizes edited content and approval together without changing artifact identity or version', () => {
@@ -201,7 +191,7 @@ describe.each(['memory', 'sqlite'] as const)('%s WorkStore contract', adapter =>
       content: settingContent('author edited'),
     })
     expect(store.getWork(work.id)!.artifacts).toEqual([approved])
-    expect(store.headVersion(work.id, 'setting')).toBe(1)
+    expect(store.getWork(work.id)!.artifacts.find((artifact) => artifact.kind === 'setting')?.version).toBe(1)
     expect(pending).toMatchObject({ humanStatus: 'pending', content: settingContent('generated') })
   })
 
@@ -325,7 +315,7 @@ describe.each(['memory', 'sqlite'] as const)('%s WorkStore contract', adapter =>
 
     expect(() => store.appendArtifact(work.id, 'setting', settingContent('competing generation'), { preconditions }))
       .toThrow(expect.objectContaining({ code: 'version-conflict' }))
-    expect(store.headVersion(work.id, 'setting')).toBe(1)
+    expect(store.getWork(work.id)!.artifacts.find((artifact) => artifact.kind === 'setting')?.version).toBe(1)
     expect(store.getWork(work.id)!.artifacts.find((artifact) => artifact.kind === 'setting')).toEqual(setting)
   })
 
@@ -399,7 +389,7 @@ describe.each(['memory', 'sqlite'] as const)('%s WorkStore contract', adapter =>
     const uncloneable = new Proxy({ note: 'invalid boundary input' }, {})
     expect(() => store.appendArtifact(work.id, 'setting', uncloneable)).toThrow()
     expect(store.getWork(work.id)!.artifacts).toEqual([])
-    expect(store.headVersion(work.id, 'setting')).toBeUndefined()
+    expect(store.getWork(work.id)!.artifacts.find((artifact) => artifact.kind === 'setting')?.version).toBeUndefined()
 
     const pending = store.appendArtifact(work.id, 'setting', settingContent('generated'))
     expect(pending.version).toBe(1)
@@ -446,7 +436,7 @@ describe.each(['memory', 'sqlite'] as const)('%s WorkStore contract', adapter =>
     expect(store.getWork(work.id)!.artifacts[0]).toMatchObject({ version: 2, humanStatus: status, content: { text: '  edited\n' } })
     expect(head.content).toEqual({ text: 'original' })
     expect(() => store.saveArtifact(request)).toThrow(expect.objectContaining({ code: 'version-conflict' }))
-    expect(store.headVersion(work.id, 'prose', { chapter: 1 })).toBe(2)
+    expect(store.getWork(work.id)!.artifacts.find((artifact) => artifact.kind === 'prose' && artifact.chapter === 1)?.version).toBe(2)
   })
   it('saves only if status and all upstream preconditions still match, without a partial version on failure', () => {
     const store = createStore()
@@ -461,6 +451,6 @@ describe.each(['memory', 'sqlite'] as const)('%s WorkStore contract', adapter =>
     const approved = store.finalizeArtifact({ ...request, content: { text: 'final' } })
     expect(() => store.saveArtifact(request)).toThrow(expect.objectContaining({ code: 'version-conflict' }))
     expect(store.getWork(work.id)!.artifacts.find(a => a.kind === 'prose')).toEqual(approved)
-    expect(store.headVersion(work.id, 'prose', { chapter: 1 })).toBe(1)
+    expect(store.getWork(work.id)!.artifacts.find((artifact) => artifact.kind === 'prose' && artifact.chapter === 1)?.version).toBe(1)
   })
 })

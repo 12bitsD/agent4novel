@@ -11,7 +11,7 @@ import { createSettingStep } from '../src/steps/setting-step.js'
 import { createFakeCaptionStep, createFakeCreativeStep, createFakeOutlineStep, createFakeSettingStep } from '../src/steps/fake-step.js'
 import { Pipeline } from '../src/pipeline/pipeline.js'
 import { InMemoryStore } from '../src/store/in-memory-store.js'
-import { telemetryCursor, telemetryFor } from '../src/steps/telemetry.js'
+import { telemetryFor } from '../src/steps/telemetry.js'
 
 const draft = {
   overview: '旅人在迷雾小镇寻找名字。',
@@ -94,12 +94,12 @@ describe('Setting Step model boundary', () => {
         { stepId: 'setting', outputKind: 'setting', consumes: ['caption', 'creative', 'outline'], gateAfter: { kind: 'setting' } },
       ],
     })
-    const cursor = telemetryCursor()
+    const beforeTelemetry = telemetryFor(work.id)
     const attempt = pipeline.advance(work.id)
     store.appendArtifact(work.id, 'outline', source.upstream.outline)
     release()
     expect(await attempt).toMatchObject({ kind: 'failed', code: 'upstream-changed' })
-    expect(telemetryFor(work.id, cursor)).toMatchObject([{ stepId: 'setting', ok: true }])
+    expect(telemetryFor(work.id).slice(beforeTelemetry.length)).toMatchObject([{ stepId: 'setting', ok: true }])
     expect(store.getWork(work.id)!.artifacts.some((artifact) => artifact.kind === 'setting')).toBe(false)
   })
 })

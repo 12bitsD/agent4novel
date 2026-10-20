@@ -20,7 +20,7 @@ it.each(artifactKinds)('refuses invalid %s append without creating a bucket or c
   const opts = ['beat', 'prose'].includes(kind) ? { chapter: 2 } : undefined
   expect(() => store.appendArtifact(work.id, kind, { secret: 'PRIVATE_VALIDATION_MARKER' }, opts)).toThrow()
   expect(store.getWork(work.id)!.artifacts).toEqual([])
-  expect(store.headVersion(work.id, kind, opts)).toBeUndefined()
+  expect(store.getWork(work.id)!.artifacts.find((artifact) => artifact.kind === kind && artifact.chapter === opts?.chapter)?.version).toBeUndefined()
 })
 
 it('accepts pending prose edits but atomically refuses an empty finalization or approved edit', () => {
@@ -33,7 +33,7 @@ it('accepts pending prose edits but atomically refuses an empty finalization or 
   const approved = store.finalizeArtifact({ ...target, content: { text: '作者已通过正文' } })
   expect(() => store.saveArtifact({ ...target, expectedHumanStatus: 'approved', content: { text: '' } })).toThrow()
   expect(store.getWork(work.id)!.artifacts).toEqual([approved])
-  expect(store.headVersion(work.id, 'prose', { chapter: 2 })).toBe(1)
+  expect(store.getWork(work.id)!.artifacts.find((artifact) => artifact.kind === 'prose' && artifact.chapter === 2)?.version).toBe(1)
 })
 
 it('validates metadata and status without mutating a valid head', () => {

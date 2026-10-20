@@ -232,10 +232,6 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
     })
   }
 
-  headVersion(workId: string, kind: ArtifactKind, opts?: { chapter?: number }): number | undefined {
-    return this.read(() => this.head(workId, kind, opts?.chapter)?.version)
-  }
-
   private extensionRecord(workId: string, requestId: string): SettingExtensionProposalRecord | undefined {
     const row = this.db.prepare('SELECT record FROM setting_extension_proposals WHERE work_id = ? AND request_id = ?')
       .get(workId, requestId) as { record: string } | undefined

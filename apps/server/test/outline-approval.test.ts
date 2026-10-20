@@ -41,7 +41,7 @@ describe('visible Outline approval over HTTP', () => {
     expect(replay.status).toBe(200)
     expect(await replay.json()).toEqual(approved)
     expect(store.getWork(work.id)!.artifacts).toEqual([approved])
-    expect(store.headVersion(work.id, 'outline')).toBe(1)
+    expect(store.getWork(work.id)!.artifacts.find((artifact) => artifact.kind === 'outline')?.version).toBe(1)
     expect(seen).toEqual([])
   })
   it('does not erase a later generation failure when replaying an already approved Outline', async () => {
@@ -158,7 +158,7 @@ describe('visible Outline approval over HTTP', () => {
     expect(result.status).toBe(500)
     expect(await result.json()).toEqual({ code: 'internal-error', message: 'response unavailable', retryable: false })
     expect(store.getWork(work.id)!.artifacts).toEqual([{ ...head, humanStatus: 'approved' }])
-    expect(store.headVersion(work.id, 'outline')).toBe(1)
+    expect(store.getWork(work.id)!.artifacts.find((artifact) => artifact.kind === 'outline')?.version).toBe(1)
   })
 
 })

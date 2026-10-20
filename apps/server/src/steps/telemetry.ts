@@ -54,10 +54,6 @@ export function recordTelemetry(workId: string, t: LlmTelemetry): void {
   } catch { /* diagnostic storage is best effort */ }
 }
 
-export function telemetryCursor(): number {
-  return seq
-}
-
 export function telemetryFor(workId: string, afterSeq = 0): LlmTelemetry[] {
   return entries
     .filter((e) => e.workId === workId && e.seq > afterSeq)
