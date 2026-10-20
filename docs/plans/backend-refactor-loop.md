@@ -280,6 +280,25 @@ C 类测试迁移可先形成 test-only commit，再接实现 commit；大改、
 
 当前没有收益足够的新生产 symbol 改名候选。尤其不改公开 `requestId`、不统一所有 status、不借用 finalizer/RunSpec 名称。`headVersion` 和 `telemetryCursor` 的移除在 Step 1，不混入命名 commit。
 
+#### Step 3 执行证据（2026-10-20，checkpoint `d2f3373`）
+
+扫描范围为 `apps/server/src`、`apps/cli/src`、`packages/contracts/src` 的全部生产 TypeScript，以及 `apps/server/scripts/build.mjs`、`apps/cli/bin/a4n`。逐类检索变量、函数、错误文本和注释，并回读跨行实现；具体正则、命中文件与边界裁决另记 `/root/work/agent4novel-refactor-loop/STEP3_REPORT.md`。术语只沿 `CONTEXT.md` 与本节冻结表核对，未新建第二份词汇来源。
+
+| 类别 | 闭合证据与结论 |
+|---|---|
+| head / version / artifactId | `sqlite-store.ts:91-102,172-217` 与 `in-memory-store.ts:44-49,121-174` 按地址取最大 version，append/save 换 ID、finalize 保持同 ID/version；`artifact-envelope.ts:24-51` 分开约束身份与版本。CLI `headOf`（`commands.ts:51-68`）只是当前 version 的局部读取，没有稳定 ID 组语义。 |
+| pending / approved | `artifact-envelope.ts:6-7`、`artifact-content.ts:21-26` 将其限定为 Artifact 作者状态；设定扩展的 `record.status` 是独立操作资源状态（`setting-extension.ts:82-95`），实验状态另由 `step-experiment.ts:105-135,165-178` 表达，未混作模型执行状态。 |
+| 两类 requestId | HTTP/命令关联由 `telemetry.ts:7-16`、`beat-command.ts:32-40`、`prose-command.ts:32-40` 限定；配置/文件/坏例/设定扩展请求由 `author-config.ts:24-39`、`bad-example.ts:13,26-29`、`setting-extension.ts:82-99` 及 Store 重放检查限定。公开同名字段没有跨上下文套用。 |
+| attemptId / runId / processInstanceId | `llm-call.ts:59-143` 将 attemptId 绑定一次 LLM 调用；`isolated-runner.ts:22-44` 每次 isolated Step 新建 runId；`telemetry.ts:22,33-43,62-69` 将 processInstanceId 限定在进程诊断窗口。`workId: runId` 只给无 Store/Pipeline 的合成 Step 输入提供隔离命名空间，不表示真实作品或其版本。 |
+| writeOutcome / failureStage | `command-observation.ts:8-16` 只按实际阶段和可证明的写前错误区分 `not-committed`/`unknown`；`beat-command.ts`、`prose-command.ts` 及两类 submission 保留 operation/target/baseline 核对，未由 HTTP status 或 LLM ok 单独推导，公开 stage 未改。 |
+| result.status / meta.status / recording.status | 三套字段分别在 `step-experiment.ts:105-135,165-178` 定义；`steps/step-record.ts:118-147` 分别写 Step 结果、meta 与响应归档结果，`apps/cli/src/step-record.ts:105-126` 只用 `oldMeta.complete === true && oldMeta.status === 'complete'` 判定完整目录，没有相互替代。 |
+| output / content / raw | `step.ts:36-44` 复验 Step 输出，`llm-call.ts:120-143` 返回 schema 校验后的结构化对象。Outline/Creative 的局部 `raw` 是待 ID 注入的 LLM 草稿，随后形成最终 content；记录 schema/writer 不保存 provider raw 输出。传输、环境和构建脚本中的 raw/output 均有各自局部技术含义。 |
+| unknown | `command-observation.ts:8-16` 保留写入不确定性；`beat-submission.ts:40-86`、`prose-submission.ts:42-94` 以既有 `hasUnknownWrite` 优先，只有精确确认才清除，后续拒绝不自动抹除。LLM 分类或 TypeScript `unknown` 不参与写入结论。 |
+| commit | Store commit 只用于事务/同步写入及命令阶段；实验记录由 `steps/step-record.ts:35-75,118-147` 和 `apps/cli/src/step-record.ts:74-126` 完成文件写入/替换与 meta 状态，没有目录级 commit。`gitCommit` 明确是版本元数据。 |
+| chatty 术语 | `collect` 仅在 `setting-content.ts:25-32` 收集既有 ID；`merged` 仅在 `setting-extension.ts:81,106-111` 表示设定基线加扩展；`collection` 在 `beat.ts:17` 指 Zod 集合；`publication/publicationError` 在 `author-config-service.ts:123-126` 指排他 hardlink 文件发布及其错误。`download/verify/publish/staging/backup/quarantine/finalizer/RunSpec` 无生产命中，未引入 chatty 工作流概念。 |
+
+结论：未发现需要修正的真实概念歧义，未改生产 symbol、错误文本、注释、公开 wire 字段、公开错误 stage 或历史文档中的时间语义。局部 `raw`、`headOf` 与合成输入的 `workId: runId` 都没有跨层误读，改名收益不足，不为 Step 3 制造生产 diff。本步仓内只有本小节的文档更新，作为独立 checkpoint 等待 nika 验收；不自行 commit。`pnpm --filter @agent4novel/server typecheck` 已通过。
+
 ### 6.4 明确删除“不做”的改法
 
 1. 不把 Pipeline 拆成通用 workflow/finalizer，不抽象一套 generation/recovery 状态机：六类操作的关卡和恢复差异是真实契约，行数减少不足以抵消风险。
