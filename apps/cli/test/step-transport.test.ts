@@ -4,10 +4,12 @@ import { once } from 'node:events'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync, statSync, symlinkSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { cliBin as bin, cliTestEnv } from './cli-process.js'
 import {
   stepExperimentRecordInputSchema, stepExperimentRecordInvocationSchema,
   stepExperimentRecordResultSchema, stepExperimentRecordMetaSchema,
+  stepExperimentResponseSchema,
 } from '@agent4novel/contracts'
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
@@ -26,6 +28,80 @@ async function invoke(args: string[], providerUrl: string, env: NodeJS.ProcessEn
   child.stderr.on('data', chunk => { stderr += chunk })
   const [code] = await once(child, 'close')
   return { code, stdout, stderr }
+}
+
+function makeWorkerControl(directory: string, mode: 'crash-after-fetch' | 'malformed' | 'mismatched', recordDir: string) {
+  const fixture = join(directory, `${mode}-fixture.mjs`)
+  const observation = join(directory, `${mode}-observation.json`)
+  const workerLog = join(directory, `${mode}-workers.log`)
+  writeFileSync(fixture, `
+import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+const mode = ${JSON.stringify(mode)}
+const recordDir = ${JSON.stringify(recordDir)}
+const observation = ${JSON.stringify(observation)}
+const workerLog = ${JSON.stringify(workerLog)}
+if (process.argv[1]?.endsWith('step-lab-main.ts')) {
+  appendFileSync(workerLog, String(process.pid) + '\\n')
+  if (mode === 'crash-after-fetch') {
+    const originalFetch = globalThis.fetch.bind(globalThis)
+    globalThis.fetch = async (...args) => {
+      const response = await originalFetch(...args)
+      await response.arrayBuffer()
+      writeFileSync(observation, JSON.stringify({
+        invocation: readFileSync(join(recordDir, 'invocation.json'), 'utf8'),
+        meta: readFileSync(join(recordDir, 'meta.json'), 'utf8'),
+        resultExists: existsSync(join(recordDir, 'result.json')),
+      }))
+      process.exit(23)
+    }
+  } else {
+    const originalWrite = process.stdout.write.bind(process.stdout)
+    process.stdout.write = (...args) => {
+      const chunk = args[0]
+      const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk)
+      let response
+      try { response = JSON.parse(text) } catch { return originalWrite(...args) }
+      const files = {}
+      for (const name of readdirSync(recordDir).sort()) files[name] = readFileSync(join(recordDir, name)).toString('base64')
+      let output = '{"kind":'
+      if (mode === 'mismatched') {
+        response = { ...response, stepId: 'prose', content: { text: '合法但错误关联的合成正文。' } }
+        output = JSON.stringify(response) + '\\n'
+      }
+      writeFileSync(observation, JSON.stringify({ files, response: mode === 'mismatched' ? response : null }))
+      args[0] = output
+      return originalWrite(...args)
+    }
+  }
+}
+`)
+  return { observation, workerLog, env: { NODE_OPTIONS: `--import=${pathToFileURL(fixture).href}` } }
+}
+
+async function startSyntheticCaptionProvider() {
+  let requestCount = 0
+  const server = createServer((req, res) => {
+    requestCount++
+    req.resume()
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ id: 'mock-step-failure', model: 'kimi-k2.8-highspeed', choices: [{ index: 0,
+      message: { role: 'assistant', content: JSON.stringify(caption) }, finish_reason: 'stop' }] }))
+  })
+  server.listen(0, '127.0.0.1'); await once(server, 'listening')
+  const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
+  return {
+    url: `http://127.0.0.1:${address.port}/v1`,
+    requestCount: () => requestCount,
+    close: async () => {
+      server.closeAllConnections()
+      await new Promise<void>(resolve => server.close(() => resolve()))
+    },
+  }
+}
+
+function recordSnapshot(recordDir: string) {
+  return Object.fromEntries(readdirSync(recordDir).sort().map(name => [name, readFileSync(join(recordDir, name)).toString('base64')]))
 }
 
 describe('run-step through a local mock provider', () => {
@@ -450,5 +526,82 @@ describe('run-step through a local mock provider', () => {
       expect(result.stderr).not.toContain('synthetic-step-key')
       expect(calls).toBe(1)
     } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
+  }, 20000)
+
+  it('finalizes unknown after a real worker crash without replacing the captured invocation', async () => {
+    const directory = mkdtempSync(join(realpathSync(tmpdir()), 'a4n-step-worker-crash-'))
+    const recordDir = join(directory, 'run-crash')
+    const provider = await startSyntheticCaptionProvider()
+    try {
+      const seedFile = join(directory, 'seed.txt'); writeFileSync(seedFile, 'synthetic worker crash seed')
+      const control = makeWorkerControl(directory, 'crash-after-fetch', recordDir)
+      const result = await invoke(['run-step', 'caption', '--seed-file', seedFile, '--record-dir', recordDir], provider.url, control.env)
+      expect(result.code).toBe(1)
+      expect(result.stdout).toBe('')
+      expect(JSON.parse(result.stderr)).toMatchObject({ code: 'step-worker-failed', retryable: false })
+
+      const crash = JSON.parse(readFileSync(control.observation, 'utf8')) as { invocation: string; meta: string; resultExists: boolean }
+      expect(crash.resultExists).toBe(false)
+      const invocationBefore = stepExperimentRecordInvocationSchema.parse(JSON.parse(crash.invocation))
+      const metaBefore = stepExperimentRecordMetaSchema.parse(JSON.parse(crash.meta))
+      expect(invocationBefore).toMatchObject({ captured: true })
+      expect(metaBefore).toMatchObject({ complete: false, status: 'in-progress' })
+
+      expect(stepExperimentRecordInputSchema.parse(JSON.parse(readFileSync(join(recordDir, 'input.json'), 'utf8'))).input).toEqual({
+        seed: 'synthetic worker crash seed', upstream: {},
+      })
+      expect(readFileSync(join(recordDir, 'invocation.json'), 'utf8')).toBe(crash.invocation)
+      expect(stepExperimentRecordInvocationSchema.parse(JSON.parse(readFileSync(join(recordDir, 'invocation.json'), 'utf8')))).toEqual(invocationBefore)
+      expect(stepExperimentRecordResultSchema.parse(JSON.parse(readFileSync(join(recordDir, 'result.json'), 'utf8')))).toMatchObject({
+        status: 'unknown', content: null, diagnostic: { code: 'worker-failed' },
+      })
+      const metaAfter = stepExperimentRecordMetaSchema.parse(JSON.parse(readFileSync(join(recordDir, 'meta.json'), 'utf8')))
+      expect(metaAfter).toMatchObject({ complete: false, status: 'incomplete', runId: metaBefore.runId, stepId: 'caption' })
+      expect(provider.requestCount()).toBe(1)
+      expect(readFileSync(control.workerLog, 'utf8').trim().split('\n')).toHaveLength(1)
+    } finally {
+      await provider.close()
+      rmSync(directory, { recursive: true, force: true })
+    }
+  }, 20000)
+
+  it.each(['malformed', 'mismatched'] as const)('rejects a %s worker response without rerunning or rewriting the record', async mode => {
+    const directory = mkdtempSync(join(realpathSync(tmpdir()), `a4n-step-response-${mode}-`))
+    const recordDir = join(directory, 'run-response')
+    const provider = await startSyntheticCaptionProvider()
+    try {
+      const seedFile = join(directory, 'seed.txt'); writeFileSync(seedFile, `synthetic ${mode} response seed`)
+      const control = makeWorkerControl(directory, mode, recordDir)
+      const result = await invoke(['run-step', 'caption', '--seed-file', seedFile, '--record-dir', recordDir], provider.url, control.env)
+      expect(result.code).toBe(1)
+      expect(result.stdout).toBe('')
+      expect(JSON.parse(result.stderr)).toMatchObject({ code: 'invalid-response', retryable: false })
+      expect(provider.requestCount()).toBe(1)
+      expect(readFileSync(control.workerLog, 'utf8').trim().split('\n')).toHaveLength(1)
+
+      const observation = JSON.parse(readFileSync(control.observation, 'utf8')) as { files: Record<string, string>; response: unknown }
+      expect(Object.keys(observation.files).sort()).toEqual(['input.json', 'invocation.json', 'meta.json', 'result.json'])
+      const beforeMeta = stepExperimentRecordMetaSchema.parse(JSON.parse(Buffer.from(observation.files['meta.json']!, 'base64').toString('utf8')))
+      const beforeResult = stepExperimentRecordResultSchema.parse(JSON.parse(Buffer.from(observation.files['result.json']!, 'base64').toString('utf8')))
+      expect(beforeMeta).toMatchObject({ complete: true, status: 'complete', stepId: 'caption' })
+      expect(beforeResult).toMatchObject({ status: 'succeeded', content: caption })
+
+      expect(recordSnapshot(recordDir)).toEqual(observation.files)
+      const afterMeta = stepExperimentRecordMetaSchema.parse(JSON.parse(readFileSync(join(recordDir, 'meta.json'), 'utf8')))
+      const afterResult = stepExperimentRecordResultSchema.parse(JSON.parse(readFileSync(join(recordDir, 'result.json'), 'utf8')))
+      expect(afterMeta).toEqual(beforeMeta)
+      expect(afterResult).toEqual(beforeResult)
+      expect(afterMeta.complete === true && afterMeta.status === 'complete').toBe(beforeMeta.complete === true && beforeMeta.status === 'complete')
+      if (mode === 'mismatched') {
+        const response = stepExperimentResponseSchema.safeParse(observation.response)
+        expect(response.success).toBe(true)
+        if (!response.success) throw new Error('mismatched fixture must be schema-valid')
+        expect(response.data.stepId).toBe('prose')
+        expect(response.data.stepId).not.toBe('caption')
+      }
+    } finally {
+      await provider.close()
+      rmSync(directory, { recursive: true, force: true })
+    }
   }, 20000)
 })
