@@ -11,11 +11,11 @@ import {
   settingLimits,
   beatApproveRequestSchema, beatRequestHeadSchema, beatLimits, beatCommandResponseSchema, beatCommandErrorSchema,
   beatRegenerateRequestSchema, beatVariantSelectionRequestSchema, beatVariantSelectionResponseSchema,
-  proseApproveRequestSchema, proseRequestHeadSchema, proseLimits, proseCommandResponseSchema, proseCommandErrorSchema,
+  proseApproveRequestSchema, proseRequestHeadSchema, proseSaveRequestHeadSchema, proseLimits, proseCommandResponseSchema, proseCommandErrorSchema,
   proseRegenerateRequestSchema, proseSaveRequestSchema,
   diagnosticQuerySchema,
   workViewSchema, startChapterRequestSchema,
-  workCreateRequestSchema, workListResponseSchema, workSchema, artifactSchema,
+  workCreateRequestSchema, workListResponseSchema, workSchema, artifactSchema, historicalArtifactRequestSchema,
   creativeDraftRequestSchema, selectCreativeRequestSchema, outlineDraftRequestSchema, approveRequestSchema,
   outlineApprovalRequestSchema, outlineApprovalResponseSchema, outlineApprovalRequestBytes,
   advanceOutcomeDtoSchema, pipelineStateSchema, settingApproveResponseSchema, diagnosticResponseSchema, httpErrorSchema,
@@ -32,28 +32,42 @@ import { approveProse, saveProse } from '../prose-review.js'
 import { observeProse, ProseCommandError, proseFailureCode, proseResponseError } from '../prose-command.js'
 import { safeLog } from '../safe-log.js'
 import { chapterSummaries, chapterWorkflow, currentChapterOf } from '../chapter-view.js'
+import { formatValidationIssues } from './validation-issues.js'
 
-// id 规整(#4 决策 6):已有 id 保留(上下移/编辑不动标识),新项(无 id)按「现存最大序号 +1」
+// id 规整(#4 决策 6):已有 id 保留(上下移/编辑不动标识),新项(无 id)按「已有及本次已分配最大序号 +1」
 // 补注入,保持与生成时相同的位置编号格式(删除后按位置重排会撞号,故取 max+1)
 function nextId(prefix: string, existing: string[]): string {
   const max = existing.reduce((m, id) => {
     const match = /(\d+)$/.exec(id)
-    return match ? Math.max(m, Number(match[1])) : m
-  }, 0)
-  return `${prefix}${max + 1}`
+    if (!match) return m
+    const value = BigInt(match[1])
+    return value > m ? value : m
+  }, 0n)
+  return `${prefix}${max + 1n}`
 }
 
 function normalizeOutlineIds(workId: string, draft: OutlineDraft): OutlineContent {
+  const arcIds = draft.arcs.map(arc => arc.arcId ?? '')
+  const usedSegmentIds = new Set(draft.arcs.flatMap(arc => arc.segments.map(segment => segment.segmentId ?? '')))
   const content = {
     arcs: draft.arcs.map((arc) => {
-      const arcId = arc.arcId ?? nextId(`${workId}-arc-`, draft.arcs.map((a) => a.arcId ?? ''))
+      const arcId = arc.arcId ?? nextId(`${workId}-arc-`, arcIds)
+      arcIds.push(arcId)
+      const segmentIds = arc.segments.map(segment => segment.segmentId ?? '')
       return {
         ...arc,
         arcId,
-        segments: arc.segments.map((seg) => ({
-          ...seg,
-          segmentId: seg.segmentId ?? nextId(`${arcId}-seg-`, arc.segments.map((x) => x.segmentId ?? '')),
-        })),
+        segments: arc.segments.map((seg) => {
+          let segmentId = seg.segmentId
+          if (!segmentId) {
+            do {
+              segmentId = nextId(`${arcId}-seg-`, segmentIds)
+              segmentIds.push(segmentId)
+            } while (usedSegmentIds.has(segmentId))
+            usedSegmentIds.add(segmentId)
+          }
+          return { ...seg, segmentId }
+        }),
       }
     }),
   }
@@ -193,10 +207,7 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
   // both the immutable identity and version so a caller cannot accidentally
   // treat a newer head as the requested history.
   app.get('/api/works/:id/artifacts/:kind/:chapter/versions/:version', c => {
-    const parsed = z.object({
-      kind: z.enum(['beat', 'prose']), chapter: z.coerce.number().int().positive().safe(),
-      version: z.coerce.number().int().positive().safe(), artifactId: z.string().min(1).max(128),
-    }).strict().safeParse({
+    const parsed = historicalArtifactRequestSchema.safeParse({
       kind: c.req.param('kind'), chapter: c.req.param('chapter'), version: c.req.param('version'), artifactId: c.req.query('artifactId'),
     })
     if (!parsed.success) return c.json(errorBody('invalid-input', 'invalid historical artifact reference'), 400)
@@ -256,7 +267,8 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
       return c.json(beatCommandErrorSchema.parse({
         code, message: code, retryable: known?.retryable ?? false, command: err.command, telemetry: currentRequest()!.telemetry,
         ...(known?.inputBudget ? { inputBudget: known.inputBudget } : {}),
-        ...(invalid && code === 'invalid-content' ? { issues: invalid.issues.slice(0, 128).map(issue => ({ path: issue.path[0] === 'content' || issue.path[0] === 'instructions' ? issue.path : ['content', ...issue.path], code: issue.code, message: 'invalid field' })) } : {}),
+        ...(invalid && code === 'invalid-content' ? formatValidationIssues(invalid.issues, issue =>
+          issue.path[0] === 'content' || issue.path[0] === 'instructions' ? issue.path : ['content', ...issue.path]) : {}),
       }), status)
     }
   })
@@ -298,7 +310,7 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
   }), async c => {
     let body: unknown
     try { body = await c.req.json() } catch { return rejectProseRequest(c, 'bad-json') }
-    const head = (operation === 'save' ? proseRequestHeadSchema.extend({ expectedHumanStatus: z.enum(['pending', 'approved']) }) : proseRequestHeadSchema).passthrough().safeParse(body)
+    const head = (operation === 'save' ? proseSaveRequestHeadSchema : proseRequestHeadSchema).passthrough().safeParse(body)
     if (!head.success) {
       const unsupported = head.error.issues.some(issue => issue.path[0] === 'chapter')
       return rejectProseRequest(c, unsupported ? 'unsupported-chapter' : 'invalid-input')
@@ -339,7 +351,8 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
       return c.json(proseCommandErrorSchema.parse({
         code, message: code, retryable: known?.retryable ?? false, command: err.command, telemetry: currentRequest()!.telemetry,
         ...(known?.inputBudget ? { inputBudget: known.inputBudget } : {}),
-        ...(invalid && code === 'invalid-content' ? { issues: invalid.issues.slice(0, 128).map(issue => ({ path: issue.path[0] === 'content' || issue.path[0] === 'instructions' ? issue.path : ['content', ...issue.path], code: issue.code, message: 'invalid field' })) } : {}),
+        ...(invalid && code === 'invalid-content' ? formatValidationIssues(invalid.issues, issue =>
+          issue.path[0] === 'content' || issue.path[0] === 'instructions' ? issue.path : ['content', ...issue.path]) : {}),
       }), status)
     }
   })
@@ -461,6 +474,11 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
     const current = work.artifacts.find(a => a.kind === 'creative')
     const conflict = assertHead(c, current, parsed.data.expectedHeadVersion)
     if (conflict) return conflict
+    const currentIds = new Set(creativeContentSchema.parse(current!.content).directions.map(direction => direction.directionId))
+    const submittedIds = new Set(parsed.data.content.directions.map(direction => direction.directionId))
+    if (submittedIds.size !== currentIds.size || [...submittedIds].some(id => !currentIds.has(id))) {
+      return c.json(errorBody('invalid-content', 'direction ids must match the current head'), 422)
+    }
     return appendFromHead(c, store, current!, parsed.data.content)
   })
 
@@ -512,7 +530,17 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
     const current = work.artifacts.find(a => a.kind === 'outline')
     const conflict = assertHead(c, current, parsed.data.expectedHeadVersion)
     if (conflict) return conflict
-    return appendFromHead(c, store, current!, normalizeOutlineIds(workId, parsed.data.content))
+    let content: OutlineContent
+    try {
+      content = normalizeOutlineIds(workId, parsed.data.content)
+    } catch (error) {
+      if (!(error instanceof z.ZodError)) throw error
+      return c.json(
+        { ...errorBody('invalid-content', 'invalid content'), issues: error.issues.map(({ path, code }) => ({ path, code, message: 'invalid field' })) },
+        422,
+      )
+    }
+    return appendFromHead(c, store, current!, content)
   })
 
   // advance = 推进到下一个关卡(链式);返回可穷举 outcome。

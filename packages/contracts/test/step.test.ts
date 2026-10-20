@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { z } from 'zod'
-import { runStep, emptyAgentConfig, type Step } from '../src/index.js'
+import { runStep, emptyAgentConfig, agentConfigSchema, type Step } from '../src/index.js'
 
 const echoStep: Step<{ x: number }, { y: number }> = {
   id: 'echo',
@@ -26,5 +26,14 @@ describe('runStep', () => {
       run: async () => ({ y: 'not-a-number' }) as unknown as { y: number },
     }
     await expect(runStep(badStep, { x: 1 }, emptyAgentConfig)).rejects.toThrow()
+  })
+})
+
+describe('agentConfigSchema', () => {
+  it('accepts registered model ids and rejects unvalidated model strings', () => {
+    expect(agentConfigSchema.safeParse({ model: 'kimi:kimi-k2.8-highspeed' }).success).toBe(true)
+    for (const model of ['test-model', 'deepseek:bad model', 'longcat:other']) {
+      expect(agentConfigSchema.safeParse({ model }).success).toBe(false)
+    }
   })
 })

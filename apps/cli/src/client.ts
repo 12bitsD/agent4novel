@@ -40,6 +40,14 @@ export class CliError extends Error {
   }
 }
 
+export function validationIssueDetails(error: HttpError): Record<string, unknown> | undefined {
+  if (error.issueCount === undefined && error.issuesTruncated === undefined) return undefined
+  return {
+    ...(error.issueCount !== undefined ? { issueCount: error.issueCount } : {}),
+    ...(error.issuesTruncated !== undefined ? { issuesTruncated: error.issuesTruncated } : {}),
+  }
+}
+
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>
 
 export type Client = ReturnType<typeof createClient>
@@ -112,8 +120,9 @@ export function createClient(opts: { baseUrl: string; fetch?: FetchLike; timeout
         if ('command' in e && e.command.kind === 'execution-result' && requestedWork !== undefined
           && e.command.target.workId !== decodeURIComponent(requestedWork)) throw invalidResponse(method !== 'GET')
         const unknownWrite = 'command' in e && e.command.writeOutcome === 'unknown'
+        const issueDetails = validationIssueDetails(e)
         throw new CliError(e.message, e.code, unknownWrite ? undefined : res.status, e.retryable, e.attemptId, e.issues,
-          'command' in e ? { command: e.command, telemetry: e.telemetry, writeOutcome: e.command.writeOutcome } : undefined)
+          'command' in e ? { ...issueDetails, command: e.command, telemetry: e.telemetry, writeOutcome: e.command.writeOutcome } : issueDetails)
       }
       return data as T
     }

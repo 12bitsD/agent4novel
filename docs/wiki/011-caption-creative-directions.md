@@ -10,7 +10,7 @@ symbols: ["captionContentSchema", "creativeContentSchema", "DEFAULT_DIRECTION_CO
 inherits: ["010"]
 changed_by: ["004", "016", "013"]
 read_when: ["change-caption-schema", "change-creative-schema", "debug-pipeline-consumes", "change-direction-selection", "debug-creative-retry", "optimize-caption-sp", "review-sp-iteration", "evaluate-story-quality", "compare-thinking-mode"]
-last_context_reviewed: "2026-09-13"
+last_context_reviewed: "2026-10-20"
 ---
 
 # 011 — 预处理重构：Caption + Creative 方向包 + 比较界面
@@ -19,8 +19,8 @@ last_context_reviewed: "2026-09-13"
 
 - **读取时机**：修改 caption/creative 产物、方向数量、上游消费、链式 advance、方向保存/选定或创意比较界面时读取；优化 SP、评阅故事效果或比较 think 时，读“Caption SP 迭代方法”。
 - **原始目的**：把“理解素材”和“提出创作方向”拆开，消除旧 preprocess 四个平行数组之间的隐式对应。
-- **实际落地**：caption 自动通过，creative 单次生成 1–3 个方向包并停在人工选择关卡；2026-09-13 已将 R10 A 原样接入 Caption SP，以素材理解为基础交付开发重心与剧情提案，形状及关卡未变。
-- **当前价值**：caption/creative 契约、consumes 语义、失败重入、方向稳定 ID 和比较关卡仍是当前 HOW；SP 采用依据与后续迭代方法见本页“当前 Caption SP”及“Caption SP 迭代方法”。
+- **实际落地**：caption 自动通过，creative 单次生成 1–3 个方向包并停在人工选择关卡；2026-09-13 已将 R10 A 原样接入 Caption SP，以素材理解为基础交付开发重心与剧情提案，形状及关卡未变。2026-10-20 已补充 `directionId` 唯一校验与 PUT 当前 ID 集约束，不符返回 422 且不写入。
+- **当前价值**：caption/creative 契约、consumes 语义、失败重入、方向 ID 唯一与保存集、比较关卡仍是当前 HOW；SP 采用依据与后续迭代方法见本页“当前 Caption SP”及“Caption SP 迭代方法”。
 - **后续变化**：[Wiki 004](./004-outline-arcs-segments.md) 扩展 workflowState 并移除 selected；[Wiki 016](./016-model-runtime-provider-config.md) 接管模型配置；[Wiki 013](./013-setting-generation-review.md) 为 consumes 生成增加提交时 head 条件与 Store 快照隔离，Creative select 因此改为回读 approved 响应，外部语义不变。
 - **代码入口**：[caption contract](../../packages/contracts/src/caption.ts)、[creative contract](../../packages/contracts/src/creative.ts)、[pipeline](../../apps/server/src/pipeline/pipeline.ts)、[creative routes](../../apps/server/src/routes/works.ts)、[compare state](../../apps/web/src/creative-compare.ts)。
 - **实验入口**：先读“Caption SP 迭代方法”，再读[经验摘要](../experiments/caption-adoption-2026-09-13/plan.md#历史实验记录)与上一轮逐 SP 反思；《旧日人》系列已收束，下一步节点隔离仍是未执行建议。
@@ -201,6 +201,8 @@ Think 暂保留关闭。R9 只有一次配对，开启后 caption 用时增加 2
 
 自动化覆盖 contract 边界、链式 advance、最新 approved consumes、非法 definition、并发锁、方向数、保存/选定，以及 409 后保留 dirty；还锁定 caption 成功而 creative 失败时只重跑 creative。
 
+当前 Creative ID 定向入口为 [creative.test.ts](../../packages/contracts/test/creative.test.ts)（重复 `directionId` 及字段路径）与 [app.test.ts](../../apps/server/test/app.test.ts)（PUT 保持当前 ID 集，重复、伪造、增删均 422 且不写入）。
+
 演示模式已验证创建、链式生成、保存、选定、刷新与 stale 409。真实 LongCat 2.0 已验证 caption 与 creative 能生成 schema-valid 产物；具体 provider 适配、结构化输出降级和 smoke 证据见 [wiki 016](./016-model-runtime-provider-config.md)。
 
 SP 迭代的公开结论见[实验与复盘摘要](../experiments/caption-adoption-2026-09-13/plan.md#历史实验记录)；真实结果、首次失败和完整原文保留在本地实验归档，不随公开仓库发布。2026-09-13 的 wiki 方法维护仅检查受影响页面的 frontmatter、固定章节、索引、相对链接及历史内容保留；没有重跑模型、应用测试或重新完成 #11 的发布审核。
@@ -224,6 +226,14 @@ SP 迭代的公开结论见[实验与复盘摘要](../experiments/caption-adopti
 - 持久化事务、lease 与 schema 迁移。
 
 ## 上下文演进
+
+### 2026-10-20 — Creative 方向 ID 唯一性与保存集收口
+
+- **触发证据**：当前 [creative.ts](../../packages/contracts/src/creative.ts) 已增加 `directionId` 唯一校验，[app.test.ts](../../apps/server/test/app.test.ts) 已覆盖 PUT 的 duplicate／forged／added／removed 拒绝与不写入；本页仍只描述稳定 ID，复审要求同步当前实现和旧库影响。
+- **原假设**：方向 ID 稳定即可支撑编辑与选定，内容内唯一性及旧库已有重复数据的读取边界未被写清。
+- **决定**：Creative 内容要求 `directionId` 唯一；PUT 保存必须保持当前 head 的 ID 集，不一致返回 422 且不写入。接受 Human 于 2026-10-20 对本轮全部历史不兼容的裁决，不做自动迁移。
+- **影响**：旧库既有重复 `directionId`／`arcId`／`segmentId` 会在实际读取时按 `invalid-stored-data` 拒绝；同一裁决覆盖本轮历史不兼容，本轮不实际修改任何数据库。当前不变量归 [schema](../schema.md)，测试入口见本页“测试与验证”。
+- **上下文处理**：preserve 原始方向设计、SP 实验和历史审核证据；replace 当前 Creative 实现与测试入口，不重写后续事件或既有完成记录。
 
 ### 2026-09-13 — 采用 R10 A 为当前 Caption SP
 

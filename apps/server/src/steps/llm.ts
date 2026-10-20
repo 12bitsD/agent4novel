@@ -2,8 +2,8 @@ import { createDeepSeek } from '@ai-sdk/deepseek'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { createProviderRegistry } from 'ai'
 import type { LanguageModel } from 'ai'
-import { agentConfigSchema, generationParametersSchema } from '@agent4novel/contracts'
-import type { AgentConfig, GenerationParameters } from '@agent4novel/contracts'
+import { agentConfigSchema, generationParametersSchema, parseModelId as parseSupportedModelId, providerForModel } from '@agent4novel/contracts'
+import type { AgentConfig, GenerationParameters, SupportedModelId } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
 
 export const DEFAULT_DEEPSEEK_MODEL_ID = 'deepseek:deepseek-chat' as const
@@ -12,7 +12,7 @@ export const DEFAULT_KIMI_MODEL_ID = 'kimi:kimi-k2.8-highspeed' as const
 export const DEFAULT_LONGCAT_BASE_URL = 'https://api.longcat.chat/openai/v1'
 export const DEFAULT_KIMI_BASE_URL = 'https://api.moonshot.cn/v1'
 
-export type SupportedModelId = `deepseek:${string}` | `kimi:${string}` | typeof DEFAULT_LONGCAT_MODEL_ID
+export type { SupportedModelId } from '@agent4novel/contracts'
 
 export class ModelConfigError extends Error {
   readonly code = 'llm-config-invalid'
@@ -44,9 +44,8 @@ function value(env: NodeJS.ProcessEnv, name: string): string | undefined {
 }
 
 function parseModelId(raw: string): SupportedModelId {
-  if (/^deepseek:[^:]+$/.test(raw)) return raw as `deepseek:${string}`
-  if (/^kimi:[^:]+$/.test(raw)) return raw as `kimi:${string}`
-  if (raw === DEFAULT_LONGCAT_MODEL_ID) return raw
+  const modelId = parseSupportedModelId(raw)
+  if (modelId) return modelId
   throw new ModelConfigError(
     `unsupported model id "${raw}"; expected deepseek:<model>, kimi:<model>, or ${DEFAULT_LONGCAT_MODEL_ID}`,
   )
@@ -105,13 +104,17 @@ export function createModelRuntime(
           ? DEFAULT_KIMI_MODEL_ID
           : DEFAULT_DEEPSEEK_MODEL_ID
 
-  const configured = (modelId: SupportedModelId): boolean =>
-    modelId.startsWith('deepseek:') ? Boolean(deepseekKey)
-      : modelId.startsWith('kimi:') ? Boolean(kimiKey)
-        : Boolean(longcatKey)
+  const configured = (modelId: SupportedModelId): boolean => {
+    switch (providerForModel(modelId)) {
+      case 'deepseek': return Boolean(deepseekKey)
+      case 'kimi': return Boolean(kimiKey)
+      case 'longcat': return Boolean(longcatKey)
+      default: return false
+    }
+  }
 
   if (explicitModel && !configured(defaultModelId)) {
-    const provider = defaultModelId.split(':', 1)[0]
+    const provider = providerForModel(defaultModelId)
     throw new ModelConfigError(`A4N_MODEL selects provider "${provider}" but its API key is missing`)
   }
 
@@ -149,7 +152,7 @@ export function createModelRuntime(
         throw new KnownError('llm-unavailable', 'invalid or unsupported generation parameters', { retryable: false })
       }
       const selectedModel = parsed.data.model ?? defaultModelId
-      const isLongCat = selectedModel === DEFAULT_LONGCAT_MODEL_ID
+      const isLongCat = providerForModel(selectedModel) === 'longcat'
       if (parsed.data.thinking !== undefined && !isLongCat) {
         throw new KnownError('llm-unavailable', 'thinking control requires LongCat-2.0', { retryable: false })
       }
@@ -176,7 +179,7 @@ export function createModelRuntime(
         )
       }
       if (!configured(modelId)) {
-        const provider = modelId.split(':', 1)[0]
+        const provider = providerForModel(modelId)
         throw new KnownError('llm-unavailable', `LLM provider "${provider}" is not configured`, {
           retryable: false,
         })

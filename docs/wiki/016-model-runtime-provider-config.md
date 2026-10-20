@@ -5,12 +5,12 @@ ticket_state: done
 context_state: mixed
 summary: "ModelRuntime 统一模型、凭据、结构化输出和超时；支持 DeepSeek、LongCat 与 Kimi。"
 topics: ["model-runtime", "provider-config", "generation-parameters", "thinking", "credentials", "base-url-security", "structured-output", "llm-timeouts"]
-code_paths: ["apps/server/src/index.ts", "apps/server/src/steps/llm.ts", "apps/server/src/steps/llm-call.ts", "apps/server/src/config/local-env.ts", "apps/server/src/start.ts", "apps/server/src/step-lab-main.ts", "apps/cli/src/local-step.ts", "packages/contracts/src/step.ts", "packages/contracts/src/author-config.ts", "apps/cli/src/client.ts", ".env.example", "compose.yaml"]
-symbols: ["ModelRuntime", "SupportedModelId", "ModelConfigError", "createModelRuntime", "modelRuntime", "DEFAULT_KIMI_MODEL_ID", "DEFAULT_KIMI_BASE_URL", "generationSettings", "generationParametersSchema", "callLlm", "run-step", "DEFAULT_CLI_TIMEOUT_MS", "DEFAULT_ADVANCE_TIMEOUT_MS", "A4N_LLM_TIMEOUT_MS", "A4N_CLI_TIMEOUT_MS", "llm-timeout"]
+code_paths: ["apps/server/src/index.ts", "apps/server/src/steps/llm.ts", "apps/server/src/steps/llm-call.ts", "apps/server/src/config/local-env.ts", "apps/server/src/start.ts", "apps/server/src/step-lab-main.ts", "apps/cli/src/local-step.ts", "packages/contracts/src/model.ts", "packages/contracts/src/step.ts", "packages/contracts/src/author-config.ts", "apps/cli/src/client.ts", ".env.example", "compose.yaml"]
+symbols: ["ModelRuntime", "SupportedModelId", "modelIdSchema", "providerForModel", "ModelConfigError", "createModelRuntime", "modelRuntime", "DEFAULT_KIMI_MODEL_ID", "DEFAULT_KIMI_BASE_URL", "generationSettings", "generationParametersSchema", "callLlm", "run-step", "DEFAULT_CLI_TIMEOUT_MS", "DEFAULT_ADVANCE_TIMEOUT_MS", "A4N_LLM_TIMEOUT_MS", "A4N_CLI_TIMEOUT_MS", "llm-timeout"]
 inherits: ["014"]
 changed_by: ["013", "005", "033", "007", "060"]
 read_when: ["configure-model-provider", "configure-generation-parameters", "run-isolated-step", "add-model-provider", "debug-llm-runtime", "change-llm-timeout", "audit-credential-safety"]
-last_context_reviewed: "2026-10-10"
+last_context_reviewed: "2026-10-20"
 ---
 
 # 016 — 模型运行配置：统一多 Provider、凭据与超时
@@ -62,6 +62,8 @@ shell/CI 与 server 入口加载的 .env.local 进入 ModelRuntime，再由 regi
 本地初始化从 .env.example 复制到不存在的 .env.local，并设权限 600。key 不得进入命令参数、客户端 bundle、Work.config、产物、fixture、截图、聊天或日志。
 
 ### 默认选择与作品覆盖
+
+`A4N_MODEL`、`AgentConfig.model` 与运行时 override 共用 [model.ts](../../packages/contracts/src/model.ts) 的 `modelIdSchema`、`parseModelId` 和 `providerForModel`；AgentConfig 也复用同一校验与映射，非法或未注册值明确拒绝，不 fallback。通过校验后才执行以下默认选择与 key 检查。
 
 启动选择按以下顺序：
 
@@ -145,7 +147,7 @@ Pipeline 不做 provider 自动重试，也不做跨 provider failover：
 
 | 责任 | 权威入口 |
 |---|---|
-| Runtime、registry 与配置校验 | [llm.ts](../../apps/server/src/steps/llm.ts) |
+| 共享模型 ID、provider 映射与 Runtime 配置校验 | [model.ts](../../packages/contracts/src/model.ts)、[llm.ts](../../apps/server/src/steps/llm.ts)；AgentConfig 复用入口为 [step.ts](../../packages/contracts/src/step.ts) |
 | 生成参数和独立运行配置 | [step.ts](../../packages/contracts/src/step.ts)、[step-experiment.ts](../../packages/contracts/src/step-experiment.ts)、[step-lab-main.ts](../../apps/server/src/step-lab-main.ts)、[local-step.ts](../../apps/cli/src/local-step.ts) |
 | 模型调用、Zod、timeout 与 telemetry | [llm-call.ts](../../apps/server/src/steps/llm-call.ts) |
 | 本地配置加载与步骤装配 | [local-env.ts](../../apps/server/src/config/local-env.ts)、[start.ts](../../apps/server/src/start.ts) |
@@ -183,6 +185,14 @@ ModelRuntime 测试以合成 key 与 fake fetch 覆盖选择、缺 key、非法 
 - 不做持久化 store、后台 job、队列或异步 advance。
 
 ## 上下文演进
+
+### 2026-10-20 — 共享模型 ID 校验与 provider 映射
+
+- **触发证据**：当前 [model.ts](../../packages/contracts/src/model.ts) 提供 `modelIdSchema`、`parseModelId` 与 `providerForModel`，[step.ts](../../packages/contracts/src/step.ts) 的 AgentConfig 和 [llm.ts](../../apps/server/src/steps/llm.ts) 已复用；[model.test.ts](../../packages/contracts/test/model.test.ts) 与 [step.test.ts](../../packages/contracts/test/step.test.ts) 覆盖合法映射及非法值拒绝，本页 HOW 尚未指向共享入口。
+- **原假设**：运行时与 AgentConfig 可以分别维护模型字符串校验和 provider 映射，只要支持列表保持一致即可。
+- **决定**：以 `packages/contracts/src/model.ts` 作为共享解析与映射入口；`AgentConfig.model` 复用 `modelIdSchema`，运行时使用同一解析和 `providerForModel`，非法或未注册值明确拒绝，不 fallback。
+- **影响**：作者配置、作品 override 与独立节点继承同一模型边界；默认选择顺序、provider adapter、凭据、URL 和 timeout 不变，当前测试入口为上述 model/step 测试及既有 ModelRuntime 测试。
+- **上下文处理**：preserve provider 研究、历史实测和审核证据；replace 当前代码入口与共享校验 HOW，不重写既有 provider 细节。
 
 ### 2026-10-10 — #60 增加 Kimi OpenAI-compatible provider
 

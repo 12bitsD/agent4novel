@@ -1,13 +1,14 @@
 import { Hono } from 'hono'
-import { z } from 'zod'
 import {
   apiErrorSchema, settingLimits, settingExtensionActionRequestSchema, settingExtensionProposeRequestSchema,
   settingExtensionReceiptSchema, settingExtensionResourceSchema,
+  settingExtensionPathSchema as pathSchema, settingExtensionActionPathSchema as actionPathSchema,
 } from '@agent4novel/contracts'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import { contractJson, responseUnavailable } from '../contract-response.js'
 import { KnownError } from '../errors.js'
 import type { WorkStore } from '../store/work-store.js'
+import { formatValidationIssues } from './validation-issues.js'
 
 const statuses: Record<string, ContentfulStatusCode> = {
   'invalid-input': 400, 'work-not-found': 404, 'setting-extension-not-found': 404,
@@ -16,8 +17,6 @@ const statuses: Record<string, ContentfulStatusCode> = {
   'setting-extension-state-conflict': 409, 'setting-extension-limit': 422, 'setting-extension-invalid': 422,
 }
 const invalid = { code: 'invalid-input', message: 'invalid setting extension request', retryable: false }
-const pathSchema = z.object({ workId: z.string().min(1), requestId: z.string().uuid() }).strict()
-const actionPathSchema = pathSchema
 
 export function settingExtensionRoutes(store: WorkStore): Hono {
   const app = new Hono()
@@ -72,7 +71,7 @@ export function settingExtensionRoutes(store: WorkStore): Hono {
       const logicalLimit = operation === 'propose' && parsed.error.issues.every(issue => issue.path[0] === 'extension' && issue.code === 'too_big')
       return contractJson(c, apiErrorSchema, { ...invalid,
         ...(logicalLimit ? { code: 'setting-extension-limit', message: 'setting extension exceeds logical limits' } : {}),
-        issues: parsed.error.issues.slice(0, 128).map(({ path, code }) => ({ path, code, message: 'invalid field' })) }, logicalLimit ? 422 : 400)
+        ...formatValidationIssues(parsed.error.issues) }, logicalLimit ? 422 : 400)
     }
     if (actionPath && actionPath.data.requestId !== parsed.data.requestId) {
       return contractJson(c, apiErrorSchema, invalid, 400)

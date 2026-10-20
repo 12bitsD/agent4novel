@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { modelIdSchema } from './model.js'
 
 // Supported application controls; omitted fields are resolved by ModelRuntime.
 export const generationParametersSchema = z.object({
@@ -10,7 +11,7 @@ export type GenerationParameters = z.infer<typeof generationParametersSchema>
 
 export const agentConfigSchema = z.object({
   ...generationParametersSchema.shape,
-  model: z.string().optional(),
+  model: modelIdSchema.optional(),
   systemPrompt: z.string().optional(),
   skills: z.array(z.string()).optional(),
   tools: z.array(z.string()).optional(),

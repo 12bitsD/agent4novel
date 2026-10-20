@@ -10,7 +10,7 @@ symbols: ["createApp", "parseServerConfig", "A4N_DATA_DIR", "A4N_SERVE_WEB"]
 inherits: ["009", "016", "014"]
 changed_by: ["007", "008", "041", "043"]
 read_when: ["run-local-container", "debug-production-build", "verify-ci", "restore-container-volume"]
-last_context_reviewed: "2026-10-03"
+last_context_reviewed: "2026-10-20"
 ---
 
 # 033 — 本机 Docker Compose 与 GitHub CI
@@ -62,7 +62,7 @@ root实现本票；独立评审按canonical清单委派给未参与实现的revi
 
 ### 维护操作
 
-前提：Docker引擎运行，`docker compose version`可用；Git下载仓库。Compose固定容器host0.0.0.0、内部8787和`/data`，只将宿主127.0.0.1端口映射出来；不支持公网部署。`docker compose up --build -d --wait` 仅在未指定模型且没有供应商密钥时进入演示模式；已有密钥时可启用真实模型，显式模型缺对应密钥则拒绝启动。使用 `.env.local` 时执行 `docker compose --env-file .env.local up --build -d --wait`，供应商字段及选择顺序仍按 [Wiki016](./016-model-runtime-provider-config.md#配置契约) 配置。宿主端口改 `A4N_HTTP_PORT`；默认8787。模型密钥不经过Docker构建参数或COPY。
+前提：Docker引擎运行，`docker compose version`可用；Git下载仓库。Compose固定容器host0.0.0.0、内部8787和`/data`，只将宿主127.0.0.1端口映射出来；不支持公网部署。镜像以`A4N_CONTAINER=1`显式允许容器内0.0.0.0监听，该标记只由镜像设置，不是公网部署开关；非容器仍仅接受loopback。`docker compose up --build -d --wait` 仅在未指定模型且没有供应商密钥时进入演示模式；已有密钥时可启用真实模型，显式模型缺对应密钥则拒绝启动。使用 `.env.local` 时执行 `docker compose --env-file .env.local up --build -d --wait`，供应商字段及选择顺序仍按 [Wiki016](./016-model-runtime-provider-config.md#配置契约) 配置。宿主端口改 `A4N_HTTP_PORT`；默认8787。模型密钥不经过Docker构建参数或COPY。
 
 `docker compose ps`查看健康，`docker compose logs app`检查安全启动报错；健康接口`/api/health`仅返回`{status:"ok"}`。显式Web开关但缺构建会提示`frontend build is unavailable; run pnpm build`；无效模型/存储/监听配置安全拒绝且不回显输入。源码开发仍用Vite5173+API8787。编译发布`pnpm build`后可`pnpm --filter @agent4novel/server start`运行演示；该入口只使用进程环境，不自动加载`.env.local`。CLI在安装依赖的宿主执行`./apps/cli/bin/a4n ... --url http://127.0.0.1:8787`。
 
@@ -127,6 +127,14 @@ config RED4项真实缺行为（返回缺Web字段/开关未校验）后GREEN15�
 本机单用户；无公网服务/鉴权/云资源/TLS/registry/自动部署。#7作者配置、#8坏例另票；#28/#29继续后置。原内存服务不迁移/停止。CI不调用真实provider，不把工程成功称为小说质量或公网已上线。数据卷删除和旧库降级不属于启动/升级默认动作。
 
 ## 上下文演进
+
+### 2026-10-20 — 显式标记容器内监听
+
+- **触发证据**：[server-config.ts](../../apps/server/src/config/server-config.ts) 已严格解析 `A4N_CONTAINER`，[server-config.test.ts](../../apps/server/test/server-config.test.ts) 已覆盖容器监听与非法值，[Dockerfile](../../Dockerfile) 已设置镜像标记；维护段已有当前说明，但本页缺少对应变化事件。
+- **原假设**：只需分别配置容器 host 与宿主 loopback 端口发布，无需独立的容器身份标记。
+- **决定**：镜像固定 `A4N_CONTAINER=1`；server 只接受 `0`／`1`，且仅在标记为 `1`、host 精确为 `0.0.0.0` 时允许非 loopback 监听。该标记不是公网部署开关。
+- **影响**：非容器仍只接受 loopback，Compose 仍只发布宿主 `127.0.0.1`；端口、数据卷、凭据和公网非目标不变，当前入口与测试以上述三个文件为准。
+- **上下文处理**：preserve 原部署方案、历史 CI 与完成审核证据；replace 当前配置事实和维护说明，不改写历史验收记录。
 
 ### 2026-10-03 — 复审缺陷另票修复
 

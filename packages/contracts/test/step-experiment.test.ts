@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { generationParametersSchema, stepExperimentRequestSchema, stepExperimentResponseSchema } from '../src/index.js'
+import {
+  generationParametersSchema, stepExperimentRequestSchema, stepExperimentResponseSchema,
+  stepExperimentRecordFiles, makeStepExperimentRecordInput, makeEmptyStepExperimentRecordInvocation,
+  makeStepExperimentRecordResult, makeStepExperimentRecordMeta,
+  stepExperimentRecordInputSchema, stepExperimentRecordInvocationSchema,
+  stepExperimentRecordResultSchema, stepExperimentRecordMetaSchema,
+} from '../src/index.js'
 
 describe('step experiment contracts', () => {
   it('accepts supported sampling endpoints without inserting runtime defaults', () => {
@@ -65,5 +71,41 @@ describe('step experiment contracts', () => {
     const base = { runId: 'experiment-test', stepId, executionMode: 'live', model: 'kimi:kimi-k2.8-highspeed', telemetry: [], kind: 'succeeded' }
     expect(stepExperimentResponseSchema.safeParse({ ...base, content: {} }).success).toBe(false)
     if (stepId !== 'prose') expect(stepExperimentResponseSchema.safeParse({ ...base, content: { text: 'different artifact' } }).success).toBe(false)
+  })
+
+  it('constructs the four record files with one schema-valid shape', () => {
+    const sources = { input: 'seed-file' as const, inputPath: '/private/seed.txt', systemPromptPath: null, configPath: null }
+    expect(stepExperimentRecordFiles).toEqual({ input: 'input.json', invocation: 'invocation.json', result: 'result.json', meta: 'meta.json' })
+
+    const input = makeStepExperimentRecordInput({ seed: 'synthetic seed', upstream: {} }, sources)
+    expect(input).toEqual({ formatVersion: 1, input: { seed: 'synthetic seed', upstream: {} }, sources })
+    expect(stepExperimentRecordInputSchema.parse(input)).toEqual(input)
+
+    const invocation = makeEmptyStepExperimentRecordInvocation()
+    expect(invocation).toEqual({
+      formatVersion: 1, captured: false, capturedAt: null, system: null, prompt: null, model: null, attemptId: null,
+      effectiveConfig: null, generation: null, sdkOptions: null, maxOutputTokens: null, maxRetries: null, requestTimeoutMs: null,
+    })
+    expect(stepExperimentRecordInvocationSchema.parse(invocation)).toEqual(invocation)
+
+    const result = makeStepExperimentRecordResult({ status: 'unknown', content: null, code: 'cli-timeout', retryable: null, telemetry: [] })
+    expect(result).toEqual({
+      formatVersion: 1, status: 'unknown', content: null,
+      diagnostic: { code: 'cli-timeout', retryable: null, error: null, telemetry: [] },
+    })
+    expect(stepExperimentRecordResultSchema.parse(result)).toEqual(result)
+
+    const meta = makeStepExperimentRecordMeta({
+      complete: false, status: 'incomplete', runId: 'experiment-test', stepId: 'caption', model: 'kimi:kimi-k2.8-highspeed',
+      startedAt: '2026-10-20T00:00:00.000Z', finishedAt: '2026-10-20T00:00:01.000Z',
+      gitCommit: null, gitDirty: null, sources,
+    })
+    expect(meta).toEqual({
+      formatVersion: 1, complete: false, status: 'incomplete', runId: 'experiment-test', stepId: 'caption', executionMode: 'live',
+      model: 'kimi:kimi-k2.8-highspeed', startedAt: '2026-10-20T00:00:00.000Z', finishedAt: '2026-10-20T00:00:01.000Z',
+      gitCommit: null, gitDirty: null, sources,
+      files: { input: 'input.json', invocation: 'invocation.json', result: 'result.json', meta: 'meta.json' },
+    })
+    expect(stepExperimentRecordMetaSchema.parse(meta)).toEqual(meta)
   })
 })

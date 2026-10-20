@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util'
 import type { ArtifactKind, CreativeContent, OutlineDraft, WorkView, CreativeRegenerateRequest } from '@agent4novel/contracts'
 import {
   artifactSchema, creativeRegenerateRequestSchema, httpErrorSchema,
@@ -9,9 +10,9 @@ import {
   matchesBeatSubmission,
   proseApproveRequestSchema, proseRegenerateRequestSchema, proseSaveRequestSchema, proseArtifactSchema, recoverProseSubmission, proseCommandErrorSchema, proseCommandResponseSchema, matchesProseSubmission,
 } from '@agent4novel/contracts'
-import { CliError } from './client.js'
+import { CliError, validationIssueDetails } from './client.js'
 import type { Client } from './client.js'
-import type { BeatSubmission, ProseSubmission, DiagnosticQuery, BeatVariantSelectionRequest } from '@agent4novel/contracts'
+import type { BeatSubmission, ProseSubmission, DiagnosticQuery, BeatVariantSelectionRequest, BeatVariantSelectionResponse } from '@agent4novel/contracts'
 
 // 命令层(#14):每个命令返回可 JSON 序列化的结果,由 main 打印;进度一律走 stderr(logger 注入)
 
@@ -97,8 +98,9 @@ export async function regenerateCreative(client: Client, workId: string, input: 
   if (!error.success) throw new CliError('Creative regeneration response is invalid; keep the request file and inspect the work', 'invalid-response', undefined, false, undefined, undefined,
     { writeOutcome: 'unknown' })
   if (response.status >= 500) throw new CliError('Creative regeneration result is unknown; keep the request file and inspect the work', 'creative-result-unknown', undefined, false, undefined, undefined,
-    { writeOutcome: 'unknown' })
-  throw new CliError(error.data.message, error.data.code, response.status, error.data.retryable, error.data.attemptId, error.data.issues)
+    { ...validationIssueDetails(error.data), writeOutcome: 'unknown' })
+  throw new CliError(error.data.message, error.data.code, response.status, error.data.retryable, error.data.attemptId, error.data.issues,
+    validationIssueDetails(error.data))
 }
 
 export async function saveOutline(client: Client, workId: string, content: OutlineDraft) {
@@ -195,7 +197,31 @@ export async function runBeatCommand(client: Client, workId: string, operation: 
   const { artifact: _artifact, ...safeRecovery } = recovery
   throw new CliError('Beat command did not confirm the requested result; keep the request file', code, response?.status,
     failure.success ? failure.data.retryable : false, failure.success ? failure.data.attemptId : undefined, failure.success ? failure.data.issues : undefined,
-    { ...local, ...safeRecovery, causeCode, ...(failure.success ? { command: failure.data.command, telemetry: failure.data.telemetry, inputBudget: failure.data.inputBudget } : {}) })
+    { ...local, ...safeRecovery, causeCode, ...(failure.success ? { ...validationIssueDetails(failure.data), command: failure.data.command, telemetry: failure.data.telemetry, inputBudget: failure.data.inputBudget } : {}) })
+}
+
+function matchesBeatVariantSelection(workId: string, request: BeatVariantSelectionRequest, value: BeatVariantSelectionResponse): boolean {
+  const { artifact, selection } = value
+  const { original, candidate } = value.comparison
+  const resultMatches = request.choice === 'new'
+    ? selection.writeOutcome === 'not-committed' && isDeepStrictEqual(artifact, candidate)
+    : selection.writeOutcome === 'committed'
+      && artifact.workId === workId && artifact.kind === 'beat' && artifact.chapter === request.chapter
+      && artifact.id !== original.id && artifact.id !== candidate.id && artifact.version === candidate.version + 1
+      && artifact.humanStatus === 'pending' && isDeepStrictEqual(artifact.content, original.content)
+  return value.choice === request.choice
+    && selection.workId === workId && selection.chapter === request.chapter && selection.choice === request.choice
+    && selection.expectedHead.artifactId === request.expectedArtifactId && selection.expectedHead.version === request.expectedHeadVersion
+    && selection.originalHead.artifactId === request.originalArtifactId && selection.originalHead.version === request.originalVersion
+    && selection.resultHead.artifactId === artifact.id && selection.resultHead.version === artifact.version
+    && selection.resultHead.humanStatus === artifact.humanStatus
+    && original.workId === workId && original.kind === 'beat' && original.chapter === request.chapter
+    && original.id === request.originalArtifactId && original.version === request.originalVersion && original.humanStatus === 'pending'
+    && candidate.workId === workId && candidate.kind === 'beat' && candidate.chapter === request.chapter
+    && candidate.id === request.expectedArtifactId && candidate.version === request.expectedHeadVersion && candidate.humanStatus === 'pending'
+    && original.id !== candidate.id && candidate.version === original.version + 1
+    && isDeepStrictEqual(original.content, request.originalContent)
+    && resultMatches
 }
 
 export async function selectBeatVariant(client: Client, workId: string, input: unknown) {
@@ -213,27 +239,19 @@ export async function selectBeatVariant(client: Client, workId: string, input: u
   }
   if (response.status >= 200 && response.status < 300) {
     const result = beatVariantSelectionResponseSchema.safeParse(response.body)
-    if (!result.success) throw new CliError('Invalid server response; inspect the work before retrying a write', 'invalid-response', undefined,
-      false, undefined, undefined, { writeOutcome: 'unknown' })
-    const value = result.data
-    if (value.selection.workId !== workId || value.selection.chapter !== request.chapter || value.choice !== request.choice
-      || value.selection.expectedHead.artifactId !== request.expectedArtifactId
-      || value.selection.expectedHead.version !== request.expectedHeadVersion
-      || value.selection.originalHead.artifactId !== request.originalArtifactId
-      || value.selection.originalHead.version !== request.originalVersion
-      || JSON.stringify(value.comparison.original.content) !== JSON.stringify(request.originalContent)) {
+    if (!result.success || !matchesBeatVariantSelection(workId, request, result.data)) {
       throw new CliError('Invalid server response; inspect the work before retrying a write', 'invalid-response', undefined,
         false, undefined, undefined, { writeOutcome: 'unknown' })
     }
-    return value
+    return result.data
   }
   const failure = httpErrorSchema.safeParse(response.body)
   if (!failure.success) throw new CliError('Invalid server response; inspect the work before retrying a write', 'invalid-response', undefined,
     false, undefined, undefined, { writeOutcome: 'unknown' })
   if (response.status >= 500) throw new CliError(failure.data.message, failure.data.code, undefined, failure.data.retryable,
-    failure.data.attemptId, failure.data.issues, { writeOutcome: 'unknown' })
+    failure.data.attemptId, failure.data.issues, { ...validationIssueDetails(failure.data), writeOutcome: 'unknown' })
   throw new CliError(failure.data.message, failure.data.code, response.status, failure.data.retryable,
-    failure.data.attemptId, failure.data.issues)
+    failure.data.attemptId, failure.data.issues, validationIssueDetails(failure.data))
 }
 
 export async function runProseCommand(client: Client, workId: string, operation: ProseSubmission['operation'], input: unknown) {
@@ -268,7 +286,7 @@ export async function runProseCommand(client: Client, workId: string, operation:
   const { artifact: _artifact, ...safeRecovery } = recovery
   throw new CliError('Prose command did not confirm the requested result; keep the request file', code, response?.status,
     failure.success ? failure.data.retryable : false, failure.success ? failure.data.attemptId : undefined, failure.success ? failure.data.issues : undefined,
-    { ...local, ...safeRecovery, causeCode, ...(failure.success ? { command: failure.data.command, telemetry: failure.data.telemetry, inputBudget: failure.data.inputBudget } : {}) })
+    { ...local, ...safeRecovery, causeCode, ...(failure.success ? { ...validationIssueDetails(failure.data), command: failure.data.command, telemetry: failure.data.telemetry, inputBudget: failure.data.inputBudget } : {}) })
 }
 
 export type SmokeResult = {

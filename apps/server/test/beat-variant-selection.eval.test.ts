@@ -18,6 +18,14 @@ const outline = { arcs: [arc('arc-1'), arc('arc-2'), arc('arc-3')] }
 const setting = { overview: '城市', world: [{ itemId: 'world-1', title: '规则', content: '现实' }], characters: [{ itemId: 'character-1', title: '主角', content: '查案' }], factions: [], relationships: [], extensions: [] }
 const original = { title: '旧章纲', goal: '守住线索', writingPlan: [{ itemId: 'beat-item-old', title: '问路', content: '主角向守门人问路。' }], ending: '拿到半张地图。' }
 const regenerated = { title: '新章纲', goal: '追上真相', writingPlan: [{ itemId: 'beat-item-old', title: '跟踪', content: '主角沿河追踪。' }], ending: '看见旧桥上的灯。' }
+const regeneratedWithoutIds = { ...regenerated, writingPlan: regenerated.writingPlan.map(({ title, content }) => ({ title, content })) }
+
+function expectFreshCardIds(baseline: typeof original, candidate: typeof original) {
+  const oldIds = new Set(baseline.writingPlan.map(item => item.itemId))
+  const newIds = candidate.writingPlan.map(item => item.itemId)
+  expect(new Set(newIds).size).toBe(newIds.length)
+  expect(newIds.every(id => /^beat-item-[0-9a-f-]{36}$/.test(id) && !oldIds.has(id))).toBe(true)
+}
 
 function makeFixture(step: ArtifactStep = fakeArtifactStep('beat', regenerated).step) {
   const store = new InMemoryStore(); const work = store.createWork({ seed: '素材' })
@@ -48,7 +56,8 @@ describe('E20 server acceptance: compare/select beat variants', () => {
     expect(() => beatCommandResponseSchema.parse(body)).not.toThrow()
     expect(body.comparison).toMatchObject({ original: fx.beat, candidate: body.artifact })
     expect(body.comparison.original.content).toEqual(original)
-    expect(body.comparison.candidate.content).toEqual(regenerated)
+    expect(body.comparison.candidate.content).toMatchObject(regeneratedWithoutIds)
+    expectFreshCardIds(original, body.comparison.candidate.content)
     expect(body.comparison.candidate.humanStatus).toBe('pending')
     expect(body.comparison.candidate.id).toBe(body.artifact.id)
     expect(body.comparison.candidate.version).toBe(2)
@@ -95,7 +104,7 @@ describe('E20 server acceptance: compare/select beat variants', () => {
     expect(selected.artifact.humanStatus).toBe('pending')
     expect(selected.comparison).toMatchObject({ original: fx.beat, candidate })
     expect(fx.store.getArtifactVersion(fx.work.id, 'beat', 1, fx.beat.id, 1)?.content).toEqual(original)
-    expect(fx.store.getArtifactVersion(fx.work.id, 'beat', 1, candidate.id, 2)?.content).toEqual(regenerated)
+    expect(fx.store.getArtifactVersion(fx.work.id, 'beat', 1, candidate.id, 2)?.content).toEqual(candidate.content)
     expect(fx.store.getArtifactVersion(fx.work.id, 'beat', 1, selected.artifact.id, 3)?.content).toEqual(original)
     for (const stale of [
       { expectedArtifactId: fx.beat.id, expectedHeadVersion: 1, content: original },
@@ -109,6 +118,63 @@ describe('E20 server acceptance: compare/select beat variants', () => {
       body: JSON.stringify({ chapter: 1, expectedArtifactId: selected.artifact.id, expectedHeadVersion: 3, content: selected.artifact.content }) })
     expect(approve.status).toBe(200); expect(((await approve.json()) as any).artifact.id).toBe(selected.artifact.id)
     expect(fx.store.getWork(fx.work.id)!.artifacts.filter(a => a.kind === 'beat' && a.chapter === 1).map(a => [a.id, a.version, a.humanStatus])).toEqual([[selected.artifact.id, 3, 'approved']])
+  })
+
+  it('allocates a disjoint card ID set for chapter regeneration', async () => {
+    const fx = makeFixture()
+    fx.store.finalizeArtifact({ workId: fx.work.id, kind: 'beat', chapter: 1,
+      expectedArtifactId: fx.beat.id, expectedHeadVersion: fx.beat.version, content: original })
+    const pendingProse = fx.store.appendArtifact(fx.work.id, 'prose', { text: '旧正文' }, { chapter: 1,
+      inputs: [{ kind: 'beat', chapter: 1, artifactId: fx.beat.id, version: fx.beat.version }] })
+    const oldProse = fx.store.finalizeArtifact({ workId: fx.work.id, kind: 'prose', chapter: 1,
+      expectedArtifactId: pendingProse.id, expectedHeadVersion: pendingProse.version, content: { text: '旧正文' } })
+    const regeneration = { mode: 'chapter-regeneration' as const,
+      expectedBeat: { artifactId: fx.beat.id, version: fx.beat.version },
+      expectedProse: { artifactId: oldProse.id, version: oldProse.version } }
+    const response = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: fx.beat.id, expectedHeadVersion: fx.beat.version,
+        content: original, instructions: '重新规划', regeneration }) })
+    expect(response.status).toBe(200)
+    const body = beatCommandResponseSchema.parse(await response.json())
+    expect(body.artifact.id).not.toBe(fx.beat.id)
+    expect(body.artifact.version).toBe(2)
+    expect(body.artifact.content).toMatchObject(regeneratedWithoutIds)
+    expectFreshCardIds(original, body.artifact.content)
+  })
+
+  it.each(['current', 'approved', 'non-direct'] as const)('rejects a %s original without writing', async scenario => {
+    const fx = makeFixture()
+    let current
+    let originalHead = { artifactId: fx.beat.id, version: fx.beat.version, content: original }
+    if (scenario === 'approved') {
+      fx.store.finalizeArtifact({ workId: fx.work.id, kind: 'beat', chapter: 1,
+        expectedArtifactId: fx.beat.id, expectedHeadVersion: fx.beat.version, content: original })
+      current = fx.store.appendArtifact(fx.work.id, 'beat', regenerated, { chapter: 1 })
+    } else {
+      const regeneratedResponse = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/regenerate`, { method: 'POST', headers,
+        body: JSON.stringify({ chapter: 1, expectedArtifactId: fx.beat.id, expectedHeadVersion: fx.beat.version,
+          content: original, instructions: '' }) })
+      expect(regeneratedResponse.status).toBe(200)
+      current = (await regeneratedResponse.json() as any).artifact
+      if (scenario === 'current') originalHead = { artifactId: current.id, version: current.version, content: current.content }
+      if (scenario === 'non-direct') {
+        const selected = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/select`, { method: 'POST', headers,
+          body: JSON.stringify({ chapter: 1, expectedArtifactId: current.id, expectedHeadVersion: current.version,
+            originalArtifactId: originalHead.artifactId, originalVersion: originalHead.version,
+            originalContent: originalHead.content, choice: 'original' }) })
+        expect(selected.status).toBe(200)
+        current = (await selected.json() as any).artifact
+      }
+    }
+    const append = vi.spyOn(fx.store, 'appendArtifact')
+    const response = await fx.app.request(`/api/works/${fx.work.id}/artifacts/beat/select`, { method: 'POST', headers,
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: current.id, expectedHeadVersion: current.version,
+        originalArtifactId: originalHead.artifactId, originalVersion: originalHead.version,
+        originalContent: originalHead.content, choice: 'original' }) })
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({ code: 'version-conflict' })
+    expect(append).not.toHaveBeenCalled()
+    expect(fx.store.getWork(fx.work.id)!.artifacts.find(artifact => artifact.kind === 'beat' && artifact.chapter === 1)).toEqual(current)
   })
 
   it('rejects missing, stale, non-current, and approved identities before the model, with no half-write', async () => {

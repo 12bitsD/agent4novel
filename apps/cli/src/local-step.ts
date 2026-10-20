@@ -1,37 +1,13 @@
-import { openSync, readSync, closeSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { stepExperimentRequestSchema, stepExperimentResponseSchema } from '@agent4novel/contracts'
 import { CliError } from './client.js'
+import { readBoundedText, readRequestJson } from './request-file.js'
 import { makeStepRecordRequest, markStepRecordUnknown, reserveStepRecordDir } from './step-record.js'
 
 const FILE_BYTES = 1024 * 1024
 const RESULT_BYTES = 8 * FILE_BYTES
 const DEFAULT_STEP_TIMEOUT_MS = 920_000
-
-function readBounded(path: string): string {
-  let descriptor: number | undefined
-  try {
-    descriptor = openSync(path, 'r')
-    const buffer = Buffer.alloc(FILE_BYTES + 1)
-    let length = 0
-    while (length < buffer.length) {
-      const count = readSync(descriptor, buffer, length, buffer.length - length, null)
-      if (!count) break
-      length += count
-    }
-    if (length > FILE_BYTES) throw new CliError('Step experiment file exceeds 1 MiB', 'payload-too-large')
-    return buffer.subarray(0, length).toString('utf8')
-  } catch (error) {
-    if (error instanceof CliError) throw error
-    throw new CliError('Unable to read step experiment file', 'usage')
-  } finally { if (descriptor !== undefined) closeSync(descriptor) }
-}
-
-function readJson(path: string): unknown {
-  const text = readBounded(path)
-  try { return JSON.parse(text) } catch { throw new CliError('Step input must be valid JSON', 'invalid-input') }
-}
 
 // 文件只在 CLI 读取。provider 配置与推理只在 server 包的独立 worker 中运行。
 export async function runLocalStep(stepId: string | undefined, flags: Record<string, string>, timeoutMs?: number) {
@@ -45,9 +21,9 @@ export async function runLocalStep(stepId: string | undefined, flags: Record<str
   }
   // Validate the file before applying flags: an override must not hide invalid or unknown config.
   const fromFile = stepExperimentRequestSchema.safeParse({ stepId,
-    input: flags['input-file'] ? readJson(flags['input-file']) : { seed: readBounded(flags['seed-file']!), upstream: {} },
-    ...(flags['system-prompt-file'] ? { systemPrompt: readBounded(flags['system-prompt-file']) } : {}),
-    ...(flags['config-file'] ? { config: readJson(flags['config-file']) } : {}),
+    input: flags['input-file'] ? readRequestJson(flags['input-file'], FILE_BYTES, 'Step input') : { seed: readBoundedText(flags['seed-file']!, FILE_BYTES, 'Step seed'), upstream: {} },
+    ...(flags['system-prompt-file'] ? { systemPrompt: readBoundedText(flags['system-prompt-file'], FILE_BYTES, 'Step system prompt') } : {}),
+    ...(flags['config-file'] ? { config: readRequestJson(flags['config-file'], FILE_BYTES, 'Step config') } : {}),
   })
   if (!fromFile.success) throw new CliError('Invalid step experiment input or options', 'invalid-input')
   const overrides = {
@@ -87,7 +63,7 @@ export async function runLocalStep(stepId: string | undefined, flags: Record<str
       clearTimeout(timer)
       if (error) {
         child.kill('SIGTERM')
-        if (recordRequest) markStepRecordUnknown(recordRequest, stepId, request.input, request.config?.model ?? 'unknown', error.code === 'network-error' ? 'cli-timeout' : 'worker-failed')
+        if (recordRequest) markStepRecordUnknown(recordRequest, request.stepId, request.input, request.config?.model ?? 'unknown', error.code === 'network-error' ? 'cli-timeout' : 'worker-failed')
         reject(error)
       } else resolve(stdout)
     }

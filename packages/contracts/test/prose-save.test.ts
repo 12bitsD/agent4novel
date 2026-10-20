@@ -9,6 +9,13 @@ const command = { kind: 'execution-result', requestId: '11111111-1111-4111-8111-
 const next = { ...baseline, id: 'p2', version: 2, content: request.content }
 
 describe('Prose saves preserve review state and current full text', () => {
+  it('exposes the strict status-bearing save head used by HTTP parsing', () => {
+    const head = { chapter: request.chapter, expectedArtifactId: request.expectedArtifactId,
+      expectedHeadVersion: request.expectedHeadVersion, expectedHumanStatus: request.expectedHumanStatus }
+    expect(c.proseSaveRequestHeadSchema.parse(head)).toEqual(head)
+    expect(c.proseSaveRequestHeadSchema.safeParse({ ...head, content: request.content }).success).toBe(false)
+    expect(c.proseSaveRequestHeadSchema.safeParse({ ...head, expectedHumanStatus: 'draft' }).success).toBe(false)
+  })
   it('requires the status-bearing save baseline and permits empty pending drafts but never empty approved text', () => {
     expect(c.proseSaveRequestSchema).toBeDefined()
     expect(c.proseSaveRequestSchema.parse(request)).toEqual(request)

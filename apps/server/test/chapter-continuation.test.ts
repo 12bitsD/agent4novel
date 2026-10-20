@@ -70,6 +70,75 @@ describe('explicit chapter continuation', () => {
     expect(view).toMatchObject({ currentChapter: 2, chapters: [{ chapter: 1, proseStatus: 'approved' }, { chapter: 2, proseStatus: 'approved' }] })
     expect(view.chapters[1]!.allowedActions).toContain('start-next-chapter')
   })
+  it('persists actual upstream inputs for every normal work-level generation', async () => {
+    const { work, store, app } = await ready()
+    const response = await app.request(`/api/works/${work.id}`)
+    expect(response.status).toBe(200)
+    const view = workViewSchema.parse(await response.json())
+    const generated = (kind: 'caption' | 'creative' | 'outline' | 'setting') => view.artifacts.find(artifact => artifact.kind === kind)!
+    const caption = generated('caption'), creative = generated('creative'), outline = generated('outline'), setting = generated('setting')
+    expect({
+      caption: caption.inputs ?? [],
+      creative: creative.inputs,
+      outline: outline.inputs,
+      setting: setting.inputs,
+    }).toEqual({
+      caption: [],
+      creative: [{ kind: 'caption', artifactId: caption.id, version: caption.version }],
+      outline: [{ kind: 'creative', artifactId: creative.id, version: creative.version }],
+      setting: [
+        { kind: 'caption', artifactId: caption.id, version: caption.version },
+        { kind: 'creative', artifactId: creative.id, version: creative.version },
+        { kind: 'outline', artifactId: outline.id, version: outline.version },
+      ],
+    })
+    for (const artifact of [caption, creative, outline, setting]) {
+      expect(store.getArtifactVersion(work.id, artifact.kind, undefined, artifact.id, artifact.version)?.inputs).toEqual(artifact.inputs)
+    }
+  })
+  it('offers start-next-chapter only for a consistent approved pair on the current chapter', async () => {
+    const { work, app, head } = await ready()
+    const actions = async () => {
+      const response = await app.request(`/api/works/${work.id}`)
+      expect(response.status).toBe(200)
+      const view = workViewSchema.parse(await response.json())
+      expect(view.currentChapter).toBe(1)
+      return view.chapters.find(chapter => chapter.chapter === 1)!.allowedActions
+    }
+    expect(await actions()).toContain('start-next-chapter')
+    const oldBeat = head('beat', 1), oldProse = head('prose', 1)
+    const regeneration = { mode: 'chapter-regeneration' as const,
+      expectedBeat: { artifactId: oldBeat.id, version: oldBeat.version },
+      expectedProse: { artifactId: oldProse.id, version: oldProse.version } }
+    const beatResponse = await app.request(`/api/works/${work.id}/artifacts/beat/regenerate`, post({
+      chapter: 1, expectedArtifactId: oldBeat.id, expectedHeadVersion: oldBeat.version,
+      content: oldBeat.content, instructions: '重新规划当前章', regeneration,
+    }))
+    expect(beatResponse.status).toBe(200)
+    const pendingBeat = beatCommandResponseSchema.parse(await beatResponse.json()).artifact
+    expect(await actions()).not.toContain('start-next-chapter')
+
+    const beatApproval = await app.request(`/api/works/${work.id}/artifacts/beat/approve`, post({
+      chapter: 1, expectedArtifactId: pendingBeat.id, expectedHeadVersion: pendingBeat.version, content: pendingBeat.content,
+    }))
+    expect(beatApproval.status).toBe(200)
+    expect(await actions()).not.toContain('start-next-chapter')
+
+    const proseResponse = await app.request(`/api/works/${work.id}/artifacts/prose/regenerate`, post({
+      chapter: 1, expectedArtifactId: oldProse.id, expectedHeadVersion: oldProse.version,
+      content: oldProse.content, instructions: '按新章纲重写', regeneration: { ...regeneration,
+        expectedBeat: { artifactId: pendingBeat.id, version: pendingBeat.version } },
+    }))
+    expect(proseResponse.status).toBe(200)
+    const pendingProse = proseCommandResponseSchema.parse(await proseResponse.json()).artifact
+    expect(await actions()).not.toContain('start-next-chapter')
+
+    const proseApproval = await app.request(`/api/works/${work.id}/artifacts/prose/approve`, post({
+      chapter: 1, expectedArtifactId: pendingProse.id, expectedHeadVersion: pendingProse.version, content: pendingProse.content,
+    }))
+    expect(proseApproval.status).toBe(200)
+    expect(await actions()).toContain('start-next-chapter')
+  })
   it('keeps later chapters after an old approved edit and restores a continuity warning from stored input references', async () => {
     const { work, pipeline, store, app, start, head, approveChapter } = await ready()
     await pipeline.startChapter(work.id, start(2)); await approveChapter(2)
@@ -228,6 +297,48 @@ describe('explicit chapter continuation', () => {
     const stale = await app.request(`/api/works/${work.id}/artifacts/beat/regenerate`, post(beatRequest))
     expect(stale.status).toBe(409)
     expect(head('beat', 1).version).toBe(2)
+  })
+  it('rejects direct HTTP chapter start until approved prose consumes the current approved beat', async () => {
+    const { work, app, start, head, store, seen } = await ready()
+    const oldBeat = beatArtifactSchema.parse(head('beat', 1))
+    const oldProse = proseArtifactSchema.parse(head('prose', 1))
+    const binding = { mode: 'chapter-regeneration' as const,
+      expectedBeat: { artifactId: oldBeat.id, version: oldBeat.version },
+      expectedProse: { artifactId: oldProse.id, version: oldProse.version } }
+    const beatResponse = await app.request(`/api/works/${work.id}/artifacts/beat/regenerate`, post({
+      chapter: 1, expectedArtifactId: oldBeat.id, expectedHeadVersion: oldBeat.version,
+      content: oldBeat.content, instructions: '重新安排本章冲突节奏', regeneration: binding,
+    }))
+    expect(beatResponse.status).toBe(200)
+    const newBeat = beatArtifactSchema.parse(beatCommandResponseSchema.parse(await beatResponse.json()).artifact)
+    await approveBeat(store, work.id, { chapter: 1, expectedArtifactId: newBeat.id, expectedHeadVersion: newBeat.version, content: newBeat.content })
+    expect(head('prose', 1)).toEqual(oldProse)
+    expect(head('prose', 1).inputs).toContainEqual({ kind: 'beat', chapter: 1, artifactId: oldBeat.id, version: oldBeat.version })
+
+    const before = store.getWork(work.id)
+    const beforeBeatCalls = seen.filter(item => item.kind === 'beat').length
+    const rejected = await app.request(`/api/works/${work.id}/chapters/start`, post(start(2)))
+    expect(rejected.status).toBe(409)
+    expect(await rejected.json()).toMatchObject({ code: 'chapter-not-ready' })
+    expect(seen.filter(item => item.kind === 'beat')).toHaveLength(beforeBeatCalls)
+    expect(store.getWork(work.id)).toEqual(before)
+    expect(head('beat', 2)).toBeUndefined()
+
+    const proseResponse = await app.request(`/api/works/${work.id}/artifacts/prose/regenerate`, post({
+      chapter: 1, expectedArtifactId: oldProse.id, expectedHeadVersion: oldProse.version,
+      content: oldProse.content, instructions: '按新章纲重写本章',
+      regeneration: { ...binding, expectedBeat: { artifactId: newBeat.id, version: newBeat.version } },
+    }))
+    expect(proseResponse.status).toBe(200)
+    const newProse = proseArtifactSchema.parse(proseCommandResponseSchema.parse(await proseResponse.json()).artifact)
+    expect(newProse.inputs).toContainEqual({ kind: 'beat', chapter: 1, artifactId: newBeat.id, version: newBeat.version })
+    await approveProse(store, work.id, { chapter: 1, expectedArtifactId: newProse.id, expectedHeadVersion: newProse.version, content: newProse.content })
+
+    const started = await app.request(`/api/works/${work.id}/chapters/start`, post(start(2)))
+    expect(started.status).toBe(200)
+    expect(await started.json()).toMatchObject({ kind: 'advanced', state: { pendingGate: { kind: 'beat', chapter: 2 } } })
+    expect(seen.filter(item => item.kind === 'beat' && item.input.chapter === 2)).toHaveLength(1)
+    expect(head('beat', 2).inputs).toContainEqual({ kind: 'prose', chapter: 1, artifactId: newProse.id, version: newProse.version })
   })
   it('does not infer a completed beat gate when the old prose source reference is absent', async () => {
     const { work, pipeline, store, app, head, seen } = await ready()

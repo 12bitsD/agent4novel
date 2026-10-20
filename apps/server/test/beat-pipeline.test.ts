@@ -397,4 +397,21 @@ describe('first chapter Beat', () => {
     expect(invalid.status).toBe(500)
     expect(await invalid.text()).not.toContain('SYNTHETIC_PRIVATE_MARKER')
   })
+  it('reports the total and truncation marker when Beat validation issues exceed 128', async () => {
+    const { app, store, work } = await ready()
+    await app.request(`/api/works/${work.id}/advance`, { method: 'POST' })
+    const head = store.getWork(work.id)!.artifacts.find(a => a.kind === 'beat')!
+    const response = await app.request(`/api/works/${work.id}/artifacts/beat/approve`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: head.id, expectedHeadVersion: 1,
+        content: { ...beatContent, writingPlan: Array.from({ length: 128 }, () => ({})) } }),
+    })
+    expect(response.status).toBe(422)
+    const body = await response.json() as { issues: unknown[] }
+    expect(body).toMatchObject({ code: 'invalid-content', issueCount: 256, issuesTruncated: true })
+    expect(body.issues).toHaveLength(128)
+    expect(body.issues[0]).toEqual({ path: ['content', 'writingPlan', 0, 'title'], code: 'invalid_type', message: 'invalid field' })
+    expect(body.issues.at(-1)).toEqual({ path: ['content', 'writingPlan', 63, 'content'], code: 'invalid_type', message: 'invalid field' })
+    expect(beatCommandErrorSchema.safeParse(body).success).toBe(true)
+  })
 })

@@ -451,4 +451,32 @@ describe('first chapter Prose HTTP commands', () => {
     expect(diagnostic.commands).toEqual([expect.objectContaining({ code, command: failure.command })])
   })
 
+  it('reports the total and truncation marker for bounded Prose validation diagnostics', async () => {
+    class InvalidSaveStore extends InMemoryStore {
+      override saveArtifact(_input: Parameters<InMemoryStore['saveArtifact']>[0]): never {
+        throw new z.ZodError(Array.from({ length: 129 }, (_, index) => ({
+          code: 'custom', path: ['text', index], message: `private-issue-${index}`,
+        })))
+      }
+    }
+    const { app, work } = await ready(undefined, new InvalidSaveStore())
+    await app.request(`/api/works/${work.id}/advance`, { method: 'POST' })
+    const before = await viewOf(app, work.id)
+    const prose = before.artifacts.find(a => a.kind === 'prose')!
+    const response = await app.request(`/api/works/${work.id}/artifacts/prose/save`, jsonRequest({
+      chapter: 1, expectedArtifactId: prose.id, expectedHeadVersion: prose.version,
+      expectedHumanStatus: 'pending', content: { text: '作者编辑' },
+    }))
+    expect(response.status).toBe(422)
+    const body = await response.json() as { issues: unknown[] }
+    expect(body).toMatchObject({ code: 'invalid-content', issueCount: 129, issuesTruncated: true,
+      command: { failureStage: 'commit', writeOutcome: 'unknown' } })
+    expect(body.issues).toHaveLength(128)
+    expect(body.issues[0]).toEqual({ path: ['content', 'text', 0], code: 'custom', message: 'invalid field' })
+    expect(body.issues.at(-1)).toEqual({ path: ['content', 'text', 127], code: 'custom', message: 'invalid field' })
+    expect(JSON.stringify(body)).not.toContain('private-issue')
+    expect(proseCommandErrorSchema.safeParse(body).success).toBe(true)
+    expect(await viewOf(app, work.id)).toEqual(before)
+  })
+
 })

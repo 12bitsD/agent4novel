@@ -2,10 +2,12 @@ import { execFileSync } from 'node:child_process'
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, parse, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import type { StepExperimentRecordRequest } from '@agent4novel/contracts'
+import {
+  stepExperimentRecordFiles as FILES, makeStepExperimentRecordInput, makeEmptyStepExperimentRecordInvocation,
+  makeStepExperimentRecordResult, makeStepExperimentRecordMeta,
+} from '@agent4novel/contracts'
+import type { StepExperimentRecordRequest, StepExperimentRequest } from '@agent4novel/contracts'
 import { CliError } from './client.js'
-
-const FILES = { input: 'input.json', invocation: 'invocation.json', result: 'result.json', meta: 'meta.json' } as const
 
 function safePathChain(target: string): void {
   const root = parse(target).root
@@ -100,30 +102,25 @@ function replaceJson(dir: string, name: string, value: unknown): void {
   }
 }
 
-export function markStepRecordUnknown(record: StepExperimentRecordRequest, stepId: string, input: unknown, model: string, code: string): void {
+export function markStepRecordUnknown(record: StepExperimentRecordRequest, stepId: StepExperimentRequest['stepId'], input: StepExperimentRequest['input'], model: string, code: string): void {
   try {
     const dirStat = lstatSync(record.dir)
     if (dirStat.isSymbolicLink() || !dirStat.isDirectory() || (dirStat.mode & 0o077) !== 0) return
     const oldMeta = readJson(join(record.dir, FILES.meta))
     if (oldMeta?.complete === true && oldMeta.status === 'complete') return
-    writeJsonExclusive(record.dir, FILES.input, { formatVersion: 1, input, sources: record.sources })
-    writeJsonExclusive(record.dir, FILES.invocation, {
-      formatVersion: 1, captured: false, capturedAt: null, system: null, prompt: null, model: null, attemptId: null,
-      effectiveConfig: null,
-      generation: null, sdkOptions: null, maxOutputTokens: null, maxRetries: null, requestTimeoutMs: null,
-    })
+    writeJsonExclusive(record.dir, FILES.input, makeStepExperimentRecordInput(input, record.sources))
+    writeJsonExclusive(record.dir, FILES.invocation, makeEmptyStepExperimentRecordInvocation())
     const existingResult = readJson(join(record.dir, FILES.result))
-    if (!existingResult) writeJsonExclusive(record.dir, FILES.result, {
-      formatVersion: 1, status: 'unknown', content: null,
-      diagnostic: { code, retryable: null, error: null, telemetry: [] },
-    })
-    const meta = {
-      formatVersion: 1, complete: false, status: 'incomplete',
-      runId: oldMeta?.runId ?? null, stepId: oldMeta?.stepId ?? stepId, executionMode: 'live', model: oldMeta?.model ?? model,
+    if (!existingResult) {
+      writeJsonExclusive(record.dir, FILES.result, makeStepExperimentRecordResult({ status: 'unknown', content: null, code, retryable: null, telemetry: [] }))
+    }
+    const meta = makeStepExperimentRecordMeta({
+      complete: false, status: 'incomplete',
+      runId: oldMeta?.runId ?? null, stepId: oldMeta?.stepId ?? stepId, model: oldMeta?.model ?? model,
       startedAt: oldMeta?.startedAt ?? new Date().toISOString(), finishedAt: new Date().toISOString(),
       gitCommit: oldMeta?.gitCommit ?? record.version.gitCommit, gitDirty: oldMeta?.gitDirty ?? record.version.gitDirty,
-      sources: oldMeta?.sources ?? record.sources, files: FILES,
-    }
+      sources: oldMeta?.sources ?? record.sources,
+    })
     if (existsSync(join(record.dir, FILES.meta))) replaceJson(record.dir, FILES.meta, meta)
     else writeJsonExclusive(record.dir, FILES.meta, meta)
   } catch { /* preserve the CLI error; a partial directory is not a successful record */ }

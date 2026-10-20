@@ -52,6 +52,12 @@ describe('creativeContentSchema', () => {
     expect(() => creativeContentSchema.parse(three)).not.toThrow()
   })
 
+  it('rejects duplicate directionId with its field path', () => {
+    const result = creativeContentSchema.safeParse({ directions: [validPack, validPack] })
+    expect(result.success).toBe(false)
+    if (!result.success) expect(result.error.issues).toContainEqual(expect.objectContaining({ path: ['directions', 1, 'directionId'] }))
+  })
+
   it('rejects 0 or 4 directions(1~3 硬边界)', () => {
     expect(() => creativeContentSchema.parse({ directions: [] })).toThrow()
     const four = { directions: [1, 2, 3, 4].map((i) => ({ ...validPack, directionId: `d${i}` })) }

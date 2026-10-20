@@ -190,6 +190,27 @@ describe('append-only setting extension', () => {
     expect(await (await f.app.request(`/api/works/${f.work.id}/setting-extensions/${requestId}`)).json()).toMatchObject({ status: 'none' })
   })
 
+  it('reports truncation totals only when Setting extension issues exceed 128', async () => {
+    const f = fixture()
+    const request = { ...proposal(f.base), extension: { title: '大量补充', items: Array.from({ length: 129 }, () => ({})) } }
+    const response = await f.app.request(`/api/works/${f.work.id}/setting-extensions`, { method: 'POST', headers, body: JSON.stringify(request) })
+    expect(response.status).toBe(400)
+    const body = await response.json() as { issues: unknown[] }
+    expect(body).toMatchObject({ code: 'invalid-input', issueCount: 258, issuesTruncated: true })
+    expect(body.issues).toHaveLength(128)
+    expect(body.issues[0]).toEqual({ path: ['extension', 'items', 0, 'title'], code: 'invalid_type', message: 'invalid field' })
+    expect(body.issues.at(-1)).toEqual({ path: ['extension', 'items', 63, 'content'], code: 'invalid_type', message: 'invalid field' })
+
+    const ordinary = await f.app.request(`/api/works/${f.work.id}/setting-extensions`, {
+      method: 'POST', headers, body: JSON.stringify({ ...proposal(f.base), extension: { title: '补充', items: [{}] } }),
+    })
+    expect(ordinary.status).toBe(400)
+    const ordinaryBody = await ordinary.json() as { issues: unknown[] }
+    expect(ordinaryBody.issues).toHaveLength(2)
+    expect(ordinaryBody).not.toHaveProperty('issueCount')
+    expect(ordinaryBody).not.toHaveProperty('issuesTruncated')
+  })
+
   it('atomically rejects a proposal when any current chapter head is pending', async () => {
     const f = fixture()
     f.store.appendArtifact(f.work.id, 'beat', { title: '待审章纲', goal: '内容', writingPlan: [{ itemId: 'plan-1', title: '安排', content: '内容' }], ending: '结束' }, { chapter: 1 })

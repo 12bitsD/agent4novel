@@ -265,6 +265,26 @@ describe('creative flow(#3c 全链路)', () => {
     expect(seen.creative[0]).toMatchObject({ seed: '种子文本', upstream: { caption: validCaption } })
   })
 
+  it.each(['duplicate', 'forged', 'added', 'removed'] as const)('rejects %s direction IDs without writing', async scenario => {
+    const { store, app } = makeApp()
+    const w = store.createWork({ seed: 'x' })
+    await advance(app, w.id)
+    const edited = scenario === 'duplicate'
+      ? { directions: [pack('work-1-dir-1'), pack('work-1-dir-1', '重复方向')] }
+      : scenario === 'forged'
+        ? { directions: [pack('forged-direction'), pack('work-1-dir-2', '方向B')] }
+        : scenario === 'added'
+          ? { directions: [pack('work-1-dir-1'), pack('work-1-dir-2', '方向B'), pack('work-1-dir-3', '新增方向')] }
+          : { directions: [pack('work-1-dir-1')] }
+    const before = store.getWork(w.id)!.artifacts.find(artifact => artifact.kind === 'creative')!
+    const response = await app.request(`/api/works/${w.id}/artifacts/creative`, {
+      method: 'PUT', headers: jsonHeaders, body: JSON.stringify({ content: edited, expectedHeadVersion: before.version }),
+    })
+    expect(response.status).toBe(422)
+    expect(await response.json()).toMatchObject({ code: 'invalid-content' })
+    expect(store.getWork(w.id)!.artifacts.find(artifact => artifact.kind === 'creative')).toEqual(before)
+  })
+
   it('saveCreativeDraft stores all directions, always pending, versions up', async () => {
     const { store, app } = makeApp()
     const w = store.createWork({ seed: 'x' })
@@ -284,6 +304,11 @@ describe('creative flow(#3c 全链路)', () => {
     expect(store.getWork(w.id)!.artifacts.find((x) => x.kind === 'creative')!.humanStatus).toBe(
       'pending',
     )
+    const selected = await app.request(`/api/works/${w.id}/artifacts/creative/select`, {
+      method: 'POST', headers: jsonHeaders, body: JSON.stringify({ directionId: 'work-1-dir-2', expectedHeadVersion: a.version }),
+    })
+    expect(selected.status).toBe(200)
+    expect(await selected.json()).toMatchObject({ humanStatus: 'approved', content: { directions: [{ directionId: 'work-1-dir-2' }] } })
   })
 
   it('save with a stale expectedHeadVersion → 409 version-conflict', async () => {
@@ -551,6 +576,77 @@ describe('outline flow(#4 全链路)', () => {
     expect(
       store.getWork(w.id)!.artifacts.find((a) => a.kind === 'outline')?.humanStatus,
     ).toBe('pending')
+  })
+
+  it('saveOutlineDraft allocates unique sequential IDs across a batch of new arcs and segments', async () => {
+    const { store, app } = makeApp()
+    const w = store.createWork({ seed: 'x' })
+    await advance(app, w.id)
+    await selectFirst(app, w.id)
+    await advance(app, w.id)
+    const newArc = (index: number) => ({
+      title: `新弧线${index}`, conflict: '新增冲突', development: '新增发展', resolution: '新增收束',
+      segments: [1, 2].map(segment => ({ title: `新剧情点${index}-${segment}`, summary: '新增概要', outcome: '新增落点' })),
+    })
+    const edited = {
+      arcs: [
+        ...validOutline.arcs.map((a, index) => index === 0 ? {
+          ...a,
+          segments: [...a.segments,
+            { title: '新剧情点3', summary: '作者手加的一段', outcome: '新局势' },
+            { title: '新剧情点4', summary: '作者手加的另一段', outcome: '另一新局势' }],
+        } : a),
+        newArc(1), newArc(2),
+      ],
+    }
+    const response = await app.request(`/api/works/${w.id}/artifacts/outline`, {
+      method: 'PUT', headers: jsonHeaders, body: JSON.stringify({ content: edited, expectedHeadVersion: 1 }),
+    })
+    expect(response.status).toBe(200)
+    const saved = (await response.json()) as { version: number; humanStatus: string;
+      content: { arcs: Array<{ arcId: string; segments: Array<{ segmentId: string }> }> } }
+    expect(saved).toMatchObject({ version: 2, humanStatus: 'pending' })
+    const arcIds = saved.content.arcs.map(arc => arc.arcId)
+    const segmentIds = saved.content.arcs.flatMap(arc => arc.segments.map(segment => segment.segmentId))
+    expect(new Set(arcIds).size).toBe(arcIds.length)
+    expect(new Set(segmentIds).size).toBe(segmentIds.length)
+    expect(arcIds.slice(3)).toEqual([`${w.id}-arc-4`, `${w.id}-arc-5`])
+    expect(saved.content.arcs[0]!.segments.slice(2).map(segment => segment.segmentId)).toEqual(['w-arc-1-seg-3', 'w-arc-1-seg-4'])
+  })
+
+  it('continues allocating past a numeric suffix above the safe integer range', async () => {
+    const { store, app } = makeApp()
+    const w = store.createWork({ seed: 'x' })
+    await advance(app, w.id)
+    await selectFirst(app, w.id)
+    await advance(app, w.id)
+    const edited = structuredClone(validOutline)
+    edited.arcs[0]!.arcId = `${w.id}-arc-9007199254740992`
+    const content = { arcs: [...edited.arcs, { ...arc('w-arc-4'), arcId: undefined }] }
+    const response = await app.request(`/api/works/${w.id}/artifacts/outline`, {
+      method: 'PUT', headers: jsonHeaders, body: JSON.stringify({ content, expectedHeadVersion: 1 }),
+    })
+    expect(response.status).toBe(200)
+    const saved = (await response.json()) as { content: { arcs: Array<{ arcId: string }> } }
+    expect(saved.content.arcs[3]!.arcId).toBe(`${w.id}-arc-9007199254740993`)
+  })
+
+  it.each(['arc', 'segment'] as const)('rejects a duplicate existing %s ID without writing', async kind => {
+    const { store, app } = makeApp()
+    const w = store.createWork({ seed: 'x' })
+    await advance(app, w.id)
+    await selectFirst(app, w.id)
+    await advance(app, w.id)
+    const edited = structuredClone(validOutline)
+    if (kind === 'arc') edited.arcs[2]!.arcId = edited.arcs[0]!.arcId
+    else edited.arcs[1]!.segments[0]!.segmentId = edited.arcs[0]!.segments[0]!.segmentId
+    const before = store.getWork(w.id)!.artifacts.find(artifact => artifact.kind === 'outline')!
+    const response = await app.request(`/api/works/${w.id}/artifacts/outline`, {
+      method: 'PUT', headers: jsonHeaders, body: JSON.stringify({ content: edited, expectedHeadVersion: before.version }),
+    })
+    expect(response.status).toBe(422)
+    expect(await response.json()).toMatchObject({ code: 'invalid-content' })
+    expect(store.getWork(w.id)!.artifacts.find(artifact => artifact.kind === 'outline')).toEqual(before)
   })
 
   it('outline 保存 stale expectedHeadVersion → 409 version-conflict', async () => {

@@ -5,7 +5,10 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSyn
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { cliBin as bin, cliTestEnv } from './cli-process.js'
-import { stepExperimentRecordInvocationSchema } from '@agent4novel/contracts'
+import {
+  stepExperimentRecordInputSchema, stepExperimentRecordInvocationSchema,
+  stepExperimentRecordResultSchema, stepExperimentRecordMetaSchema,
+} from '@agent4novel/contracts'
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 
@@ -362,6 +365,42 @@ describe('run-step through a local mock provider', () => {
     } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
   }, 20000)
 
+  it.each([
+    { option: '--input-file', sentinel: 'private-input-sentinel', prefix: '{"seed":"private-input-sentinel', suffix: '","upstream":{}}' },
+    { option: '--seed-file', sentinel: 'private-seed-sentinel', prefix: 'private-seed-sentinel', suffix: '' },
+    { option: '--system-prompt-file', sentinel: 'private-system-sentinel', prefix: 'private-system-sentinel', suffix: '' },
+    { option: '--config-file', sentinel: 'private-config-sentinel', prefix: '{"model":"private-config-sentinel', suffix: '"}' },
+  ])('rejects invalid UTF-8 in %s before starting the worker', async ({ option, sentinel, prefix, suffix }) => {
+    const directory = mkdtempSync(join(realpathSync(tmpdir()), 'a4n-step-utf8-'))
+    let calls = 0
+    const server = createServer((_req, res) => {
+      calls++
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ id: 'mock-utf8', model: 'kimi-k2.8-highspeed', choices: [{ index: 0,
+        message: { role: 'assistant', content: JSON.stringify(caption) }, finish_reason: 'stop' }] }))
+    })
+    server.listen(0, '127.0.0.1'); await once(server, 'listening')
+    const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
+    try {
+      const file = join(directory, 'invalid.bin')
+      writeFileSync(file, Buffer.concat([Buffer.from(prefix), Buffer.from([0xff]), Buffer.from(suffix)]))
+      const seedFile = join(directory, 'seed.txt'); writeFileSync(seedFile, 'valid synthetic seed')
+      const args = ['run-step', 'caption']
+      if (option === '--input-file') args.push('--input-file', file)
+      else if (option === '--seed-file') args.push('--seed-file', file)
+      else args.push('--seed-file', seedFile, option, file)
+      args.push('--record-dir', join(directory, 'record'))
+      const result = await invoke(args, `http://127.0.0.1:${address.port}/v1`)
+      expect(result.code).toBe(1)
+      expect(result.stdout).toBe('')
+      expect(JSON.parse(result.stderr)).toMatchObject({ code: 'invalid-input' })
+      expect(result.stdout).not.toContain(sentinel)
+      expect(result.stderr).not.toContain(sentinel)
+      expect(readdirSync(directory)).not.toContain('record')
+      expect(calls).toBe(0)
+    } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
+  }, 20000)
+
   it('ends the worker on a CLI deadline and returns one safe JSON error', async () => {
     const directory = mkdtempSync(join(realpathSync(tmpdir()), 'a4n-step-timeout-'))
     let calls = 0
@@ -381,12 +420,14 @@ describe('run-step through a local mock provider', () => {
       expect(JSON.parse(result.stderr)).toMatchObject({ code: 'network-error', retryable: false })
       expect(calls).toBe(1)
       expect(disconnected).toBe(true)
-      expect(JSON.parse(readFileSync(join(recordDir, 'result.json'), 'utf8'))).toMatchObject({ status: 'unknown', content: null, diagnostic: { code: 'cli-timeout' } })
-      const invocation = JSON.parse(readFileSync(join(recordDir, 'invocation.json'), 'utf8'))
-      const parsedInvocation = stepExperimentRecordInvocationSchema.safeParse(invocation)
-      expect(parsedInvocation.success).toBe(true)
+      const input = stepExperimentRecordInputSchema.parse(JSON.parse(readFileSync(join(recordDir, 'input.json'), 'utf8')))
+      const invocation = stepExperimentRecordInvocationSchema.parse(JSON.parse(readFileSync(join(recordDir, 'invocation.json'), 'utf8')))
+      const recordedResult = stepExperimentRecordResultSchema.parse(JSON.parse(readFileSync(join(recordDir, 'result.json'), 'utf8')))
+      const meta = stepExperimentRecordMetaSchema.parse(JSON.parse(readFileSync(join(recordDir, 'meta.json'), 'utf8')))
+      expect(input.input).toEqual({ seed: 'synthetic timeout seed', upstream: {} })
       expect(invocation).toHaveProperty('effectiveConfig')
-      expect(JSON.parse(readFileSync(join(recordDir, 'meta.json'), 'utf8'))).toMatchObject({ complete: false, status: 'incomplete' })
+      expect(recordedResult).toMatchObject({ status: 'unknown', content: null, diagnostic: { code: 'cli-timeout' } })
+      expect(meta).toMatchObject({ complete: false, status: 'incomplete' })
     } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); rmSync(directory, { recursive: true, force: true }) }
   }, 15000)
 

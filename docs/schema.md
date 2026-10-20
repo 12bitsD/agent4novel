@@ -11,8 +11,8 @@ agent4novel 的领域数据模型。代码英文 id ↔ 领域中文词（见 [C
 | 节点（kind） | 产物内容 | 形状 |
 |---|---|---|
 | `caption` | 提炼稿（#3c）：`{inputStage（脑洞/设定/主线/模板）, summary, elements:[{kind,content}], gaps[]}`；理解素材后的开发判断与提案，落库即 approved，不设关卡 | 每作品一份 |
-| `creative` | 创意稿（#3c）：`{directions:[方向包 ×N]}`，方向包 = `directionId + title + hook + tags[] + synopsis + characters[] + setting[] + payoffs[] + outline[]`（全 hint 级）；N=directionCount（默认 2，严格 1~3）；选定时落**单方向**新版本 | 每作品一份 |
-| `outline` | 大纲（#4，两层，与章节解耦）：`{arcs:[{arcId, title, conflict, development, resolution, segments:[{segmentId, title, summary, outcome}]}]}`；弧线 3~8、每弧剧情点 2~8；`arcId`/`segmentId` 由 server 注入；章数不在本层（归 #5） | 每作品一份 |
+| `creative` | 创意稿（#3c）：`{directions:[方向包 ×N]}`，方向包 = `directionId + title + hook + tags[] + synopsis + characters[] + setting[] + payoffs[] + outline[]`（全 hint 级）；N=directionCount（默认 2，严格 1~3）；同一内容的 `directionId` 必须唯一；选定时落**单方向**新版本 | 每作品一份 |
+| `outline` | 大纲（#4，两层，与章节解耦）：`{arcs:[{arcId, title, conflict, development, resolution, segments:[{segmentId, title, summary, outcome}]}]}`；弧线 3~8、每弧剧情点 2~8；`arcId` 全篇唯一、`segmentId` 全篇唯一，由 server 注入；章数不在本层（归 #5） | 每作品一份 |
 | `setting` | 完整设定（#13）：`{overview, world[], characters[], factions[], relationships[], extensions[]}`；固定栏目通用卡片 + 动态补充栏目，具体规则见下方 | 每作品一份 |
 | `beat` | 章纲；内容和编辑协议见[下方](#beat5-当前契约)，按章推进见[续写契约](#后续章6-续写契约) | 每作品 × 每章一份 |
 | `prose` | 正文 `{text}`；内容、保存与通过协议见[下方](#prose22-当前契约) | 每作品 × 每章一份 |
@@ -36,6 +36,8 @@ Work = {
 ### AgentConfig（Agent 配置）
 
 `agentConfigSchema` 保留既有 model、systemPrompt、skills、tools、directionCount，并加入可选 `thinking: "enabled" | "disabled"`、`temperature: number`（0–1）、`topP: number`（大于 0 且不超过 1）。`generationParametersSchema` 对这三项采用 strict 校验；省略项由 ModelRuntime 解析，provider 支持范围和默认值以 [Wiki 016](./wiki/016-model-runtime-provider-config.md) 为准。#7新增独立作者配置UI/API，见下方；解析后的AgentConfig携带可选安全`configRevision`与`configFiles:[{id,sha256}]`溯源，systemPrompt为实际已读取指导，skills/tools不作为工具执行授权。
+
+`AgentConfig.model` 与 ModelRuntime 共用 [model.ts](../packages/contracts/src/model.ts) 的 `modelIdSchema`、`parseModelId` 和 `providerForModel`；AgentConfig 也复用同一模型校验与 provider 映射。非法或未注册值明确拒绝，不 fallback 到 DeepSeek 或其他 provider。
 
 `LlmTelemetry.generation?` 使用相同 schema，记录本次已解析的生成参数。它是安全诊断，不含凭据或模型正文。
 
@@ -73,13 +75,13 @@ Artifact = {
 
 - `appendArtifact` 追加新版本（version+1），旧版本保留；当前公开读模型仍只返回各地址的 head。#20 为当前 pending beat 增加受限的 A/B 比较与选择入口。#21 增加通过后历史章重生：请求显式绑定目标 beat/prose 的 id/version，先追加 pending beat，再由作者通过后追加 pending prose；正文阶段还必须能从旧正文的 beat input 引用确认前一关，缺失来源时不推断已完成。后续章不写入，只通过 stale inputs 投影连续性提示。Harness 可用 `GET /api/works/:id/artifacts/{beat|prose}/{chapter}/versions/:version?artifactId=...` 读取精确历史 Artifact；这不是历史列表或回退入口。
 - `humanStatus` 语义：`pending` = 待作者把关（关卡中）；`approved` = 已通过
-- 人工保存语义分节点：caption 落库即 `approved`（无关卡）；creative 保存草稿 = 新版本 + `pending`（`saveCreativeDraft`），显式选定方向 = 单方向新版本 + `approved`（`selectCreativeDirection`）；outline（#4）保存草稿 = 新版本 + `pending`（`saveOutlineDraft`，新增弧线/剧情点的 id 由 server 补注入），通过使用[大纲可见版本通过](#大纲可见版本通过)的专用条件命令，旧通用 `/approve` 保留当前 head 兼容语义；setting（#13）不保存中间草稿，专用完成命令将同 id／version 的内容和状态原子定稿，不追加 V2
+- 人工保存语义分节点：caption 落库即 `approved`（无关卡）；creative 保存草稿 = 新版本 + `pending`（`saveCreativeDraft`），PUT 必须保持当前 head 的 `directionId` 集，重复、伪造、增删均返回 422 且不写入；显式选定方向 = 单方向新版本 + `approved`（`selectCreativeDirection`）；outline（#4）保存草稿 = 新版本 + `pending`（`saveOutlineDraft`，新增弧线/剧情点的 id 由 server 按已有及同批已分配 ID 批量避让补注入），通过使用[大纲可见版本通过](#大纲可见版本通过)的专用条件命令，旧通用 `/approve` 保留当前 head 兼容语义；setting（#13）不保存中间草稿，专用完成命令将同 id／version 的内容和状态原子定稿，不追加 V2
 - Prose 保存追加新 ID／版本并保留匹配基线的 `humanStatus`；pending 草稿可为空，approved 内容必须非空。通过仍是同 ID／版本原子定稿。通过后可编辑是 Prose 的明确例外，不改变 Setting／Beat 通过后只读的语义。
 - 关卡在步骤边界：`gateAfter` 的步骤产出后置 `pending` 等 approve；`gateBefore` 的步骤要求目标产物已 `approved`；`consumes` 的上游产物读最新版且必须 `approved`
 
 ### Beat 版本比较与选择（#20）
 
-当前章节的 `pending` beat 再生成功后追加新的 pending head B，并在命令响应的可选 `comparison` 中返回再生前快照 A 与 B；A 不被覆盖。选择 `new` 只确认 B 仍为当前 pending，不自动通过。选择 `original` 由服务端核对 A 的 artifact id、version 和完整 content 后追加新的 pending A-copy C；A、B、C 均保留，后续通过仍需绑定当前 head 的 id/version。已通过 beat、非当前章节、缺少历史身份、head 变化和 A 内容不匹配均拒绝并返回冲突；选择动作不调用模型。选择响应包含 `expectedHead`、`originalHead`、`choice`、`writeOutcome` 和 `resultHead`，供 CLI、Web 与 Harness 读取动作结果。
+当前章节的 `pending` beat 再生成功后追加新的 pending head B，并在命令响应的可选 `comparison` 中返回再生前快照 A 与 B；A 不被覆盖。选择 `new` 只确认 B 仍为当前 pending，不自动通过。选择 `original` 时，A 必须是 B 的直接前一版（`A.version = B.version - 1`）、与 B 不同 artifact identity 且为 `pending`；服务端核对 A 的 artifact id、version 和完整 content 后追加新的 pending A-copy C，C 的 identity 与 A/B 均不同。A、B、C 均保留，后续通过仍需绑定当前 head 的 id/version。已通过 beat、非当前章节、缺少历史身份、head 变化和 A 内容不匹配均拒绝并返回冲突；选择动作不调用模型。选择响应包含 `expectedHead`、`originalHead`、`choice`、`writeOutcome` 和 `resultHead`，供 CLI、Web 与 Harness 读取动作结果。
 
 ## 共享验证边界：#19
 
@@ -89,7 +91,11 @@ Artifact = {
 
 Store 在写入及状态转换前校验候选，保留原有版本与上游条件检查；失败不得创建空 bucket、增加版本或改变状态。读取校验本次返回的内容，快照不暴露内部可变引用。公开作品 GET 仍只返回各地址 head；精确历史 GET 复用同一 Artifact 校验入口，不扫描历史列表、不改变当前 head。SQLite 从磁盘解码时复用同一验证入口。
 
+**历史兼容裁决（Human，2026-10-20）**：本轮所有历史不兼容均接受，包括旧库中既有重复 `directionId`／`arcId`／`segmentId` 在新唯一校验下不可读；这些记录会在实际读取时按 `invalid-stored-data` 拒绝，不做自动迁移。本轮不实际修改任何数据库。
+
 公开创建、列表、创意稿保存/选择、大纲保存、通用通过、应用配置、推进及各专用命令均复用 `packages/contracts`。HTTP 成功输出也校验；输出失败统一安全 500，不含原始内容，不宣称操作未发生。错误公共联合 `httpErrorSchema` 保留基础错误以及 Beat/Prose command 与遥测扩展。CLI 本地诊断包装和 Step 私有 I/O 不被强行并入 HTTP 错误形。
+
+公开错误 `apiErrorSchema` 还可选携带 `issueCount` 与 `issuesTruncated`：仅在校验问题实际超过 128 条并发生截断时出现，`issues` 最多返回 128 条，`issueCount` 记录截断前总数。普通无截断错误不新增这两个字段；CLI 收到后必须透传到 stderr JSON，不得静默丢弃。
 
 Web/CLI 在消费端解析公开响应并核对资源身份。错误体畸形、身份不匹配或成功响应无效时，写操作按结果未知处理；不能仅凭 4xx 认定未写入，也不能自动重复 POST。既有 Beat/Prose 专用恢复层仍保留原始状态与响应，按各自共享命令契约对账。
 
@@ -560,7 +566,7 @@ ChapterSummary = {
 // WorkView.chapters: ChapterSummary[]，按章排序
 ```
 
-开始请求为严格对象，chapter 与 expectedPreviousProseVersion 都是安全整数，前章正文 ID 为非空且最多128字符，HTTP body 上限4096 bytes。目标尚不存在时，验证上一章为已通过正文、身份/版本匹配、章号连续，并复用作品生成锁与提交时前置条件；非法跳章、旧基线和不满足关卡均明确拒绝。合法形状的重放请求若目标章纲已存在，则只返回作品当前状态，不重新核对旧前章基线、不再次调用模型，也不会改成创建再下一章。返回 `AdvanceOutcomeDto`，包含本次真实 telemetry；业务 `failed` 仍需显式检查，不能只看 HTTP 200。
+开始请求为严格对象，chapter 与 expectedPreviousProseVersion 都是安全整数，前章正文 ID 为非空且最多128字符，HTTP body 上限4096 bytes。目标尚不存在时，验证上一章 Beat/Prose 均为 approved，且 Prose.inputs 中对当前 Beat 的同章 artifactId/version 均匹配；再验证前章正文身份/版本、章号连续，并复用作品生成锁与提交时前置条件。输入引用不一致返回 `chapter-not-ready`（409），不调用 Step 或写入；非法跳章、旧基线和不满足关卡也明确拒绝。合法形状的重放请求若目标章纲已存在，则只返回作品当前状态，不重新核对旧前章基线、不再次调用模型，也不会改成创建再下一章。返回 `AdvanceOutcomeDto`，包含本次真实 telemetry；业务 `failed` 仍需显式检查，不能只看 HTTP 200。
 
 `advance` 不从已完成章隐式开启下一章。Web 的阅读章来自 URL 选择，服务端工作章来自产物与关卡；历史正文保存绑定自己的章号和状态，不能误用当前工作章的 global actions 决定权限。
 

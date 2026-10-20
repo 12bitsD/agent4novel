@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { generateObject } from 'ai'
-import { seedCharBudget, authorConfigLimits, agentConfigSchema } from '@agent4novel/contracts'
+import { seedCharBudget, authorConfigLimits, agentConfigSchema, parseModelId } from '@agent4novel/contracts'
 import type { AgentConfig, GenerationParameters } from '@agent4novel/contracts'
 import type { z } from 'zod'
 import { KnownError } from '../errors.js'
@@ -79,7 +79,7 @@ export async function callLlm<T>(args: {
     stepId: args.stepId,
     ...(args.chapter !== undefined ? { chapter: args.chapter } : {}),
     attemptId: args.attemptId,
-    model: /^(deepseek:[a-zA-Z0-9_.-]{1,96}|kimi:[a-zA-Z0-9_.-]{1,96}|longcat:LongCat-2\.0)$/.test(model) ? model : 'unrecognized-model',
+    model: parseModelId(model) ?? 'unrecognized-model',
     ...(currentRequest() ? { requestId: currentRequest()!.requestId } : {}),
     promptChars: args.prompt.length,
     promptHash: hash12(args.prompt),

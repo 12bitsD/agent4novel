@@ -113,6 +113,8 @@ export const stepExperimentRecordResultSchema = z.object({
     telemetry: z.array(llmTelemetrySchema),
   }).strict(),
 }).strict()
+export type StepExperimentRecordResult = z.infer<typeof stepExperimentRecordResultSchema>
+export const stepExperimentRecordFiles = { input: 'input.json', invocation: 'invocation.json', result: 'result.json', meta: 'meta.json' } as const
 export const stepExperimentRecordMetaSchema = z.object({
   formatVersion: z.literal(1),
   complete: z.boolean(),
@@ -126,8 +128,40 @@ export const stepExperimentRecordMetaSchema = z.object({
   gitCommit: z.string().nullable(),
   gitDirty: z.boolean().nullable(),
   sources: stepExperimentRecordSourcesSchema.nullable(),
-  files: z.object({ input: z.literal('input.json'), invocation: z.literal('invocation.json'), result: z.literal('result.json'), meta: z.literal('meta.json') }).strict(),
+  files: z.object({
+    input: z.literal(stepExperimentRecordFiles.input), invocation: z.literal(stepExperimentRecordFiles.invocation),
+    result: z.literal(stepExperimentRecordFiles.result), meta: z.literal(stepExperimentRecordFiles.meta),
+  }).strict(),
 }).strict()
+export type StepExperimentRecordMeta = z.infer<typeof stepExperimentRecordMetaSchema>
+
+export function makeStepExperimentRecordInput(input: StepExperimentRequest['input'], sources: StepExperimentRecordRequest['sources']) {
+  return stepExperimentRecordInputSchema.parse({ formatVersion: 1, input, sources })
+}
+
+export function makeEmptyStepExperimentRecordInvocation() {
+  return stepExperimentRecordInvocationSchema.parse({
+    formatVersion: 1, captured: false, capturedAt: null, system: null, prompt: null, model: null, attemptId: null,
+    effectiveConfig: null, generation: null, sdkOptions: null, maxOutputTokens: null, maxRetries: null, requestTimeoutMs: null,
+  })
+}
+
+export function makeStepExperimentRecordResult(args: {
+  status: StepExperimentRecordResult['status']
+  content: unknown
+  code: string | null
+  retryable: boolean | null
+  telemetry: unknown[]
+}) {
+  return stepExperimentRecordResultSchema.parse({
+    formatVersion: 1, status: args.status, content: args.content,
+    diagnostic: { code: args.code, retryable: args.retryable, error: null, telemetry: args.telemetry },
+  })
+}
+
+export function makeStepExperimentRecordMeta(args: Omit<StepExperimentRecordMeta, 'formatVersion' | 'executionMode' | 'files'>) {
+  return stepExperimentRecordMetaSchema.parse({ formatVersion: 1, executionMode: 'live', ...args, files: stepExperimentRecordFiles })
+}
 export const stepExperimentRecordingSchema = z.object({
   status: z.enum(['complete', 'incomplete', 'failed']),
   dir: z.string(),

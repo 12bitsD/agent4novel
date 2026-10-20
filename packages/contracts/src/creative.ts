@@ -51,6 +51,13 @@ export const creativeContentSchema = z
     directions: z.array(creativePackSchema).min(1).max(3),
   })
   .strict()
+  .superRefine((content, ctx) => {
+    const ids = new Set<string>()
+    content.directions.forEach((direction, index) => {
+      if (ids.has(direction.directionId)) ctx.addIssue({ code: 'custom', path: ['directions', index, 'directionId'], message: 'directionId must be unique' })
+      ids.add(direction.directionId)
+    })
+  })
 export type CreativeContent = z.infer<typeof creativeContentSchema>
 
 // 再生请求固定作者实际看到的 creative head；首次重试用 null/null。

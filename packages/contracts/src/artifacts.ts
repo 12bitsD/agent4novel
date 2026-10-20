@@ -82,6 +82,7 @@ export type ValidationIssue = z.infer<typeof validationIssueSchema>
 export const apiErrorSchema = z.object({
   code: z.string().min(1), retryable: z.boolean(), attemptId: z.string().optional(), message: z.string(),
   issues: z.array(validationIssueSchema).optional(),
+  issueCount: z.number().int().nonnegative().safe().optional(), issuesTruncated: z.boolean().optional(),
 }).strict()
 export type ApiError = z.infer<typeof apiErrorSchema>
 export type SettingApiError = ApiError
