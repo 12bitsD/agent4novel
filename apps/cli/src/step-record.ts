@@ -1,12 +1,12 @@
 import { execFileSync } from 'node:child_process'
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, parse, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import {
   stepExperimentRecordFiles as FILES, makeStepExperimentRecordInput, makeEmptyStepExperimentRecordInvocation,
   makeStepExperimentRecordResult, makeStepExperimentRecordMeta,
 } from '@agent4novel/contracts'
-import type { StepExperimentRecordRequest, StepExperimentRequest } from '@agent4novel/contracts'
+import type { StepExperimentRecordMeta, StepExperimentRecordRequest, StepExperimentRequest } from '@agent4novel/contracts'
 import { CliError } from './client.js'
 
 function safePathChain(target: string): void {
@@ -67,8 +67,8 @@ export function makeStepRecordRequest(args: {
   }
 }
 
-function readJson(path: string): Record<string, any> | undefined {
-  try { return JSON.parse(readFileSync(path, 'utf8')) as Record<string, any> } catch { return undefined }
+function readJson<T>(path: string): T | undefined {
+  try { return JSON.parse(readFileSync(path, 'utf8')) as T } catch { return undefined }
 }
 
 function writeJsonExclusive(dir: string, name: string, value: unknown): void {
@@ -106,11 +106,11 @@ export function markStepRecordUnknown(record: StepExperimentRecordRequest, stepI
   try {
     const dirStat = lstatSync(record.dir)
     if (dirStat.isSymbolicLink() || !dirStat.isDirectory() || (dirStat.mode & 0o077) !== 0) return
-    const oldMeta = readJson(join(record.dir, FILES.meta))
+    const oldMeta = readJson<Partial<StepExperimentRecordMeta>>(join(record.dir, FILES.meta))
     if (oldMeta?.complete === true && oldMeta.status === 'complete') return
     writeJsonExclusive(record.dir, FILES.input, makeStepExperimentRecordInput(input, record.sources))
     writeJsonExclusive(record.dir, FILES.invocation, makeEmptyStepExperimentRecordInvocation())
-    const existingResult = readJson(join(record.dir, FILES.result))
+    const existingResult = readJson<unknown>(join(record.dir, FILES.result))
     if (!existingResult) {
       writeJsonExclusive(record.dir, FILES.result, makeStepExperimentRecordResult({ status: 'unknown', content: null, code, retryable: null, telemetry: [] }))
     }

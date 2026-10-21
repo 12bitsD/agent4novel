@@ -32,7 +32,7 @@ it('rejects absent credentials instead of using demo output', async () => {
 })
 it('forwards creative regeneration through the run-step worker into the production prompt', async () => {
   const f = await fixtures()
-  const regenerated = { directions: f.creative.directions.map(({ directionId, ...value }) => value) }
+  const regenerated = { directions: f.creative.directions.map(({ directionId: _directionId, ...value }) => value) }
   mocks.generateObject.mockResolvedValue({ object: regenerated, usage: {}, finishReason: 'stop' })
   const result = await runIsolatedStep({
     stepId: 'creative',
@@ -73,10 +73,10 @@ it('uses production selected-direction guard before invoking outline', async () 
 })
 it.each(['creative', 'outline', 'setting', 'beat'] as const)('preserves %s production budget, context and output IDs with custom SP', async stepId => {
   const f = await fixtures()
-  const raw = stepId === 'creative' ? { directions: f.creative.directions.map(({ directionId, ...d }) => d) }
-    : stepId === 'outline' ? { arcs: f.outline.arcs.map(({ arcId, segments, ...arc }) => ({ ...arc, segments: segments.map(({ segmentId, ...s }) => s) })) }
-    : stepId === 'setting' ? { ...f.setting, world: f.setting.world.map(({ itemId, ...v }) => v), characters: f.setting.characters.map(({ itemId, ...v }) => v), factions: [], relationships: [], extensions: [] }
-    : { ...f.beat, writingPlan: f.beat.writingPlan.map(({ itemId, ...v }) => v) }
+  const raw = stepId === 'creative' ? { directions: f.creative.directions.map(({ directionId: _directionId, ...d }) => d) }
+    : stepId === 'outline' ? { arcs: f.outline.arcs.map(({ arcId: _arcId, segments, ...arc }) => ({ ...arc, segments: segments.map(({ segmentId: _segmentId, ...s }) => s) })) }
+    : stepId === 'setting' ? { ...f.setting, world: f.setting.world.map(({ itemId: _itemId, ...v }) => v), characters: f.setting.characters.map(({ itemId: _itemId, ...v }) => v), factions: [], relationships: [], extensions: [] }
+    : { ...f.beat, writingPlan: f.beat.writingPlan.map(({ itemId: _itemId, ...v }) => v) }
   mocks.generateObject.mockResolvedValue({ object: raw, usage: {}, finishReason: 'stop' })
   const upstream: Record<string, JsonValue> = stepId === 'beat' ? { outline: f.outline, setting: f.setting } : { caption: f.caption, creative: f.creative, outline: f.outline, setting: f.setting }
   const result = await runIsolatedStep({ stepId, input: { seed: '合成素材', upstream, ...(stepId === 'beat' ? { chapter: 1 as const } : {}) }, config: { directionCount: 1 }, systemPrompt: 'CUSTOM_SYSTEM' })
@@ -162,10 +162,10 @@ it.each(['caption', 'creative', 'outline', 'setting', 'beat', 'prose'] as const)
     : stepId === 'setting' ? { seed: '合成素材', upstream: { caption: f.caption, creative: f.creative, outline: f.outline } }
     : { seed: '合成素材', chapter: 1, upstream: stepId === 'beat' ? { outline: f.outline, setting: f.setting } : { beat: f.beat, setting: f.setting } }
   const object = stepId === 'caption' ? f.caption
-    : stepId === 'creative' ? { directions: f.creative.directions.map(({ directionId, ...value }) => value) }
-    : stepId === 'outline' ? { arcs: f.outline.arcs.map(({ arcId, segments, ...arc }) => ({ ...arc, segments: segments.map(({ segmentId, ...value }) => value) })) }
-    : stepId === 'setting' ? { ...f.setting, world: f.setting.world.map(({ itemId, ...value }) => value), characters: f.setting.characters.map(({ itemId, ...value }) => value) }
-    : stepId === 'beat' ? { ...f.beat, writingPlan: f.beat.writingPlan.map(({ itemId, ...value }) => value) }
+    : stepId === 'creative' ? { directions: f.creative.directions.map(({ directionId: _directionId, ...value }) => value) }
+    : stepId === 'outline' ? { arcs: f.outline.arcs.map(({ arcId: _arcId, segments, ...arc }) => ({ ...arc, segments: segments.map(({ segmentId: _segmentId, ...value }) => value) })) }
+    : stepId === 'setting' ? { ...f.setting, world: f.setting.world.map(({ itemId: _itemId, ...value }) => value), characters: f.setting.characters.map(({ itemId: _itemId, ...value }) => value) }
+    : stepId === 'beat' ? { ...f.beat, writingPlan: f.beat.writingPlan.map(({ itemId: _itemId, ...value }) => value) }
     : { text: '合成正文。' }
   mocks.generateObject.mockResolvedValue({ object, usage: {}, finishReason: 'stop' })
   try {

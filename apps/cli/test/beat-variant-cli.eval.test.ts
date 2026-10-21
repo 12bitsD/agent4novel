@@ -19,7 +19,6 @@ import {
 import { cliBin as bin, cliTestEnv } from './cli-process.js'
 
 const artifactA = { id: 'beat-a', workId: 'work-test', kind: 'beat' as const, chapter: 1, version: 1, humanStatus: 'pending' as const, createdAt: '2026-10-10T00:00:00.000Z', content: { title: '旧章纲', goal: '旧目标', writingPlan: [{ itemId: 'item-old', title: '旧安排', content: '旧内容' }], ending: '旧落点' } }
-const artifactB = { ...artifactA, id: 'beat-b', version: 2, content: { ...artifactA.content, title: '新章纲', goal: '新目标' } }
 
 async function invoke(args: string[], baseUrl: string) {
   const child = spawn(bin, args, { env: cliTestEnv({ A4N_BASE_URL: baseUrl, A4N_CLI_TIMEOUT_MS: '10000' }), stdio: ['ignore', 'pipe', 'pipe'] })

@@ -58,8 +58,7 @@ describe('CLI command discovery and syntax', { timeout: testTimeoutMs }, () => {
     expect(result.stderr).toContain('advance <workId>')
   })
 
-  it.each([[], ['--'], ['private-unknown-command', '--help']])
-    ('shows global help with invalid configuration: %j', async (...args) => {
+  it.each([[], ['--'], ['private-unknown-command', '--help']])('shows global help with invalid configuration: %j', async (...args) => {
       const result = await invoke(args, { A4N_CLI_TIMEOUT_MS: 'invalid-timeout', A4N_MODEL: 'invalid-provider' })
       expect(result.code).toBe(0)
       expect(result.stdout).toBe('')
@@ -79,8 +78,7 @@ describe('CLI command discovery and syntax', { timeout: testTimeoutMs }, () => {
     expect(requests).toEqual([])
   })
 
-  it.each(['advance'])
-    ('offers scoped %s help before invalid configuration, arguments or files', async command => {
+  it.each(['advance'])('offers scoped %s help before invalid configuration, arguments or files', async command => {
       for (const help of ['--help', '-h']) {
         const result = await invoke([command, help, '--file', '/missing/private-file', '--unknown'], {
           A4N_CLI_TIMEOUT_MS: 'invalid-timeout', A4N_MODEL: 'invalid-provider',

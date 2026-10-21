@@ -6,13 +6,21 @@ const repositoryRoot = fileURLToPath(new URL('../../../../', import.meta.url))
 
 export type ServerConfig = { dataDir: string; databasePath: string; host: string; port: number; seedDemo: boolean; serveWeb: boolean }
 
+function containsControlCharacter(value: string): boolean {
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index)
+    if (code <= 0x1f || code === 0x7f) return true
+  }
+  return false
+}
+
 export class ServerConfigError extends Error {
   readonly code = 'server-config-invalid'
 }
 
 export function parseServerConfig(env: NodeJS.ProcessEnv, root = repositoryRoot): ServerConfig {
   const rawDirectory = env.A4N_DATA_DIR ?? ''
-  if (/[\x00-\x1f\x7f]/.test(rawDirectory)) throw new ServerConfigError('A4N_DATA_DIR contains invalid characters')
+  if (containsControlCharacter(rawDirectory)) throw new ServerConfigError('A4N_DATA_DIR contains invalid characters')
   const dataDir = resolve(root, rawDirectory.trim() || '.data')
   const container = env.A4N_CONTAINER?.trim() || '0'
   if (container !== '0' && container !== '1') throw new ServerConfigError('A4N_CONTAINER must be 0 or 1')

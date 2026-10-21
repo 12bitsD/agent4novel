@@ -229,14 +229,9 @@ export async function selectBeatVariant(client: Client, workId: string, input: u
   if (!parsed.success) throw new CliError('Invalid Beat variant selection file', 'invalid-input', undefined, false, undefined,
     parsed.error.issues.map(({ path, code }) => ({ path, code, message: 'invalid field' })))
   const request: BeatVariantSelectionRequest = parsed.data
-  let response: { status: number; body: unknown }
-  try {
-    response = await client.selectBeatVariant(workId, request)
-  } catch (error) {
-    // This endpoint is intentionally one POST: a timeout is unknown and is
-    // never resolved by a client-side retry or readback.
-    throw error
-  }
+  // This endpoint is intentionally one POST: a timeout is unknown and is
+  // never resolved by a client-side retry or readback.
+  const response: { status: number; body: unknown } = await client.selectBeatVariant(workId, request)
   if (response.status >= 200 && response.status < 300) {
     const result = beatVariantSelectionResponseSchema.safeParse(response.body)
     if (!result.success || !matchesBeatVariantSelection(workId, request, result.data)) {
@@ -304,7 +299,7 @@ export async function smoke(
 ): Promise<SmokeResult> {
   const steps: SmokeResult['steps'] = []
   let executionMode: 'demo' | 'live' | 'unknown' = 'unknown'
-  let smokeWorkId: string | undefined
+  let smokeWorkId: string | undefined = undefined
   const run = async <T>(step: string, fn: () => Promise<T>, detail: (r: T) => string): Promise<T> => {
     log(`[smoke] ${step} ...`)
     let r: T

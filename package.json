@@ -9,6 +9,12 @@
     "cli": "pnpm -s --filter @agent4novel/cli run -s cli --",
     "test": "pnpm -r --workspace-concurrency=1 --if-present run test --maxWorkers=2",
     "typecheck": "pnpm -r --if-present run typecheck",
-    "build": "pnpm -r --if-present run build"
+    "build": "pnpm -r --if-present run build",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.13.0",
+    "typescript-eslint": "8.72.0"
   }
 }

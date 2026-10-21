@@ -169,7 +169,7 @@ describe('run-step through a local mock provider', () => {
       const a = await run(aDir, 'A版迭代：定位第二段。')
       const b = await run(bDir, 'B版迭代：第二段更具体。')
       expect(a.code, a.stderr).toBe(0); expect(b.code, b.stderr).toBe(0)
-      const readRecord = (dir: string, name: string) => JSON.parse(readFileSync(join(dir, name), 'utf8')) as Record<string, any>
+      const readRecord = (dir: string, name: string) => JSON.parse(readFileSync(join(dir, name), 'utf8')) as Record<string, unknown>
       const aInput = readRecord(aDir, 'input.json'); const aInvocation = readRecord(aDir, 'invocation.json'); const aResult = readRecord(aDir, 'result.json'); const aMeta = readRecord(aDir, 'meta.json')
       const bInput = readRecord(bDir, 'input.json'); const bInvocation = readRecord(bDir, 'invocation.json'); const bResult = readRecord(bDir, 'result.json'); const bMeta = readRecord(bDir, 'meta.json')
       writeFileSync(join(directory, 'comments.md'), '用户原话：第二段还在讲道理。\nAgent观察：A版问题集中在第二段。\n下一轮假设：B版要求具体行动。\n')

@@ -185,14 +185,14 @@ describe('works routes', () => {
   })
 
   it('returns 404 for an unknown work', async () => {
-    const { store, app } = makeApp()
+    const { app } = makeApp()
     const res = await app.request('/api/works/nope')
     expect(res.status).toBe(404)
     expect(((await res.json()) as { code: string }).code).toBe('work-not-found')
   })
 
   it('creates a work via POST(只创建,不触发 advance)', async () => {
-    const { store, app } = makeApp()
+    const { app } = makeApp()
     const res = await app.request('/api/works', {
       method: 'POST',
       headers: jsonHeaders,
@@ -204,7 +204,7 @@ describe('works routes', () => {
   })
 
   it('rejects POST with empty seed', async () => {
-    const { store, app } = makeApp()
+    const { app } = makeApp()
     const res = await app.request('/api/works', {
       method: 'POST',
       headers: jsonHeaders,
@@ -426,7 +426,7 @@ describe('creative flow(#3c 全链路)', () => {
   })
 
   it('interview 零残留:answer-interview 路由不存在', async () => {
-    const { store, app } = makeApp()
+    const { app } = makeApp()
     const w = (await (
       await app.request('/api/works', {
         method: 'POST',
