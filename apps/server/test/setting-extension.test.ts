@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { beatContentSchema, proseContentSchema, settingContentSchema, settingExtensionReceiptSchema, settingExtensionResourceSchema } from '@agent4novel/contracts'
 import { createApp } from '../src/app.js'
 import { InMemoryStore } from '../src/store/in-memory-store.js'
@@ -313,6 +313,29 @@ describe('append-only setting extension', () => {
     }
   })
 
+  function failOnSecondSettingExtensionWrite() {
+    const observed: string[] = []
+    const prepare = Database.prototype.prepare
+    const driver = vi.spyOn(Database.prototype, 'prepare').mockImplementation(function (this: Database.Database, sql) {
+      const canonicalInsert = sql.startsWith('INSERT INTO artifacts ')
+      const proposalWrite = sql.startsWith('INSERT INTO setting_extension_proposals ')
+      if (!canonicalInsert && !proposalWrite) return prepare.call(this, sql)
+      const statement = prepare.call(this, sql) as Database.Statement<unknown[]>
+      const run = statement.run.bind(statement)
+      statement.run = (...params: unknown[]) => {
+        if (proposalWrite) {
+          observed.push('proposal-write-reached')
+          throw new Database.SqliteError('synthetic proposal write failure', 'SQLITE_ERROR')
+        }
+        const result = run(...params)
+        observed.push('canonical-insert-complete')
+        return result
+      }
+      return statement
+    })
+    return { observed, restore: () => driver.mockRestore() }
+  }
+
   it('rolls back both the canonical append and proposal status when SQLite commit fails', () => {
     const dir = mkdtempSync(join(tmpdir(), 'a4n-setting-extension-rollback-'))
     const path = join(dir, 'db.sqlite')
@@ -328,5 +351,90 @@ describe('append-only setting extension', () => {
       expect(store.getWork(f.work.id)!.artifacts.filter(a => a.kind === 'setting')).toHaveLength(1)
       store.close()
     } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  it('commits both the canonical append and proposal status without injected failure', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'a4n-setting-extension-control-'))
+    const path = join(dir, 'db.sqlite')
+    const store = new SqliteStore(path)
+    try {
+      const f = fixture(store)
+      const originalHead = store.getWork(f.work.id)!.artifacts.find(a => a.kind === 'setting')!
+      const proposed = await f.app.request(`/api/works/${f.work.id}/setting-extensions`, {
+        method: 'POST', headers, body: JSON.stringify(proposal(f.base)),
+      })
+      expect(proposed.status).toBe(201)
+      const approved = await f.app.request(`/api/works/${f.work.id}/setting-extensions/${requestId}/approve`, {
+        method: 'POST', headers, body: JSON.stringify({ requestId, expectedBase: f.base }),
+      })
+      expect(approved.status).toBe(200)
+      const receipt = settingExtensionReceiptSchema.parse(await approved.json())
+      expect(receipt).toMatchObject({ operation: 'approve', outcome: 'success', writeOutcome: 'committed', errorCode: null })
+      expect(receipt.candidate).not.toBeNull()
+      const candidate = receipt.candidate!
+      store.close()
+      const reopened = new SqliteStore(path)
+      try {
+        const persistedCandidate = reopened.getArtifactVersion(f.work.id, 'setting', undefined, candidate.artifactId, candidate.version)!
+        expect(persistedCandidate).toMatchObject({
+          version: originalHead.version + 1,
+          humanStatus: 'approved',
+          inputs: [{ kind: 'setting', artifactId: originalHead.id, version: originalHead.version }],
+        })
+        expect(reopened.getArtifactVersion(f.work.id, 'setting', undefined, originalHead.id, originalHead.version)).toEqual(originalHead)
+        expect(reopened.getSettingExtension(f.work.id, requestId)).toMatchObject({ status: 'approved', candidate })
+      } finally { reopened.close() }
+    } finally {
+      store.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('rolls back the completed canonical insert when the second SQLite write fails', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'a4n-setting-extension-second-write-'))
+    const path = join(dir, 'db.sqlite')
+    const store = new SqliteStore(path)
+    try {
+      const f = fixture(store)
+      const originalHead = store.getWork(f.work.id)!.artifacts.find(a => a.kind === 'setting')!
+      const proposed = await f.app.request(`/api/works/${f.work.id}/setting-extensions`, {
+        method: 'POST', headers, body: JSON.stringify(proposal(f.base)),
+      })
+      expect(proposed.status).toBe(201)
+      const pending = store.getSettingExtension(f.work.id, requestId)
+      expect(pending).toMatchObject({ status: 'pending', candidate: null })
+      const driver = failOnSecondSettingExtensionWrite()
+      let approved: Response
+      try {
+        approved = await f.app.request(`/api/works/${f.work.id}/setting-extensions/${requestId}/approve`, {
+          method: 'POST', headers, body: JSON.stringify({ requestId, expectedBase: f.base }),
+        })
+      } finally { driver.restore() }
+      expect(driver.observed).toEqual(['canonical-insert-complete', 'proposal-write-reached'])
+      expect(approved.status).toBe(500)
+      expect(await approved.json()).toEqual({ code: 'internal-error', message: 'response unavailable', retryable: false })
+      store.close()
+      const raw = new Database(path, { readonly: true })
+      try {
+        const rows = raw.prepare(`SELECT id, version, content, human_status, inputs FROM artifacts
+          WHERE work_id = ? AND kind = 'setting' ORDER BY version`).all(f.work.id) as Array<{
+            id: string; version: number; content: string; human_status: string; inputs: string | null
+          }>
+        expect(rows).toHaveLength(1)
+        const head = rows[0]!
+        expect(head).toMatchObject({ id: originalHead.id, version: originalHead.version, human_status: originalHead.humanStatus })
+        expect(JSON.parse(head.content)).toEqual(originalHead.content)
+        expect(head.inputs === null ? undefined : JSON.parse(head.inputs)).toEqual(originalHead.inputs)
+        const proposalRow = raw.prepare('SELECT record FROM setting_extension_proposals WHERE work_id = ? AND request_id = ?')
+          .get(f.work.id, requestId) as { record: string } | undefined
+        expect(proposalRow).toBeDefined()
+        expect(JSON.parse(proposalRow!.record)).toMatchObject({
+          requestId, status: 'pending', candidate: null, updatedAt: pending.updatedAt,
+        })
+      } finally { raw.close() }
+    } finally {
+      store.close()
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })
