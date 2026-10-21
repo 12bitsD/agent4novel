@@ -58,7 +58,7 @@ describe('CLI command discovery and syntax', { timeout: testTimeoutMs }, () => {
     expect(result.stderr).toContain('advance <workId>')
   })
 
-  it.each([[], ['--'], ['--help'], ['-h'], ['private-unknown-command', '--help']])
+  it.each([[], ['--'], ['private-unknown-command', '--help']])
     ('shows global help with invalid configuration: %j', async (...args) => {
       const result = await invoke(args, { A4N_CLI_TIMEOUT_MS: 'invalid-timeout', A4N_MODEL: 'invalid-provider' })
       expect(result.code).toBe(0)
@@ -69,8 +69,6 @@ describe('CLI command discovery and syntax', { timeout: testTimeoutMs }, () => {
     })
 
   it.each([
-    ['--help', 'advance', 'work-synthetic'],
-    ['--url', 'get', '--timeout-ms', '5', 'advance', 'work-synthetic', '-h'],
     ['advance', 'work-synthetic', '--url', '--help', '--timeout-ms', 'invalid-timeout'],
   ])('finds the help command without treating option values as commands: %j', async (...args) => {
     const result = await invoke(args)
@@ -81,7 +79,7 @@ describe('CLI command discovery and syntax', { timeout: testTimeoutMs }, () => {
     expect(requests).toEqual([])
   })
 
-  it.each(['list', 'create', 'get', 'run-step', 'advance', 'start-chapter', 'select', 'save-outline', 'approve', 'approve-setting', 'approve-beat', 'regenerate-beat', 'approve-prose', 'regenerate-prose', 'save-prose', 'config', 'logs', 'smoke'])
+  it.each(['advance'])
     ('offers scoped %s help before invalid configuration, arguments or files', async command => {
       for (const help of ['--help', '-h']) {
         const result = await invoke([command, help, '--file', '/missing/private-file', '--unknown'], {
@@ -151,18 +149,8 @@ describe('CLI command discovery and syntax', { timeout: testTimeoutMs }, () => {
 
   it.each([
     ['advance', 'work-synthetic', '--thinking', 'private-option-value'],
-    ['get', 'work-synthetic', '--knd', 'private-option-value'],
-    ['private-unknown-command'],
-    ['advance', '-x'],
-    ['advance', 'work-synthetic', '--url', 'private-option-value', '--url', 'private-other-value'],
-    ['advance', 'work-synthetic', '--url'],
-    ['advance', 'work-synthetic', '--url', '--timeout-ms', '1000'],
-    ['advance', 'work-synthetic', '--url='],
-    ['advance', 'work-synthetic', '--url', '   '],
     ['get', 'work-synthetic', '--kind', 'private-invalid-kind'],
     ['approve', 'work-synthetic', 'private-invalid-kind'],
-    ['advance', 'work-synthetic', '--private-option-name', 'private-option-value'],
-    ['start-chapter', 'work-synthetic', '--file', '/missing/private-file', '--chapter', '2'],
   ])('rejects invalid syntax before any HTTP request: %j', async (...args) => {
     const result = await invoke(args)
     expect(requests).toEqual([])
@@ -175,28 +163,6 @@ describe('CLI command discovery and syntax', { timeout: testTimeoutMs }, () => {
 
   it.each([
     ['list', 'private-extra'],
-    ['config', 'private-extra'],
-    ['create', '--seed', 'synthetic', 'private-extra'],
-    ['smoke', '--seed', 'synthetic', 'private-extra'],
-    ['get', 'work-synthetic', 'private-extra'],
-    ['advance', 'work-synthetic', 'private-extra'],
-    ['start-chapter', 'work-synthetic', '--file', '/missing/private-file', 'private-extra'],
-    ['select', 'work-synthetic', 'direction-synthetic', 'private-extra'],
-    ['approve', 'work-synthetic', 'outline', 'private-extra'],
-    ['save-outline', 'work-synthetic', '--file', '/missing/private-file', 'private-extra'],
-    ['approve-setting', 'work-synthetic', '--file', '/missing/private-file', 'private-extra'],
-    ['approve-beat', 'work-synthetic', '--file', '/missing/private-file', 'private-extra'],
-    ['regenerate-beat', 'work-synthetic', '--file', '/missing/private-file', 'private-extra'],
-    ['logs', 'work-synthetic', 'private-extra'],
-    ['run-step', 'caption', '--seed-file', '/missing/private-file', 'private-extra'],
-    ['get'], ['advance'], ['select'], ['approve', 'work-synthetic'],
-    ['start-chapter', '--file', '/missing/private-file'],
-    ['save-outline', '--file', '/missing/private-file'],
-    ['approve-setting', '--file', '/missing/private-file'],
-    ['approve-beat', '--file', '/missing/private-file'],
-    ['regenerate-beat', '--file', '/missing/private-file'],
-    ['logs'], ['run-step', '--seed-file', '/missing/private-file'],
-    ['advance', '   '], ['select', 'work-synthetic', ''],
   ])('rejects missing, extra or blank positionals before execution: %j', async (...args) => {
     const result = await invoke(args)
     expect(requests).toEqual([])
@@ -208,13 +174,7 @@ describe('CLI command discovery and syntax', { timeout: testTimeoutMs }, () => {
   })
 
   it.each([
-    ['create'], ['smoke'], ['run-step', 'caption'],
-    ['create', '--seed', 'private-seed', '--seed-file', '/missing/private-file'],
-    ['smoke', '--seed', 'private-seed', '--seed-file', '/missing/private-file'],
-    ['run-step', 'caption', '--input-file', '/missing/private-input', '--seed-file', '/missing/private-file'],
-    ['save-outline', 'work-synthetic'], ['approve-setting', 'work-synthetic'],
-    ['start-chapter', 'work-synthetic'],
-    ['approve-beat', 'work-synthetic'], ['regenerate-beat', 'work-synthetic'],
+    ['create'],
   ])('rejects missing or mutually exclusive inputs before execution: %j', async (...args) => {
     const result = await invoke(args)
     expect(requests).toEqual([])

@@ -3,32 +3,26 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { cliBin as bin, cliTestEnv } from './cli-process.js'
+import { helpFor, parseCommandLine } from '../src/command-line.js'
 import { describe, expect, it } from 'vitest'
 
 describe('run-step executable entry', () => {
   it('advertises a dedicated single-node command and requires input', () => {
-    const help = spawnSync(bin, [], { encoding: 'utf8', env: cliTestEnv() }).stderr
+    const help = helpFor([])
     expect(help).toContain('run-step')
     expect(help).toContain('--thinking on|off')
     expect(help).toContain('--temperature')
     expect(help).toContain('--top-p')
     expect(help).toContain('--record-dir')
     expect(help).toContain('不支持 --top-k')
-    const result = spawnSync(bin, ['run-step', 'caption'], { encoding: 'utf8', env: cliTestEnv() })
-    expect(result.status).toBe(1)
-    expect(result.stdout).toBe('')
-    expect(JSON.parse(result.stderr)).toMatchObject({ code: 'usage' })
+    expect(() => parseCommandLine(['run-step', 'caption'])).toThrow(
+      expect.objectContaining({ code: 'usage' }),
+    )
   })
   it.each(['--system-prompt-file', '--config-file'])('rejects an empty %s instead of silently using defaults', option => {
-    const directory = mkdtempSync(join(tmpdir(), 'a4n-step-options-'))
-    try {
-      const file = join(directory, 'seed.txt'); writeFileSync(file, 'synthetic seed')
-      const result = spawnSync(bin, ['run-step', 'caption', '--seed-file', file, option, ''], {
-        encoding: 'utf8', env: cliTestEnv(),
-      })
-      expect(result.status).toBe(1)
-      expect(JSON.parse(result.stderr)).toMatchObject({ code: 'usage' })
-    } finally { rmSync(directory, { recursive: true, force: true }) }
+    expect(() => parseCommandLine(['run-step', 'caption', '--seed-file', 'seed.txt', option, ''])).toThrow(
+      expect.objectContaining({ code: 'usage' }),
+    )
   })
   it('rejects unknown flags, malformed input and oversized files without echoing contents', () => {
     const directory = mkdtempSync(join(tmpdir(), 'a4n-step-cli-'))
