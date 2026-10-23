@@ -33,9 +33,9 @@ export async function runIsolatedStep(request: StepExperimentRequest): Promise<S
     if (validated.record) recorder = await StepRecorder.start({ request: validated.record, input: validated.input, runId, stepId: validated.stepId, model })
     const execute = async () => {
       const step = factories[validated.stepId]({ systemPrompt: validated.systemPrompt })
-      const input = step.inputSchema.parse({ ...validated.input, upstream: validated.input.upstream ?? {}, workId: runId })
       const upstream = validated.input.upstream ?? {}
       for (const kind of consumes[validated.stepId]) consumeGuards[kind]?.(upstream[kind]!)
+      const input = step.inputSchema.parse({ ...validated.input, upstream: validated.input.upstream ?? {}, workId: runId })
       if (modelRuntime.mode !== 'live') throw new KnownError('llm-unavailable', 'Live model configuration required')
       return runStep(step, input, validated.config ?? {})
     }

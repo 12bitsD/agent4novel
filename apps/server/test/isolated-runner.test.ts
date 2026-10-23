@@ -71,6 +71,15 @@ it('uses production selected-direction guard before invoking outline', async () 
   expect(await runIsolatedStep({ stepId: 'outline', input: { seed: '合成素材', upstream: { creative: source.creative } } })).toMatchObject({ kind: 'failed', code: 'direction-not-selected' })
   expect(mocks.generateObject).not.toHaveBeenCalled()
 })
+it('returns direction-not-selected for Setting with multiple creative directions', async () => {
+  const source = await fixtures()
+  source.creative.directions.push({ ...source.creative.directions[0]!, directionId: 'second' })
+  expect(await runIsolatedStep({
+    stepId: 'setting',
+    input: { seed: '合成素材', upstream: { caption: source.caption, creative: source.creative, outline: source.outline } },
+  })).toMatchObject({ kind: 'failed', code: 'direction-not-selected' })
+  expect(mocks.generateObject).not.toHaveBeenCalled()
+})
 it.each(['creative', 'outline', 'setting', 'beat'] as const)('preserves %s production budget, context and output IDs with custom SP', async stepId => {
   const f = await fixtures()
   const raw = stepId === 'creative' ? { directions: f.creative.directions.map(({ directionId: _directionId, ...d }) => d) }
