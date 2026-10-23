@@ -146,7 +146,7 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
   private artifactVersion(workId: string, kind: ArtifactKind, chapter: number | undefined, artifactId: string, version: number): Artifact | undefined {
     const row = this.db.prepare(`SELECT * FROM artifacts
       WHERE work_id = ? AND kind = ? AND chapter IS ? AND id = ? AND version = ?`).get(workId, kind, chapter ?? null, artifactId, version) as ArtifactRow | undefined
-    return row === undefined ? undefined : validateStoreValue(artifactSchema, artifactFromRow(row), 'stored')
+    return row === undefined ? undefined : artifactFromRow(row)
   }
 
   getArtifactVersion(workId: string, kind: ArtifactKind, chapter: number | undefined, artifactId: string, version: number): Artifact | undefined {
