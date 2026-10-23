@@ -11,11 +11,6 @@ const DEFAULT_STEP_TIMEOUT_MS = 920_000
 
 // 文件只在 CLI 读取。provider 配置与推理只在 server 包的独立 worker 中运行。
 export async function runLocalStep(stepId: string | undefined, flags: Record<string, string>, timeoutMs?: number) {
-  if ('top-k' in flags) throw new CliError('--top-k is not supported by the configured model API; use --top-p instead', 'usage')
-  if (!stepId || Object.values(flags).some(value => value.trim() === '') || Object.keys(flags).some(key => !['input-file', 'seed-file', 'system-prompt-file', 'config-file', 'record-dir', 'timeout-ms', 'thinking', 'temperature', 'top-p'].includes(key))
-    || Boolean(flags['input-file']) === Boolean(flags['seed-file'])) {
-    throw new CliError('run-step requires a node and exactly one of --input-file or --seed-file; --url is not supported', 'usage')
-  }
   if (flags.thinking !== undefined && !['on', 'off'].includes(flags.thinking)) {
     throw new CliError('--thinking must be on or off', 'invalid-input')
   }
