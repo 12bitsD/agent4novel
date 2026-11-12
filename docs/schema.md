@@ -2,6 +2,8 @@
 
 agent4novel 的领域数据模型。代码英文 id ↔ 领域中文词（见 [CONTEXT.md](../CONTEXT.md)）的映射、实体、形状与不变量。当前 SQLite 物理存储形状见下方“SQLite 持久化”章节；设计依据和运行 HOW 见 [Wiki 009](./wiki/009-sqlite-persistence.md)。
 
+当前生产后端的可执行契约是 `apps/backend/src/agent4novel` 中的 Pydantic 模型，API、Python CLI 与 SQLite 共用这些定义。`packages/contracts` 仅为 React/TypeScript 前端保留 Zod 运行时校验和类型；下文 TypeScript 代码块用于说明语言中立的 JSON 形状，不再表示存在 Node 后端。跨语言行为由 golden fixtures 与消费端复验约束，治理边界见 [契约治理](./agents/contract-governance.md)。
+
 ## kind = 节点名
 
 公开运行健康接口 `GET /api/health` 使用strict `healthSchema`，仅返回 `{status:"ok"}`；不包含作品、配置或模型状态。`A4N_SERVE_WEB=1`显式启用编译后同源Web目录，默认0保留开发Vite方式；与存储实体/schema版本无关。部署配置与卷操作见 [Wiki033](./wiki/033-local-docker-ci.md)。
@@ -17,7 +19,7 @@ agent4novel 的领域数据模型。代码英文 id ↔ 领域中文词（见 [C
 | `beat` | 章纲；内容和编辑协议见[下方](#beat5-当前契约)，按章推进见[续写契约](#后续章6-续写契约) | 每作品 × 每章一份 |
 | `prose` | 正文 `{text}`；内容、保存与通过协议见[下方](#prose22-当前契约) | 每作品 × 每章一份 |
 
-**卖点 / 梗概 不是独立产物**：卖点 = 创意稿方向包的 `hook` / `payoffs`，梗概 = `synopsis`。创意稿里的人物/设定/大纲是 **hint（粗）**；`outline` / `setting` 节点产出的**完整版（细）**是独立产物。各 kind 的 zod schema 见 packages/contracts（caption.ts / creative.ts / outline.ts / setting.ts）。
+**卖点 / 梗概 不是独立产物**：卖点 = 创意稿方向包的 `hook` / `payoffs`，梗概 = `synopsis`。创意稿里的人物/设定/大纲是 **hint（粗）**；`outline` / `setting` 节点产出的**完整版（细）**是独立产物。服务端各 kind 的 Pydantic 内容模型集中在 [`domain/work.py`](../apps/backend/src/agent4novel/domain/work.py)，前端对应的 Zod 校验保留在 `packages/contracts`。
 
 ## 实体
 
@@ -37,15 +39,15 @@ Work = {
 
 `agentConfigSchema` 保留既有 model、systemPrompt、skills、tools、directionCount，并加入可选 `thinking: "enabled" | "disabled"`、`temperature: number`（0–1）、`topP: number`（大于 0 且不超过 1）。`generationParametersSchema` 对这三项采用 strict 校验；省略项由 ModelRuntime 解析，provider 支持范围和默认值以 [Wiki 016](./wiki/016-model-runtime-provider-config.md) 为准。#7新增独立作者配置UI/API，见下方；解析后的AgentConfig携带可选安全`configRevision`与`configFiles:[{id,sha256}]`溯源，systemPrompt为实际已读取指导，skills/tools不作为工具执行授权。
 
-`AgentConfig.model` 与 ModelRuntime 共用 [model.ts](../packages/contracts/src/model.ts) 的 `modelIdSchema`、`parseModelId` 和 `providerForModel`；AgentConfig 也复用同一模型校验与 provider 映射。非法或未注册值明确拒绝，不 fallback 到 DeepSeek 或其他 provider。
+生产后端的模型 ID 解析、provider 注册与 ModelRuntime 选择见 [`config.py`](../apps/backend/src/agent4novel/config.py) 和 [`agent/runtime.py`](../apps/backend/src/agent4novel/agent/runtime.py)；前端 [`model.ts`](../packages/contracts/src/model.ts) 仅保留对应的 UI 类型和校验。非法或未注册值明确拒绝，不 fallback 到 DeepSeek 或其他 provider。
 
-`LlmTelemetry.generation?` 使用相同 schema，记录本次已解析的生成参数。它是安全诊断，不含凭据或模型正文。
+`LlmTelemetry.generation?` 使用同一组生成参数约束，记录本次已解析的生成参数。它是安全诊断，不含凭据或模型正文。
 
 ### 单节点实验协议
 
-`stepExperimentRequestSchema` 是本地 CLI 与独立 worker 的协议，不是作品 REST 写入接口。请求为 `{ stepId, input: { seed, upstream?, chapter?, regeneration? }, systemPrompt?, config? }`；节点限 caption/creative/outline/setting/beat/prose。Beat 与 Prose 的 chapter 必须为正安全整数，可选 regeneration 必须匹配对应节点的草稿形状；其他节点不接受 chapter 或 regeneration。Beat 的 upstream 为完整 `{outline, setting}`，Prose 为 `{beat, setting}`；两者 chapter > 1 时还必须携带 `previousChapter: {chapter, beat, prose}` 且章号恰好为前一章，第一章不接受该字段。下游按生产 Step 输入 schema 与消费守卫校验，独立输入不证明产物来自作品当前已通过版本。
+[`StepExperimentRequest`](../apps/backend/src/agent4novel/agent/isolated.py) 是本地 `a4n run-step` 的实验协议，不是作品 REST 写入接口。CLI 在同一 Python 进程内调用隔离的 Agent step，不再启动独立 stdio worker。请求为 `{ stepId, input: { seed, upstream?, chapter?, regeneration? }, systemPrompt?, config? }`；节点限 caption/creative/outline/setting/beat/prose。Beat 与 Prose 的 chapter 必须为正安全整数，可选 regeneration 必须匹配对应节点的草稿形状；其他节点不接受 chapter 或 regeneration。Beat 的 upstream 为完整 `{outline, setting}`，Prose 为 `{beat, setting}`；两者 chapter > 1 时还必须携带 `previousChapter: {chapter, beat, prose}` 且章号恰好为前一章，第一章不接受该字段。下游按生产 Step 输入 schema 与消费守卫校验，独立输入不证明产物来自作品当前已通过版本。
 
-实验 config 只接受 model、directionCount 及三项生成参数，拒绝未知字段；SP 必须非空且最多 100000 字符，seed 受共享素材预算限制。成功结果为 `{ kind: "succeeded", runId, stepId, executionMode: "live", model, content, telemetry }`；失败以 `kind: "failed"`、code、retryable 替代 content，公共响应不含模型 raw 文本。可执行定义见 [step-experiment.ts](../packages/contracts/src/step-experiment.ts)，命令与文件限制见 [Wiki 014](./wiki/014-agent-cli-telemetry.md)。
+实验 config 只接受 model、directionCount 及三项生成参数，拒绝未知字段；SP 必须非空且最多 100000 字符，seed 受共享素材预算限制。成功结果为 `{ kind: "succeeded", runId, stepId, executionMode: "live", model, content, telemetry }`；失败以 `kind: "failed"`、code、retryable 替代 content，公共响应不含模型 raw 文本。可执行定义见 [`agent/isolated.py`](../apps/backend/src/agent4novel/agent/isolated.py) 与 [`cli.py`](../apps/backend/src/agent4novel/cli.py)，命令与文件限制见 [Wiki 014](./wiki/014-agent-cli-telemetry.md)。
 
 ### Artifact（产物）
 
@@ -93,17 +95,17 @@ Store 在写入及状态转换前校验候选，保留原有版本与上游条�
 
 **历史兼容裁决（Human，2026-10-20）**：本轮所有历史不兼容均接受，包括旧库中既有重复 `directionId`／`arcId`／`segmentId` 在新唯一校验下不可读；这些记录会在实际读取时按 `invalid-stored-data` 拒绝，不做自动迁移。本轮不实际修改任何数据库。
 
-公开创建、列表、创意稿保存/选择、大纲保存、通用通过、应用配置、推进及各专用命令均复用 `packages/contracts`。HTTP 成功输出也校验；输出失败统一安全 500，不含原始内容，不宣称操作未发生。错误公共联合 `httpErrorSchema` 保留基础错误以及 Beat/Prose command 与遥测扩展。CLI 本地诊断包装和 Step 私有 I/O 不被强行并入 HTTP 错误形。
+公开创建、列表、创意稿保存/选择、大纲保存、通用通过、应用配置、推进及各专用命令在服务端统一使用 `apps/backend/src/agent4novel/domain` 的 Pydantic 契约，前端以 `packages/contracts` 的 Zod 契约复验相同 JSON。HTTP 成功输出也校验；输出失败统一安全 500，不含原始内容，不宣称操作未发生。错误公共联合保留基础错误以及 Beat/Prose command 与遥测扩展。CLI 本地诊断包装和 Step 私有 I/O 不被强行并入 HTTP 错误形。
 
 公开错误 `apiErrorSchema` 还可选携带 `issueCount` 与 `issuesTruncated`：仅在校验问题实际超过 128 条并发生截断时出现，`issues` 最多返回 128 条，`issueCount` 记录截断前总数。普通无截断错误不新增这两个字段；CLI 收到后必须透传到 stderr JSON，不得静默丢弃。
 
-Web/CLI 在消费端解析公开响应并核对资源身份。错误体畸形、身份不匹配或成功响应无效时，写操作按结果未知处理；不能仅凭 4xx 认定未写入，也不能自动重复 POST。既有 Beat/Prose 专用恢复层仍保留原始状态与响应，按各自共享命令契约对账。
+Web/CLI 在消费端解析公开响应并核对资源身份。Python CLI 以流式累计字节数限制资源消耗：错误响应最多 64 KiB，成功响应最多 64 MiB；这是传输技术预算，不是作品数量或内容配额，超限在 JSON 解析前停止。错误体畸形、身份不匹配、成功响应无效或超限时，写操作按结果未知处理；不能仅凭 4xx 认定未写入，也不能自动重复 POST。通用 approve 只接受与 caption→creative、outline→setting 相符的 ready 后继状态，或 nextStepId 为空的 complete，并要求 pendingGate 已解除；专用 approve-outline 仍按精确 Artifact ID/version/status 对账。既有 Beat/Prose 专用恢复层保留原始状态与响应，按各自共享命令契约对账。
 
 独立 Step 实验成功包按 `stepId` 校验正式内容；请求与 Step 调度包装仍为各自私有边界。完整契约清单与保留重复的理由见 [契约治理](./agents/contract-governance.md)，本票设计和证据见 [Wiki 019](./wiki/019-contract-governance.md)。
 
 ## SQLite 持久化：#9
 
-生产使用 [`SqliteStore`](../apps/server/src/store/sqlite-store.ts) 实现 `WorkStore`；`InMemoryStore` 继续用于行为测试。SQLite v4 由 [`sqlite-schema.ts`](../apps/server/src/store/sqlite-schema.ts) 定义；继承 v1 的两张 `STRICT` 表持有作品与每个产物版本，不按 kind 拆表。v2 新增作者配置与版本文件元数据两表，v3 再新增不可变坏例表，v4 新增独立的设定扩展操作表。
+生产使用 [`SqliteStore`](../apps/backend/src/agent4novel/store/work.py) 实现作品写入，`InMemoryStore` 继续用于行为测试。SQLite v4 由 [`sqlite.py`](../apps/backend/src/agent4novel/store/sqlite.py) 定义；继承 v1 的两张 `STRICT` 表持有作品与每个产物版本，不按 kind 拆表。v2 新增作者配置与版本文件元数据两表，v3 再新增不可变坏例表，v4 新增独立的设定扩展操作表。
 
 | 表 | 列与存储形态 |
 | --- | --- |
@@ -130,7 +132,7 @@ Web/CLI 在消费端解析公开响应并核对资源身份。错误体畸形、
 
 ## 大纲可见版本通过
 
-#49 的专用命令绑定作者实际读取的大纲，或本页保存成功回执中的新产物身份；确认与重试沿用该基线。可执行定义与响应关联核对见 [`outline-approval.ts`](../packages/contracts/src/outline-approval.ts)。
+#49 的专用命令绑定作者实际读取的大纲，或本页保存成功回执中的新产物身份；确认与重试沿用该基线。服务端可执行定义见 [`domain/requests.py`](../apps/backend/src/agent4novel/domain/requests.py) 的 `OutlineApprovalRequest`，响应关联核对见 [`cli_http.py`](../apps/backend/src/agent4novel/cli_http.py) 的 `approve-outline` 匹配器；前端对应 Zod 定义保留在 [`outline-approval.ts`](../packages/contracts/src/outline-approval.ts)。
 
 ```ts
 // POST /api/works/:workId/artifacts/outline/approve
@@ -158,7 +160,7 @@ Pipeline 校验显式 ID／版本，并把同一观察到的 ID、version、huma
 
 ## Setting：#13 已确认设计
 
-本节是 2026-09-05 Human 确认并在 #13 实现的契约。可执行定义见 `packages/contracts/src/setting.ts`，提交对账见 `setting-submission.ts`，公开读模型见 `public-api.ts`。设计理由、验证证据与限制见 [Wiki 013](./wiki/013-setting-generation-review.md)。保留本节标题作为既有文档锚点。
+本节是 2026-09-05 Human 确认并在 #13 实现的契约。当前服务端内容模型见 [`domain/work.py`](../apps/backend/src/agent4novel/domain/work.py)，提交对账见 [`services/submissions.py`](../apps/backend/src/agent4novel/services/submissions.py)，公开读模型见 [`domain/work.py`](../apps/backend/src/agent4novel/domain/work.py) 与 [`domain/outcomes.py`](../apps/backend/src/agent4novel/domain/outcomes.py)；前端 Zod 对应文件仍保留在 `packages/contracts`。设计理由、验证证据与限制见 [Wiki 013](./wiki/013-setting-generation-review.md)。保留本节标题作为既有文档锚点。
 
 ### 内容形态
 
@@ -206,17 +208,17 @@ type SettingContent = {
 
 | 边界 | 内容与 ID 规则 | 归属 |
 |---|---|---|
-| Agent 输出 | 内容字段完整；没有 `itemId`、`sectionId`，由服务端注入 | `packages/contracts` 的 `settingDraftSchema`；服务端 `setting-io.ts` 复用并包装 Step I/O |
-| 通过请求 `SettingReviewDraft` | 提交整份内容；已有项带原 ID，新增项省略 ID；携带 `expectedHeadVersion` | `packages/contracts` 的公开请求契约 |
-| 存储内容 `SettingContent` | 所有 ID 必须存在、合法且唯一；完整内容满足共同约束 | `packages/contracts` 的公开内容契约 |
+| Agent 输出 | 内容字段完整；没有 `itemId`、`sectionId`，由服务端注入 | 服务端 `domain/drafts.py` 的 `SettingReviewDraft` 与 `agent/foundation_steps.py` 的 Step 输出校验 |
+| 通过请求 `SettingReviewDraft` | 提交整份内容；已有项带原 ID，新增项省略 ID；携带 `expectedHeadVersion` | 服务端 `domain/requests.py` 的公开请求契约 |
+| 存储内容 `SettingContent` | 所有 ID 必须存在、合法且唯一；完整内容满足共同约束 | 服务端 `domain/work.py` 的公开内容契约 |
 
-页面正在编辑的临时状态可以不合法；它不等同于已通过校验的请求或存储内容。前后端复用公开契约校验最终提交，不各自维护一份规则。
+页面正在编辑的临时状态可以不合法；它不等同于已通过校验的请求或存储内容。前后端按同一公开契约分别校验最终提交，跨语言 golden fixtures 防止规则漂移。
 
-校验采用严格对象、非空及宽松的技术安全上限。`settingLimits` 集中维护标题 256／ID 96／单段正文 20,000／总文本 200,000 个 JS code units、总卡片 256／动态栏目 32、HTTP body 2 MiB；这些是技术保护而非创作配额。模型预算与校准证据见 Wiki；不猜测补齐缺失栏目或截断结构化内容。
+校验采用严格对象、非空及宽松的技术安全上限。服务端 `domain/work.py` 集中维护标题 256／ID 96／单段正文 20,000／总文本 200,000 个 JS code units、总卡片 256／动态栏目 32，HTTP body 上限为 2 MiB；这些是技术保护而非创作配额。模型预算与校准证据见 Wiki；不猜测补齐缺失栏目或截断结构化内容。
 
 ### #13 公开协议设计
 
-以下协议的可执行 Zod 定义归 `packages/contracts`。内容形态沿用上文；请求／响应不在 Web、CLI 或路由中重新手写一份。
+以下协议的服务端可执行定义归 `apps/backend/src/agent4novel/domain`，前端 Zod 定义归 `packages/contracts`。内容形态沿用上文；请求／响应不在 Web、Python CLI 或路由中重新手写一份。
 
 ```ts
 type SettingReviewItem = Omit<SettingItem, 'itemId'> & { itemId?: string }
@@ -286,7 +288,7 @@ approved record 的 candidate 通过共享 readback validator 按精确 `artifac
 
 ## Beat：#5 当前契约
 
-本节的内容与编辑契约由 #5 落地，#6 将章号、输入引用与恢复匹配推广至后续章；保留标题供既有链接使用。运行时定义位于 `packages/contracts/src/beat.ts`、`beat-submission.ts`、`public-api.ts` 与 `telemetry.ts`；原设计与 TDD 见 [Wiki 005](./wiki/005-beat-generation-review.md)，多章工程上下文见 [Wiki 006](./wiki/006-chapter-continuation.md)。Setting 契约保持上文不变。
+本节的内容与编辑契约由 #5 落地，#6 将章号、输入引用与恢复匹配推广至后续章；保留标题供既有链接使用。当前服务端定义位于 [`domain/work.py`](../apps/backend/src/agent4novel/domain/work.py)、[`domain/requests.py`](../apps/backend/src/agent4novel/domain/requests.py)、[`domain/commands.py`](../apps/backend/src/agent4novel/domain/commands.py)、[`domain/diagnostics.py`](../apps/backend/src/agent4novel/domain/diagnostics.py) 与 [`services/submissions.py`](../apps/backend/src/agent4novel/services/submissions.py)；前端对应 Zod 文件仍保留在 `packages/contracts`。原设计与 TDD 见 [Wiki 005](./wiki/005-beat-generation-review.md)，多章工程上下文见 [Wiki 006](./wiki/006-chapter-continuation.md)。Setting 契约保持上文不变。
 
 带数字的小节保留 R1 原稿编号，便于与固定评审证据核对；不会据此另建一套契约来源。
 
@@ -431,7 +433,7 @@ Agent 不应靠读日志正文猜操作是否成功。响应先给业务结果�
 
 #### 机器可执行的恢复信息
 
-Web 和 CLI 复用 `beat-submission.ts` 的纯恢复判断：输入为原始 baseline Artifact（含已删除旧卡的 ID 集）、冻结请求、此前 unknown、合法命令响应以及一次回读的 WorkView，输出 `resolution` 与 `nextActions`。不在 Agent 提示词里再抄一份状态机，也不让服务端猜客户端是否有更早的未知请求。
+Web 使用 `packages/contracts/src/beat-submission.ts` 的 `recoverBeatSubmission`，Python CLI 使用 `services/submissions.py` 的 `recover_submission`；两者执行同一纯恢复契约：输入为原始 baseline Artifact（含已删除旧卡的 ID 集）、冻结请求、此前 unknown、合法命令响应以及一次回读的 WorkView，输出 `resolution` 与 `nextActions`。不在 Agent 提示词里再抄一份状态机，也不让服务端猜客户端是否有更早的未知请求。
 
 `resolution` 为 `confirmed / rejected / uncertain / conflict`；`nextActions` 为固定枚举的有序数组：`edit-input / read-work / retry-frozen-request / load-server-version / inspect-diagnostics / check-model-config / await-author`。这些是基于现有事实的建议，不是自动执行授权；`retryable:true` 仅表示原因可能恢复，不等于立即安全重放。版本冲突、旧 unknown 等事实优先于某一次错误的 retryable。
 
@@ -475,7 +477,7 @@ CLI 在失败 JSON 中保留原始安全 `code` 为 `causeCode`、operation、�
 
 ## Prose：#22 当前契约
 
-可执行定义为 `packages/contracts/src/prose.ts`、`prose-command.ts`、`prose-submission.ts`；首章工程上下文与已交付证据见 [Wiki 022](./wiki/022-prose-generation-review.md)。#6 保留本节标题与编辑语义，将章号、恢复匹配和章级动作推广至后续章，见 [Wiki 006](./wiki/006-chapter-continuation.md)。
+当前服务端可执行定义为 [`domain/work.py`](../apps/backend/src/agent4novel/domain/work.py)、[`domain/requests.py`](../apps/backend/src/agent4novel/domain/requests.py)、[`domain/commands.py`](../apps/backend/src/agent4novel/domain/commands.py) 与 [`services/submissions.py`](../apps/backend/src/agent4novel/services/submissions.py)；前端对应的 `prose.ts`、`prose-command.ts`、`prose-submission.ts` 保留在 `packages/contracts`。首章工程上下文与已交付证据见 [Wiki 022](./wiki/022-prose-generation-review.md)。#6 保留本节标题与编辑语义，将章号、恢复匹配和章级动作推广至后续章，见 [Wiki 006](./wiki/006-chapter-continuation.md)。
 
 ### 内容与生成
 
@@ -525,13 +527,13 @@ save 必须校验 `expectedHumanStatus`：通过不增加版本，审批前发�
 
 失败提供 `writeOutcome:not-committed|unknown` 与阶段；写入后 adapter 异常或响应构造失败都为 unknown，不能据 HTTP 失败认定未落库。内容错误422、身份／状态／上游冲突409、请求格式400、body过大413；日志只记录安全身份、长度、hash和分类。
 
-共享 `recoverProseSubmission` 把保存回读的作品／章节、下一版本、新身份、相同状态和逐字符全文与冻结请求匹配；精确匹配可确认保存结果，较新或不同内容按冲突保留本地输入。通过确认要求同 id/version/createdAt 和逐字符全文。未知重写不能仅凭 GET 新版认领成功；更早 unknown 也不会被后续 not-committed 清除。客户端最多自动回读一次，重试使用冻结基线，不自动改版本覆盖服务器。
+Python CLI 的 `recover_submission` 与 Web 的 `recoverProseSubmission` 执行同一恢复契约：把保存回读的作品／章节、下一版本、新身份、相同状态和逐字符全文与冻结请求匹配；精确匹配可确认保存结果，较新或不同内容按冲突保留本地输入。通过确认要求同 id/version/createdAt 和逐字符全文。未知重写不能仅凭 GET 新版认领成功；更早 unknown 也不会被后续 not-committed 清除。客户端最多自动回读一次，重试使用冻结基线，不自动改版本覆盖服务器。
 
 生产 WorkStore 使用 SQLite，成功保存的正文及其版本、状态和 inputs 在同一数据目录中跨服务重启保留；未保存的页面内容不恢复。诊断仍是进程内窗口，重启不会自动续跑模型。实际持久性验证见 [Wiki 009](./wiki/009-sqlite-persistence.md)。设定检索与工具执行 #28、作品 Wiki 档案演进及联合通过 #29 均为后续扩展，不属于正文保存语义。
 
 ## 作者配置与版本文件：#7
 
-可执行定义为 `packages/contracts/src/author-config.ts`；设计与证据见 [Wiki 007](./wiki/007-author-agent-config.md)。作品配置独立于内容关卡和旧 `Work.config`：`{preferences:{style?,genre?,payoff?}, defaults:controls, steps:{caption?,creative?,outline?,setting?,beat?,prose?}}`。省略字段继承，节点逐字段覆盖作品默认，数组替换；`systemPromptRef:null` 清除作者 Prompt，仍保留内置任务指导。模型、directionCount、thinking、temperature、topP 继续服从 ModelRuntime；tools 只接受空数组。偏好每项最多500字符；文风用于Prose、题材用于除Caption外各步、爽点用于Creative/Outline/Beat/Prose。
+当前服务端可执行定义见 [`domain/resources.py`](../apps/backend/src/agent4novel/domain/resources.py) 与 [`services/author_config.py`](../apps/backend/src/agent4novel/services/author_config.py)，前端对应 Zod 定义保留在 `packages/contracts/src/author-config.ts`；设计与证据见 [Wiki 007](./wiki/007-author-agent-config.md)。作品配置独立于内容关卡和旧 `Work.config`：`{preferences:{style?,genre?,payoff?}, defaults:controls, steps:{caption?,creative?,outline?,setting?,beat?,prose?}}`。省略字段继承，节点逐字段覆盖作品默认，数组替换；`systemPromptRef:null` 清除作者 Prompt，仍保留内置任务指导。模型、directionCount、thinking、temperature、topP 继续服从 ModelRuntime；tools 只接受空数组。偏好每项最多500字符；文风用于Prose、题材用于除Caption外各步、爽点用于Creative/Outline/Beat/Prose。
 
 `GET /api/works/:id/agent-config` 返回 `{workId,revision,document,files,effective}`，effective 包含恰好六个唯一节点的实际模型/provider/参数/偏好/文件版本与运行模式；provider 为 `deepseek`、`longcat` 或 `kimi`。响应校验全部文件归属、唯一ID、选择与库中元数据完全匹配及provider/model一致。初始revision为0，仅此时兼容旧Work.config；保存后仅作者document和启动默认生效。已提交请求先匹配不可变回执，当前文件/模型不可用不否认历史提交；`PUT` 接收严格 `{requestId:UUID,expectedRevision:safe>=0,document}`，返回不可变 `{workId,requestId,revision,document}` 回执。SQLite `author_configs` 以作品/revision保存每次配置，requestId去重；同请求返回原回执，同ID异内容或旧revision为409；保存不改变产物或状态。
 
@@ -578,7 +580,7 @@ ChapterSummary = {
 
 生成时写入 `Artifact.inputs`，正文保存与定稿保留它。上游版本变化或前章衔接已过期时，章节摘要的 `needsContinuityReview` 提醒检查；既有章纲/正文和 humanStatus 均保留。提示不表示内容已经重新校对，不触发级联重写，也不自动清除人工关卡。
 
-可执行字段与验证见 [artifacts.ts](../packages/contracts/src/artifacts.ts)、[公共 API](../packages/contracts/src/public-api.ts) 及 [Pipeline](../apps/server/src/pipeline/pipeline.ts)。工程意图、TDD、运行验证和当前交付状态见 [Wiki 006](./wiki/006-chapter-continuation.md)。
+服务端可执行字段与验证见 [`domain/work.py`](../apps/backend/src/agent4novel/domain/work.py)、[`domain/requests.py`](../apps/backend/src/agent4novel/domain/requests.py) 及 [Pipeline](../apps/backend/src/agent4novel/pipeline_generation.py)；前端对应的 [artifacts.ts](../packages/contracts/src/artifacts.ts) 与 [公共 API](../packages/contracts/src/public-api.ts) 仅承担 Web 校验。工程意图、TDD、运行验证和当前交付状态见 [Wiki 006](./wiki/006-chapter-continuation.md)。
 
 ## 坏例快照：#8
 

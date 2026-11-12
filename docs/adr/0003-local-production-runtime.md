@@ -1,6 +1,8 @@
 # ADR-0003 — 本机同源生产服务与整个数据目录卷
 
-状态：Accepted · 2026-09-30 · [#33](https://github.com/12bitsD/agent4novel/issues/33)
+状态：Superseded by [ADR-0005](./0005-python-backend-migration.md) · 2026-11-13 · 原决定 Accepted · 2026-09-30 · [#33](https://github.com/12bitsD/agent4novel/issues/33)
+
+> 本页保留本机同源服务、整目录卷、非 root 与无密钥 CI 的边界。2026-11-13 起生产进程改为 FastAPI + Nextloop；原 Hono/Node 启动与 `apps/server/dist/start.js` 不再使用，Node 只用于前端构建和开发进程管理。
 
 用户明确选择本机 Docker + CI；保持本地单用户，不扩展公网服务、鉴权、镜像发布或自动部署。开发继续使用 Vite 与 Hono 的两个端口，生产由一个 Hono/Node 进程提供编译后的 Web 与 API，宿主端口仅绑定 loopback。
 

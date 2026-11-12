@@ -1,55 +1,46 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working in this repository.
 
 ## Commands
 
 ```bash
 python3.11 -m venv .venv
-.venv/bin/python -m pip install -r apps/agent-loop/requirements.lock
-.venv/bin/python -m pip install -e 'apps/agent-loop[dev]'
-pnpm install          # pnpm workspaces (apps/* + packages/*)
-pnpm dev              # server :8787 (tsx watch) + web :5173 (vite), in parallel
-pnpm test             # Python adapter + Vitest; local fakes and loopback only
+.venv/bin/python -m pip install -r apps/backend/requirements.lock
+.venv/bin/python -m pip install -e 'apps/backend[dev]'
+pnpm install --frozen-lockfile
+pnpm dev              # FastAPI :8787 + Vite :5173
+pnpm test             # Python backend + TypeScript contracts/Web; local fakes and loopback only
 pnpm typecheck        # mypy + ruff + TypeScript
-pnpm build
-pnpm -s cli <cmd>     # CLI for driving the whole pipeline (or ./apps/cli/bin/a4n, cleaner stdout)
+pnpm build            # Python wheel + compiled Web
+pnpm -s cli <cmd>     # or .venv/bin/a4n <cmd>, for a machine-readable JSON stdout
 ```
 
-The project ships an end-to-end operating skill at `.claude/skills/agent4novel-drive/SKILL.md`. Read it before starting the app, changing model configuration, running CLI cases, or diagnosing LLM failures.
+The project ships an end-to-end operating skill at `.claude/skills/agent4novel-drive/SKILL.md`. Read it before starting the app, changing model configuration, driving CLI cases, or diagnosing LLM failures. Read `.claude/skills/agent4novel-wiki/SKILL.md` before planning, implementing, debugging or reviewing existing behavior, and use it when maintaining `docs/wiki/`. Complete `docs/agents/ticket-completion-checklist.md` before reviewing or delivering a ticket.
 
-Before planning, implementing, debugging, or reviewing existing behavior, use `.claude/skills/agent4novel-wiki/SKILL.md` to locate the minimum relevant ticket context. Use the same skill when creating or updating `docs/wiki/` so design intent and change reasons survive implementation.
-
-Run a single test: `pnpm --filter @agent4novel/server exec vitest run test/pipeline.test.ts` (or `@agent4novel/web`, `@agent4novel/contracts`).
-
-Model runtime rules live in `docs/wiki/016-model-runtime-provider-config.md`; use the Wiki skill to read only the relevant configuration, provider, credential, URL, or timeout section. Never put a credential inline in a command or print `.env.local`.
+Model configuration belongs to `docs/wiki/016-model-runtime-provider-config.md`. Never print credentials or `.env.local`. Real Provider calls require explicit configuration; tests use fakes, mocked transports or loopback SSE.
 
 ## Architecture
 
-pnpm monorepo: `packages/contracts` (zod schemas + types, the shared contract), `apps/server` (Hono + the `callLlm` seam), `apps/agent-loop` (Python 3.11 + Nextloop stdio worker), `apps/web` (React 19 + Vite: 书架 Bookcase / 统一入口 Entry / 创作界面 Workspace). Contracts exports raw `.ts` — no build step.
+- `apps/backend` — the production FastAPI application, Pydantic contracts, Python CLI, SQLite stores and native Nextloop model runtime. `a4n-api` serves the API and compiled Web; `a4n` drives works or isolated steps.
+- `apps/web` — the React/Vite author interface.
+- `packages/contracts` — TypeScript/Zod schemas for the frontend. Python owns the production HTTP and CLI contracts; cross-language golden fixtures and real API/CLI tests protect the shared wire behavior. Do not reintroduce a second production backend or a stdio worker.
 
-The system is a **human-in-the-loop pipeline**: machines generate, the author gates everything. Three core pieces:
+The human-in-the-loop pipeline generates Caption → Creative → Outline → Setting, then a Beat and Prose for each explicitly started chapter. Artifact status, not a persisted workflow field, determines the next action. Human approval uses the dedicated finalize/save/select commands; append/save creates a new identity and version in the normal case, while finalize keeps identity, version and creation time.
 
-- **Pipeline** (`apps/server/src/pipeline/pipeline.ts`) — the orchestrator and the only owner of flow control. Steps run in a fixed `PipelineDefinitionEntry[]` order; each entry declares `outputKind` and optional `consumes` (explicit upstream deps — latest version must be `approved`) / `gateAfter` (output lands as `pending`, next step blocked until approved) / `gateBefore`. Stage (`ready | blocked | awaiting-approval | complete`) is **derived from artifact status**, not stored. `advance()` is chained (runs auto-approved steps until the next gate) under a per-work mutex, and returns an exhaustive outcome (`advanced | awaiting-approval | complete | failed`).
-- **Steps** (`apps/server/src/steps/`) — contract-bound AI generations executed via `runStep`, which zod-validates both input and output. Steps don't know their position in the pipeline. Prompts live in `steps/skills/<step>/SKILL.md` files (ADR-0002) — prompt iteration never touches code. Real steps call the model via `steps/llm-call.ts`; `runNextloop` passes the same JSON mode, generation settings and timeout to the Python Nextloop worker, then applies local Zod validation and typed LLM errors. Oversized seeds are truncated there, in one place.
-- **Artifacts** (`store/`) — append-only version chains keyed by `{kind, chapter?}`; `appendArtifact` bumps `version`, old versions stay. For `creative`: saving a draft = new version + `pending`; explicitly selecting a direction = single-direction new version + `approved`.
+The deliberate seams are storage (`SqliteStore` for production and `InMemoryStore` for behavior tests), step implementations and `ModelRuntime`. Model calls happen outside database transactions. Conditional writes revalidate the current head and consumed inputs in a short SQLite transaction. Generation never auto-retries at the Pipeline or CLI level; provider retry budgets belong to the individual Step.
 
-The deliberate runtime seams are **storage** (`WorkStore` interface), **step implementation** (FakeStep/RealStep), and **model runtime** (`ModelRuntime` in `steps/llm.ts`, producing Nextloop Provider configuration). `A4N_MODEL` supplies the startup default; author configuration supplies per-work and per-step overrides. Tests use fakes, mocked transports or loopback SSE and never call a real provider.
+`apps/backend/src/agent4novel/agent/` contains the six production Steps and their packaged `skills/<step>/SKILL.md`. Nextloop is called in-process with an empty tool registry and per-run in-memory events. It is not a tool-calling agent or a Work Wiki/Memory integration. `run-step` uses the same Step and schemas without creating a WorkStore or claiming that supplied upstream is the current approved head.
 
-The current pipeline definition wires `caption` (提炼稿, auto-approved) → `creative` (创意稿 direction packs, `gateAfter` = compare view) → `outline` (大纲, `gateAfter` = review). Assembly lives in `apps/server/src/start.ts`; `apps/server/src/index.ts` only loads `.env.local` before dynamically importing it. Setting/beat/prose contracts exist but their steps are not yet registered.
+## Data and recovery
 
-## Data model
+`docs/schema.md` owns the current data model and `CONTEXT.md` owns domain terminology. `docs/adr/` records long-lived architecture decisions; per-ticket rationale and implementation history live in `docs/wiki/NNN-*.md`.
 
-`docs/schema.md` is the single source of truth. Artifact kinds map 1:1 to pipeline nodes: `caption` (提炼稿: inputStage + summary + elements + gaps), `creative` (创意稿: `directions[]` of hint-level packs with server-injected `directionId`), `outline`, `setting` (per-work), `beat`, `prose` (per-chapter). Invariants: per-work kinds never have `chapter`; per-chapter kinds always do. 卖点/梗概 are **not** standalone artifacts — they live inside a creative pack (`hook`/`payoffs`/`synopsis`).
+SQLite v1–v4 migrations are strict. Works, all artifact versions, status and input references persist under `A4N_DATA_DIR`. Prompt/Skill files have immutable content hashes and private filesystem permissions. Unknown writes require exact request/head/content matching and bounded readback; never infer `not-committed` from a timeout, 5xx or malformed response. `run-step --record-dir` creates a new private directory containing only `input.json`, `invocation.json`, `result.json` and `meta.json`; `comments.md` remains optional adjacent material.
 
-## Documentation conventions (this repo is docs-for-agents)
+## Documentation conventions
 
-- `CONTEXT.md` — domain glossary. Use its exact terms (脑洞, 卖点, 梗概, 大纲, 章纲, 正文, 设定, 关卡…); each entry lists forbidden synonyms — don't introduce them.
-- `docs/wiki/NNN-<slug>.md` — per-ticket engineering context: original purpose, technical/code landing, reasons for changes, and the handoff boundary. Use the Wiki skill for selective reading and updates; verify current executable behavior in code and tests.
-- `docs/adr/` — irreversible decisions; new ones become new ADRs, wiki only links.
-- `docs/agents/ticket-completion-checklist.md` — canonical gate from ticket scope and TDD planning through review, PR/merge, and remote verification. Read it before starting, reviewing a candidate or attestation, or completing a ticket.
-- Issues are managed via `gh` CLI with five canonical triage labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`); see `docs/agents/`.
-
-## Language
-
-Code identifiers and user-facing English docs are English; domain docs (CONTEXT.md, schema.md, wiki) are Chinese, and code comments are often Chinese. Match the language of the file you're editing. Keep README.md (English) and README.zh-CN.md in sync.
+- Keep `README.md` and `README.en.md` synchronized; `README.zh-CN.md` retains the Chinese navigation entry.
+- Update `docs/handoff.md` only for the verified current milestone, limitations and next step. Do not rewrite historical acceptance evidence as if it were a new result.
+- Follow `docs/agents/ticket-completion-checklist.md` for review and delivery. Issues use the canonical triage labels in `docs/agents/`.
+- Code identifiers and user-facing English docs are English; domain docs are Chinese. Match the surrounding file.

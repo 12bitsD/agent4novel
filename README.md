@@ -53,19 +53,19 @@ docker compose up --build -d --wait
 
 <a id="从源码启动演示模式"></a>
 
-使用项目固定版本 **Node.js 24.19.0、pnpm 12.5.1**，并准备 **Python 3.11 或更新版本**运行 Nextloop worker。以下命令适用于 macOS 和 Linux。已有源码时，直接进入项目目录：
+使用项目固定版本 **Node.js 24.19.0、pnpm 12.5.1** 进行前端构建与开发进程管理，并准备 **Python 3.11 或更新版本**运行后端、CLI 和 Nextloop。以下命令适用于 macOS 和 Linux。已有源码时，直接进入项目目录：
 
 ```bash
 git clone https://github.com/12bitsD/agent4novel.git
 cd agent4novel
 python3.11 -m venv .venv
-.venv/bin/python -m pip install -r apps/agent-loop/requirements.lock
-.venv/bin/python -m pip install -e 'apps/agent-loop[dev]'
+.venv/bin/python -m pip install -r apps/backend/requirements.lock
+.venv/bin/python -m pip install -e 'apps/backend[dev]'
 pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-保持终端运行，打开 **[localhost:5173](http://localhost:5173)**。首次书架为空，可直接创建作品；如需预放示例，用 `A4N_SEED_DEMO=1 pnpm dev` 启动，只会填充空书架。真实模型模式启动时会检查 Python 与 Nextloop 是否可用；无密钥演示模式仍使用内置示例，不调用模型。
+保持终端运行，打开 **[localhost:5173](http://localhost:5173)**。首次书架为空，可直接创建作品；如需预放示例，用 `A4N_SEED_DEMO=1 pnpm dev` 启动，只会填充空书架。真实模型由后端在 Python 进程内直接调用 Nextloop，不再启动 stdio worker；启动或生成前会校验对应配置，无密钥演示模式仍使用内置示例，不调用模型。
 
 命令行入口：`pnpm cli --help`。作品操作、独立节点测试与诊断见 [CLI 说明](./docs/wiki/014-agent-cli-telemetry.md)。
 
@@ -74,7 +74,7 @@ pnpm dev
 Agent 需要检查一次独立节点的真实输入输出时，可给 `run-step` 指定一个尚不存在的私有目录：
 
 ```bash
-./apps/cli/bin/a4n run-step caption --seed-file seed.txt \
+.venv/bin/a4n run-step caption --seed-file seed.txt \
   --system-prompt-file caption-sp.md --record-dir .data/experiments/round-1/a
 ```
 

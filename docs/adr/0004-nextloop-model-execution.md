@@ -1,6 +1,8 @@
 # 节点模型执行使用 Python Nextloop
 
-状态：Accepted · 2026-11-12
+状态：Superseded by [ADR-0005](./0005-python-backend-migration.md) · 2026-11-13 · 原决定 Accepted · 2026-11-12
+
+> 本页保留以 Nextloop 执行六节点模型调用的选型理由。后续验证表明不再需要 Node → Python stdio 适配层；现由 FastAPI 与 Python CLI 直接调用同一锁定 Nextloop 包，原“全后端 Python 重写不采用”的首版取舍已被人为确认的全量迁移取代。
 
 用户指定以 Nextloop 1.0.0 替换六个创作节点的 Agent loop。保留 `callLlm` 接口，由 Node 按次启动 Python 3.11 worker，通过有界 stdio 调用 Nextloop `AgentLoop` 与 `OpenAIProvider`；最终 JSON 仍由 Node Zod 校验后进入既有 WorkStore。
 

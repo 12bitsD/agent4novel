@@ -24,16 +24,18 @@ export default tseslint.config(
     },
   },
   {
-    files: ["apps/server/scripts/**/*.mjs", "scripts/**/*.mjs"],
+    files: ["scripts/**/*.mjs"],
     languageOptions: {
       globals: {
         Buffer: "readonly",
         URL: "readonly",
         clearTimeout: "readonly",
+        clearInterval: "readonly",
         console: "readonly",
         fetch: "readonly",
         process: "readonly",
         setTimeout: "readonly",
+        setInterval: "readonly",
       },
     },
   },

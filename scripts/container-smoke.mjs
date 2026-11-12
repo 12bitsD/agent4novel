@@ -34,21 +34,24 @@ async function command(file, args, { json = false, quiet = false, binary = false
   })
   return binary ? result : json ? JSON.parse(result.toString()) : result.toString()
 }
-const compose = (args, options) => command('docker', ['compose', '--project-name', project, '--env-file', '/dev/null', ...args], options)
+const composeFiles = (process.env.A4N_COMPOSE_FILES || 'compose.yaml').split(',')
+const fileOptions = () => composeFiles.flatMap(file => ['-f', file])
+const compose = (args, options) => command('docker', ['compose', ...fileOptions(), '--project-name', project, '--env-file', '/dev/null', ...args], options)
 const restoredProject = `${project}-restore`
 const restoreFile = join(folder, 'restore.json')
-const restored = (args, options) => command('docker', ['compose', '-f', 'compose.yaml', '-f', restoreFile,
+const restored = (args, options) => command('docker', ['compose', ...fileOptions(), '-f', restoreFile,
   '--project-name', restoredProject, '--env-file', '/dev/null', ...args], options)
 const url = `http://127.0.0.1:${port}`
-const cli = args => command(join(root, 'apps/cli/bin/a4n'), [...args, '--url', url], { json: true, quiet: true })
+const cliBinary = process.env.A4N_CLI_BIN || join(root, '.venv/bin/a4n')
+const cli = args => command(cliBinary, [...args, '--url', url], { json: true, quiet: true })
 let workId
 const requestFile = join(folder, 'request.json')
 async function submit(action, request) {
   await writeFile(requestFile, JSON.stringify(request))
   return cli([action, workId, '--file', requestFile])
 }
-const history = (runner = compose) => runner(['exec', '-T', 'app', 'node', '--input-type=module', '-e',
-  "import Database from 'better-sqlite3'; const db = new Database('/data/agent4novel.sqlite', {readonly:true}); console.log(JSON.stringify(db.prepare('SELECT * FROM artifacts ORDER BY rowid').all())); db.close();"], { json: true, quiet: true })
+const history = (runner = compose) => runner(['exec', '-T', 'app', 'python', '-c',
+  "import sqlite3,json; db=sqlite3.connect('file:/data/agent4novel.sqlite?mode=ro',uri=True); db.row_factory=sqlite3.Row; print(json.dumps([dict(row) for row in db.execute('SELECT * FROM artifacts ORDER BY rowid')])); db.close()"], { json: true, quiet: true })
 
 try {
   const config = await compose(['config', '--format', 'json'], { json: true, quiet: true })
@@ -65,10 +68,8 @@ try {
   assert.equal((await fetch(`${url}${asset}`)).status, 200)
   assert.equal((await fetch(`${url}/api/unknown`)).status, 404)
   assert.equal((await fetch(`${url}/.env.local`)).status, 404)
-  await compose(['exec', '-T', 'app', 'node', '--input-type=module', '-e',
-    "import assert from 'node:assert/strict'; import {existsSync,readdirSync} from 'node:fs'; assert.notEqual(process.getuid(),0); for(const path of ['/app/.env.local','/app/.git','/app/apps/server/src','/app/apps/server/test','/app/apps/server/node_modules/tsx']) assert.equal(existsSync(path),false,path); assert.deepEqual(readdirSync('/app/apps/server/dist/skills').sort(),['beat','caption','creative','outline','prose','setting']);"], { quiet: true })
-  await compose(['exec', '-T', 'app', '/opt/agent-loop/bin/python', '-c',
-    "import importlib.metadata,sys; assert sys.version_info >= (3,11); assert importlib.metadata.version('nextloop') == '1.0.0'; import agent4novel_nextloop.worker"], { quiet: true })
+  await compose(['exec', '-T', 'app', 'python', '-c',
+    "import os,sys,importlib.metadata,importlib.resources; from pathlib import Path; assert os.getuid() != 0; assert sys.version_info >= (3,11); assert importlib.metadata.version('nextloop') == '1.0.0'; assert all(not Path(path).exists() for path in ['/app/.env.local','/app/.git','/app/apps/server/src','/app/apps/server/test','/app/apps/server/node_modules/tsx']); assert sorted(path.name for path in (importlib.resources.files('agent4novel') / 'skills').iterdir()) == ['beat','caption','creative','outline','prose','setting']; import agent4novel.cli,agent4novel.main"], { quiet: true })
   assert.deepEqual(await cli(['list']), [])
   const smoke = await cli(['smoke', '--seed', '容器合成验收：雨夜发现线索，翌日走到旧桥。'])
   workId = smoke.workId

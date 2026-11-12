@@ -5,13 +5,14 @@
   "type": "module",
   "packageManager": "pnpm@12.5.1",
   "scripts": {
-    "dev": "pnpm --parallel -r --if-present run dev",
-    "cli": "pnpm -s --filter @agent4novel/cli run -s cli --",
-    "test:agent-loop": ".venv/bin/python -m pytest apps/agent-loop",
-    "test": "pnpm test:agent-loop && pnpm -r --workspace-concurrency=1 --if-present run test --maxWorkers=2",
-    "typecheck:agent-loop": ".venv/bin/python -m mypy apps/agent-loop/src && .venv/bin/python -m ruff check apps/agent-loop && .venv/bin/python -m ruff format --check apps/agent-loop",
-    "typecheck": "pnpm typecheck:agent-loop && pnpm -r --if-present run typecheck",
-    "build": "pnpm -r --if-present run build",
+    "dev": "node scripts/dev.mjs",
+    "cli": ".venv/bin/a4n",
+    "test:backend": ".venv/bin/python -m pytest apps/backend",
+    "test": "pnpm test:backend && pnpm -r --workspace-concurrency=1 --if-present run test --maxWorkers=2",
+    "typecheck:backend": ".venv/bin/python -m mypy apps/backend/src && .venv/bin/python -m ruff check apps/backend && .venv/bin/python -m ruff format --check apps/backend",
+    "typecheck": "pnpm typecheck:backend && pnpm -r --if-present run typecheck",
+    "build:backend": ".venv/bin/python -m pip wheel --no-deps --no-build-isolation --wheel-dir .data/build apps/backend",
+    "build": "pnpm build:backend && pnpm --filter @agent4novel/web build",
     "lint": "eslint ."
   },
   "devDependencies": {

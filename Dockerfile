@@ -1,33 +1,35 @@
-FROM node:24.19.0-bookworm-slim AS build
+FROM node:24.19.0-bookworm-slim AS web-build
 WORKDIR /build
 RUN npm install --global pnpm@12.5.1
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-COPY apps/server/package.json apps/server/package.json
 COPY apps/web/package.json apps/web/package.json
-COPY apps/cli/package.json apps/cli/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
-RUN pnpm install --frozen-lockfile
-COPY apps/server/src apps/server/src
-COPY apps/server/scripts apps/server/scripts
+RUN pnpm install --filter @agent4novel/web... --frozen-lockfile
 COPY apps/web apps/web
 COPY packages/contracts/src packages/contracts/src
-RUN pnpm --filter @agent4novel/server build && pnpm --filter @agent4novel/web build
-RUN pnpm --filter @agent4novel/server deploy --prod /production/server
+RUN pnpm --filter @agent4novel/web build
 
-FROM node:24.19.0-bookworm-slim AS runtime
-ENV NODE_ENV=production A4N_HOST=0.0.0.0 A4N_PORT=8787 A4N_DATA_DIR=/data A4N_SERVE_WEB=1 A4N_SEED_DEMO=0 A4N_CONTAINER=1 \
-    A4N_NEXTLOOP_PYTHON=/opt/agent-loop/bin/python PYTHONPATH=/opt/agent-loop/src
-WORKDIR /app/apps/server
-RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv python3-pip \
-    && rm -rf /var/lib/apt/lists/*
-COPY apps/agent-loop/requirements.lock /opt/agent-loop/requirements.lock
-RUN python3 -m venv /opt/agent-loop \
-    && /opt/agent-loop/bin/pip install --no-cache-dir -r /opt/agent-loop/requirements.lock
-COPY apps/agent-loop/src /opt/agent-loop/src
-COPY --from=build --chown=node:node /production/server ./
-COPY --from=build --chown=node:node /build/apps/web/dist /app/apps/web/dist
-RUN mkdir /data && chown node:node /data
-USER node
+FROM python:3.11-slim-bookworm AS runtime
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    A4N_ROOT=/app \
+    A4N_HOST=0.0.0.0 \
+    A4N_PORT=8787 \
+    A4N_DATA_DIR=/data \
+    A4N_SERVE_WEB=1 \
+    A4N_SEED_DEMO=0 \
+    A4N_CONTAINER=1
+WORKDIR /app
+COPY apps/backend/pyproject.toml apps/backend/requirements.lock apps/backend/
+RUN python -m pip install --no-cache-dir -r apps/backend/requirements.lock
+COPY apps/backend/src apps/backend/src
+RUN python -m pip install --no-cache-dir --no-deps apps/backend
+COPY --from=web-build /build/apps/web/dist apps/web/dist
+RUN groupadd --gid 10001 app \
+    && useradd --uid 10001 --gid app --no-create-home app \
+    && install -d -m 700 -o app -g app /data
+USER app
 EXPOSE 8787
-HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 CMD node -e "fetch('http://127.0.0.1:8787/api/health').then(async r => {if (!r.ok || (await r.json()).status !== 'ok') process.exit(1)}).catch(() => process.exit(1))"
-CMD ["node", "dist/start.js"]
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
+    CMD python -c "import json,urllib.request; response=json.load(urllib.request.urlopen('http://127.0.0.1:8787/api/health', timeout=2)); assert response['status']=='ok'"
+CMD ["a4n-api"]

@@ -5,7 +5,7 @@ description: 用命令行驱动 agent4novel 创作链路、独立运行节点和
 
 # 驱动 agent4novel
 
-本项目的创作链路用 CLI(`./apps/cli/bin/a4n`)驱动,**不要手搓 curl**。只有 `select`／`save-outline` 自动回填 `expectedHeadVersion`；`approve-outline`、Setting、Beat、Prose和start-chapter的专用写命令使用请求文件中的显式基线，不替换成最新head。正常结果的stdout是纯JSON，进度与错误走stderr。HTTP/传输错误会exit≠0，但`advance`/`start-chapter`即使HTTP200也可能返回`kind: "failed"`，必须同时检查JSON outcome。
+本项目的创作链路用 CLI(`.venv/bin/a4n`)驱动,**不要手搓 curl**。只有 `select`／`save-outline` 自动回填 `expectedHeadVersion`；`approve-outline`、Setting、Beat、Prose和start-chapter的专用写命令使用请求文件中的显式基线，不替换成最新head。正常结果的stdout是纯JSON，进度与错误走stderr。HTTP/传输错误会exit≠0，但`advance`/`start-chapter`即使HTTP200也可能返回`kind: "failed"`，必须同时检查JSON outcome。
 
 模型与 provider 配置的唯一 HOW 是 [`docs/wiki/016-model-runtime-provider-config.md`](../../../docs/wiki/016-model-runtime-provider-config.md)；源码持久化与恢复见 [Wiki 009](../../../docs/wiki/009-sqlite-persistence.md)，本机容器、卷恢复与CI见 [Wiki 033](../../../docs/wiki/033-local-docker-ci.md)。本 skill 只保留运行时操作,不要在其他入口复制配置规则。
 
@@ -18,13 +18,13 @@ test -f .env.local || cp .env.example .env.local   # 首次初始化；不要覆
 chmod 600 .env.local
 # 用本地编辑器填写所需 key；不要把 key 写进命令、日志或聊天，也不要打印 .env.local
 python3.11 -m venv .venv
-.venv/bin/python -m pip install -r apps/agent-loop/requirements.lock
-.venv/bin/python -m pip install -e 'apps/agent-loop[dev]'
+.venv/bin/python -m pip install -r apps/backend/requirements.lock
+.venv/bin/python -m pip install -e 'apps/backend[dev]'
 pnpm install --frozen-lockfile
 pnpm dev                         # server :8787 + web :5173
 ```
 
-Live 启动会先检查 Python 3.11 与 `nextloop==1.0.0`，失败时不监听端口；demo 不启动 worker。Live 模式会把生成所需的素材和上游产物发送给所选远程 provider。worker 默认解析仓库 `.venv`，自定义解释器只用 `A4N_NEXTLOOP_PYTHON` 指定路径，不把 key 写进该配置。
+后端在 Python 进程内直接调用 `nextloop==1.0.0`，不再启动 Node 或 stdio worker。Live 模式会把生成所需的素材和上游产物发送给所选远程 provider，并在生成前校验对应凭据；demo 使用内置示例，不调用 Provider。Python 环境由 `.venv` 提供，安装后的进程可用 `A4N_ROOT` 定位仓库资源，密钥只通过运行期环境传入。
 
 服务默认读取项目根目录的 `.data/agent4novel.sqlite`；用 `A4N_DATA_DIR` 指向明确的数据目录。首次启动不自动放入示例作品；需要空库示例时显式设置 `A4N_SEED_DEMO=1`，初始化在事务中执行，非空库不重复添加。测试应使用独立临时目录和端口，勿把 smoke 写入用户作品库；不要停止或清空仍持有作品的旧版内存服务。备份前停止所有访问同一数据目录的进程，复制整个目录；恢复前先保留现有目录的备份，具体步骤看 Wiki 009。
 
@@ -33,33 +33,33 @@ Live 启动会先检查 Python 3.11 与 `nextloop==1.0.0`，失败时不监听�
 作品的作者配置使用 [Wiki 007](../../../docs/wiki/007-author-agent-config.md) 的独立版本接口；凭据/Base URL继续由Wiki016持有。配置文件例为 `{"requestId":"<UUID>","expectedRevision":0,"document":{"preferences":{"style":"简洁自然"},"defaults":{},"steps":{}}}`；先读agent-config，使用看到的revision，不自动回填。上传文件需显式request-id；同一冻结请求可由作者明确重试，不自动重发。网络/5xx/不匹配回执为unknown，先读配置/文件检查；旧幂等回执不表示服务器仍停在该revision。只有保存配置后选择才生效，运行中的操作冻结实际配置和文件文本；上传只作指导，不执行工具。
 
 ```bash
-./apps/cli/bin/a4n agent-config <workId>
-./apps/cli/bin/a4n upload-prompt <workId> --file guidance.md --request-id <UUID>
-./apps/cli/bin/a4n upload-skill <workId> --file SKILL.md --request-id <UUID>
-./apps/cli/bin/a4n save-agent-config <workId> --file config-request.json
-./apps/cli/bin/a4n get-agent-file <workId> <fileId>
+.venv/bin/a4n agent-config <workId>
+.venv/bin/a4n upload-prompt <workId> --file guidance.md --request-id <UUID>
+.venv/bin/a4n upload-skill <workId> --file SKILL.md --request-id <UUID>
+.venv/bin/a4n save-agent-config <workId> --file config-request.json
+.venv/bin/a4n get-agent-file <workId> <fileId>
 ```
 
 文件≤32KiB，库≤64文件，每步≤4Skill，frontmatter和装配预算由服务端校验；CLI核对实际文件完整hash/字节数及资源归属。备份同时包含SQLite和prompts目录，不能只恢复数据库。Web配置/文件GET等待10秒、写入30秒；CLI读沿普通300秒，写30秒（显式CLI超时仍优先）；不修改生成期限。源码Step更新需新进程，编译Web更新需build和浏览器reload。
 
-对照单个节点时，先读 [Wiki 014 单节点实验](../../../docs/wiki/014-agent-cli-telemetry.md#单节点实验-run-step)，按节点补齐 upstream content。完整 monorepo 安装依赖后可直接运行，无需启动 HTTP server；worker 使用真实 provider，不创建或修改作品。
+对照单个节点时，先读 [Wiki 014 单节点实验](../../../docs/wiki/014-agent-cli-telemetry.md#单节点实验-run-step)，按节点补齐 upstream content。完整 monorepo 安装依赖后可直接运行，无需启动 HTTP server；本地 Python 进程使用真实 provider，不创建或修改作品。
 
 ```bash
-./apps/cli/bin/a4n run-step caption --seed-file seed.txt --system-prompt-file caption-sp.md
-./apps/cli/bin/a4n run-step setting --input-file setting-input.json --config-file generation.json
-./apps/cli/bin/a4n run-step prose --input-file prose-input.json --config-file generation.json
+.venv/bin/a4n run-step caption --seed-file seed.txt --system-prompt-file caption-sp.md
+.venv/bin/a4n run-step setting --input-file setting-input.json --config-file generation.json
+.venv/bin/a4n run-step prose --input-file prose-input.json --config-file generation.json
 ```
 
 需要保存一次节点的私有实际调用时，为本次运行指定一个**尚不存在**的目录；不要复用或覆盖旧目录：
 
 ```bash
-./apps/cli/bin/a4n run-step caption --seed-file seed.txt \
+.venv/bin/a4n run-step caption --seed-file seed.txt \
   --system-prompt-file caption-sp.md --record-dir .data/experiments/round-1/a
 ```
 
-记录目录是Harness的一次读取资源，固定包含 `input.json`、`invocation.json`、`result.json`、`meta.json`。先读 `meta.json`：只有 `complete:true` 且 `status:"complete"` 才能把本次结果视为完整；再按 `meta.files` 一次读齐另外三份。`input.json` 是实际输入和来源路径，`invocation.json` 是 `callLlm` 传给 Nextloop worker 的实际 system/prompt、严格的 `effectiveConfig`（model、directionCount、thinking、temperature、topP）和有效选项，`result.json` 是最终节点结果（含结构ID）或安全的 failed/unknown，`meta.json` 关联版本、运行身份、时间和完成语义。兼容字段 `sdkOptions` 当前保存 Nextloop Provider options。没有捕获的信息明确为 `null`；不能从源文件重建未发生或未捕获的调用，未传的选项也不能猜 provider 默认值。`effectiveConfig` 不包含凭据或完整配置文件。目录为0700、文件为0600；目标或任一父级是符号链接、目录已存在或路径不安全时，CLI在调用provider前拒绝。
+记录目录是Harness的一次读取资源，固定包含 `input.json`、`invocation.json`、`result.json`、`meta.json`。先读 `meta.json`：只有 `complete:true` 且 `status:"complete"` 才能把本次结果视为完整；再按 `meta.files` 一次读齐另外三份。`input.json` 是实际输入和来源路径，`invocation.json` 是 `callLlm` 传给 Nextloop 的实际 system/prompt、严格的 `effectiveConfig`（model、directionCount、thinking、temperature、topP）和有效选项，`result.json` 是最终节点结果（含结构ID）或安全的 failed/unknown，`meta.json` 关联版本、运行身份、时间和完成语义。兼容字段 `sdkOptions` 当前保存 Nextloop Provider options。没有捕获的信息明确为 `null`；不能从源文件重建未发生或未捕获的调用，未传的选项也不能猜 provider 默认值。`effectiveConfig` 不包含凭据或完整配置文件。目录为0700、文件为0600；目标或任一父级是符号链接、目录已存在或路径不安全时，CLI在调用provider前拒绝。
 
-用两个新目录做A/B：复用同一份合成输入，只替换明确的SP或选项，分别读取四文件后比较 `meta`、`invocation` 和 `result`。comment写在记录目录旁的 `comments.md`，不修改机器记录；复跑先核对 `input`/来源，再用原有 `run-step` 和新的 `--record-dir` 发起，原记录只读保留。CLI timeout/worker failure 的目录若只有部分证据，读取时按 `meta.complete:false` 和 `result.status:"unknown"` 处理，不把迟到结果冒充成功。
+用两个新目录做A/B：复用同一份合成输入，只替换明确的SP或选项，分别读取四文件后比较 `meta`、`invocation` 和 `result`。comment写在记录目录旁的 `comments.md`，不修改机器记录；复跑先核对 `input`/来源，再用原有 `run-step` 和新的 `--record-dir` 发起，原记录只读保留。CLI timeout 或本地 Step 异常的目录若只有部分证据，读取时按 `meta.complete:false` 和 `result.status:"unknown"` 处理，不把迟到结果冒充成功。
 
 Beat和Prose都要求正安全整数chapter。Beat的upstream为`{outline, setting}`，Prose为`{beat:<同章完整章纲content>, setting:<完整设定content>}`；chapter>1时两者还必须提供`upstream.previousChapter:{chapter, beat, prose}`，其中章号恰为目标减1，第一章禁止该字段。可选`regeneration`使用当前节点草稿和instructions；Prose重写草稿可为空，模型输出须完整非空。前章内容计入实际输入总预算，超限拒绝。独立输入不证明来自作品当前已通过版本；需验证生产关卡时走作品命令。边界见 [续章契约](../../../docs/schema.md#后续章6-续写契约)。
 
@@ -70,41 +70,41 @@ Beat和Prose都要求正安全整数chapter。Beat的upstream为`{outline, setti
 先用get读取已保存Prose正文，生成显式请求文件`{requestId:<UUID>,chapter,sourceArtifactId,sourceVersion,sourceHash:<完整正文SHA256>,start,end,text,note?}`；start/end是UTF-16位置，选完整Unicode。CLI不自动替换来源或基线。正文pending/approved均可；先前正文写入未知时先对账，不使用未保存的本页文字。
 
 ```bash
-./apps/cli/bin/a4n mark-bad-example <workId> --file sample.json
-./apps/cli/bin/a4n bad-examples <workId> --chapter 1
-./apps/cli/bin/a4n bad-examples <workId> --chapter 1 --after <nextCursor>
-./apps/cli/bin/a4n bad-example <workId> <requestId>
+.venv/bin/a4n mark-bad-example <workId> --file sample.json
+.venv/bin/a4n bad-examples <workId> --chapter 1
+.venv/bin/a4n bad-examples <workId> --chapter 1 --after <nextCursor>
+.venv/bin/a4n bad-example <workId> <requestId>
 ```
 
 每页50、选段最多10000字符、备注2000、请求196608字节。原请求重试返回原样本；不要为未知结果自动换UUID，不同备注需新UUID。网络/5xx/畸形或不匹配回执为unknown，先按ID GET核对，404不证明先前请求不会完成。只有显式要求时重试同一文件，不自动POST。写等待30秒、读沿普通300秒，显式CLI超时仍优先。保存后正文变化不改原快照；样本随SQLite及整目录备份恢复，无LLM分析或自动改写。协议见[Wiki008](../../../docs/wiki/008-bad-example-collection.md)。
 
 ## CLI 命令
 
-先用 `./apps/cli/bin/a4n --help` 或 `<command> --help` / `-h` 查看语法、请求形状与副作用；帮助在任何 I/O 前返回。参数错误返回安全 `usage` JSON 并非零退出：修正命令后再执行，勿把未知参数当作已生效配置。`create` / `smoke` 的 `--seed` 与 `--seed-file` 恰好选一个。独立帮助 token 优先，字面值用 `--seed=--help`；严格语法边界见 [Wiki 025](../../../docs/wiki/025-cli-command-safety.md)。
+先用 `.venv/bin/a4n --help` 或 `<command> --help` / `-h` 查看语法、请求形状与副作用；帮助在任何 I/O 前返回。参数错误返回安全 `usage` JSON 并非零退出：修正命令后再执行，勿把未知参数当作已生效配置。`create` / `smoke` 的 `--seed` 与 `--seed-file` 恰好选一个。独立帮助 token 优先，字面值用 `--seed=--help`；严格语法边界见 [Wiki 025](../../../docs/wiki/025-cli-command-safety.md)。
 
 ```bash
-./apps/cli/bin/a4n list                          # 作品列表
-./apps/cli/bin/a4n create --seed-file seed.txt --title "标题"
-./apps/cli/bin/a4n get <workId>                  # 快照:workflowState + allowedActions + 产物
-./apps/cli/bin/a4n get <workId> --kind outline   # 只取某产物(含 content)
-./apps/cli/bin/a4n advance <workId>              # 推进当前工作章到下一关卡(默认最长 1820s)
-./apps/cli/bin/a4n start-chapter <workId> --file chapter-request.json # 显式开始指定下一章
-./apps/cli/bin/a4n select <workId> [directionId] # 选定创意方向(缺省取第一个)
-./apps/cli/bin/a4n save-outline <workId> --file draft.json
-./apps/cli/bin/a4n approve-outline <workId> --file outline-approval.json # 原始可见 ID／版本
-./apps/cli/bin/a4n approve <workId> outline      # 旧兼容：通过服务器当前 head
-./apps/cli/bin/a4n get <workId> --kind setting   # 读取 pending 基线及版本
-./apps/cli/bin/a4n approve-setting <workId> --file request.json
-./apps/cli/bin/a4n get <workId> --kind beat --chapter <chapter>
-./apps/cli/bin/a4n regenerate-beat <workId> --file request.json
-./apps/cli/bin/a4n approve-beat <workId> --file request.json
-./apps/cli/bin/a4n get <workId> --kind prose --chapter <chapter>
-./apps/cli/bin/a4n save-prose <workId> --file request.json
-./apps/cli/bin/a4n regenerate-prose <workId> --file request.json
-./apps/cli/bin/a4n approve-prose <workId> --file request.json
-./apps/cli/bin/a4n config                        # 只读运行模式与公开配置
-./apps/cli/bin/a4n logs <workId> --request-id <UUID> # 请求关联诊断；也可用 --attempt-id
-./apps/cli/bin/a4n smoke --seed-file seed.txt    # 默认首章探针，不继续开始第二章
+.venv/bin/a4n list                          # 作品列表
+.venv/bin/a4n create --seed-file seed.txt --title "标题"
+.venv/bin/a4n get <workId>                  # 快照:workflowState + allowedActions + 产物
+.venv/bin/a4n get <workId> --kind outline   # 只取某产物(含 content)
+.venv/bin/a4n advance <workId>              # 推进当前工作章到下一关卡(默认最长 1820s)
+.venv/bin/a4n start-chapter <workId> --file chapter-request.json # 显式开始指定下一章
+.venv/bin/a4n select <workId> [directionId] # 选定创意方向(缺省取第一个)
+.venv/bin/a4n save-outline <workId> --file draft.json
+.venv/bin/a4n approve-outline <workId> --file outline-approval.json # 原始可见 ID／版本
+.venv/bin/a4n approve <workId> outline      # 旧兼容：通过服务器当前 head
+.venv/bin/a4n get <workId> --kind setting   # 读取 pending 基线及版本
+.venv/bin/a4n approve-setting <workId> --file request.json
+.venv/bin/a4n get <workId> --kind beat --chapter <chapter>
+.venv/bin/a4n regenerate-beat <workId> --file request.json
+.venv/bin/a4n approve-beat <workId> --file request.json
+.venv/bin/a4n get <workId> --kind prose --chapter <chapter>
+.venv/bin/a4n save-prose <workId> --file request.json
+.venv/bin/a4n regenerate-prose <workId> --file request.json
+.venv/bin/a4n approve-prose <workId> --file request.json
+.venv/bin/a4n config                        # 只读运行模式与公开配置
+.venv/bin/a4n logs <workId> --request-id <UUID> # 请求关联诊断；也可用 --attempt-id
+.venv/bin/a4n smoke --seed-file seed.txt    # 默认首章探针，不继续开始第二章
 ```
 
 `pnpm -s cli ...` 等价(必须带`-s`，否则pnpm横幅污染stdout)。server地址用`--url`或`A4N_BASE_URL`覆盖；`--timeout-ms`或CLI进程环境变量`A4N_CLI_TIMEOUT_MS`覆盖全部请求等待上限。未覆盖时普通请求300s、advance1820s、start-chapter920s、Beat/Prose通过及Prose保存30s、Beat/Prose重写920s、恢复GET10s；期限包含响应body读取。
@@ -162,7 +162,7 @@ Web首次生成遇到unknown（包括HTTP200业务结果）时保留原类型/�
 
 ```bash
 pnpm test && pnpm typecheck          # 双绿门禁
-./apps/cli/bin/a4n smoke --seed-file <素材>   # 链路探针(demo 秒回;真模型通常需要数分钟)
+.venv/bin/a4n smoke --seed-file <素材>   # 链路探针(demo 秒回;真模型通常需要数分钟)
 ```
 
 测试与 typecheck 使用 fake 或 mock provider transport，不调用真实 provider；CLI 集成会启动临时 loopback 服务。真模型耗时取决于 provider、素材与手动重试,不要把注释里的时间当成承诺。

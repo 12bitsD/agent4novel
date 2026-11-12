@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。最后更新：2026-11-12。本机 MVP 已发布；#35/PR45、#47/PR48 与 #49/PR50 已关闭/合并（本轮 GitHub 回读）。当前进入 MVP 后第二期；#12、#20、#51、#46 已合并关闭。#60 Kimi provider 已合并关闭。#21 章节重生已完成：允许历史章重生，后续章保留并只提示连续性；#21/PR62 已合并关闭。#18 冲突设计已完成：Setting 前非阻断旁路、作者 disposition 和显式上下文。#17 设定扩展已按 Loop 完成并合入 main（PR65、CI 与 issue close 已回读）；剩余两个恶意持久 JSON 篡改硬化风险见 Wiki017，不是正常 HTTP 路径。下一步是先对齐 #15 Hono RPC 技术整理；实现尚未获 Human 确认。#28/#29 与长篇质量评估保持后置。本次直接用户请求是在独立 clone 中以 Nextloop 替换六节点模型执行，未创建 ticket 或远端交付。
+> 用途：context compaction / 新会话接力。最后更新：2026-11-13。本机 MVP 已发布；#35/PR45、#47/PR48 与 #49/PR50 已关闭/合并（本轮 GitHub 回读）。当前进入 MVP 后第二期；#12、#20、#51、#46 已合并关闭。#60 Kimi provider 已合并关闭。#21 章节重生已完成：允许历史章重生，后续章保留并只提示连续性；#21/PR62 已合并关闭。#18 冲突设计已完成：Setting 前非阻断旁路、作者 disposition 和显式上下文。#17 设定扩展已按 Loop 完成并合入 main（PR65、CI 与 issue close 已回读）；剩余两个恶意持久 JSON 篡改硬化风险见 Wiki017，不是正常 HTTP 路径。下一步是先对齐 #15 Hono RPC 技术整理；实现尚未获 Human 确认。#28/#29 与长篇质量评估保持后置。本次直接用户请求已完成 Python 全后端迁移，未创建独立 ticket 或 PR；交付方式为用户授权的工作分支推送，不合并或改写 main，结果以远端回读为准。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -15,6 +15,14 @@
 2026-10-03 用户要求对外输出遵循其个人 Work Wiki 的中性精确风：事实直陈，一句表达一件事，首次解释必要术语，明确已验证与未验证范围；删除情绪、修辞和没有具体信息的过渡语。个人 Work Wiki 的输出要求与 #29 的书级设定库属于不同用途。本次应用和清点结果见 [复审记录](./wiki/001-mvp-acceptance.md#2026-10-03-清点与复审)。
 
 ## 当前里程碑与验证边界
+
+### Python 全后端迁移（2026-11-13）
+
+- 当前 API、CLI、Pipeline、SQLite 和六节点模型执行均归 `apps/backend`；生产直接调用 `nextloop==1.0.0`，不再运行 Node 后端、旧 Node CLI 或 stdio worker。前端继续使用 React 与 `packages/contracts`，Node/pnpm 只承担构建与开发进程管理。
+- 迁移保留 Artifact 身份/版本/状态、作者配置和不可变文件、逐章人工关卡、A/B、提交恢复、设定扩展、坏例、四文件实验记录及 SQLite v1–v4。最终定义见 [ADR-0005](./adr/0005-python-backend-migration.md) 与 [契约治理](./agents/contract-governance.md)。
+- 已验证本地 fake/loopback、六节点独立执行、完整首章 smoke、Python API/CLI 实际 Provider 请求、默认 Python Dockerfile 的两章与整目录恢复，以及 `pnpm dev` 双进程启动和停止。当前候选的后端 162 项、contracts 141 项、Web 218 项测试与 Ruff/Mypy/TypeScript/build 均通过；Standards、Spec、Risk 三轴已对实现候选 `6e4cae0f27c51b55631abe9511c29c0e68420927` 给出 PASS。此次仅收口交接事实，分支推送和 CI 结果以远端回读为准，不把本地测试写成 CI。`pnpm lint` 仍有两个未修改 Web 测试的未使用变量错误。
+- 真实 Provider 尚未验收，不能把本地 mock 当作真实模型质量或供应商兼容性证明。#28 工具循环、#29 Work Wiki 与长期 Memory 尚未接入，不在本次迁移中虚构完成。#15 Hono RPC 不再是最终 Web 类型边界。
+
 
 此前 #49 的范围与工程证据从 [Wiki049](./wiki/049-author-workbench.md) 进入，已随 PR50 合入。六种材料的保存差异、显式续章、原文/UTF-16、配置和坏例保护继续有效。新大纲通过绑定作者所见 ID/版本；旧通用通过命令仍读取服务端当前 head。通用任意历史全文和浏览器历史协议未新增；#21 仅新增按精确 ID/version 读取 Beat/Prose 历史版本。当前第二期的范围、顺序和非目标集中在 [第二期路线](./plans/mvp-phase2-roadmap.md)。#21 的实现、CI、远端 main 和 issue close 已完成；#18 只完成设计，不提供冲突检测代码能力；#17 已由 [PR65](https://github.com/12bitsD/agent4novel/pull/65) 合入并关闭，当前下一票为尚未获 Human 实施确认的 #15 技术整理。
 
@@ -68,16 +76,16 @@
 - **#5 继承边界**：本页编辑、整份再生、同版本通过、UUID身份与请求关联诊断继续保留；“通过并生成正文”按钮在 #22 接到 Prose，#6 将同一双关卡推广到各章，不开放已通过章纲回改。Beat与Prose契约分别见 [schema](./schema.md)。
 - **workflow 骨架 + 步骤内 agent**；Step 零感知 kind，输出 `{content}` 装整个 JSON；kind = 节点名；pipeline 管解析/组装/持久化，是深模块不是 swap seam。
 - **两个真 seam**：store（生产 SqliteStore／测试可用 InMemoryStore）、step（FakeStep / RealStep）。SQL 事务内校验目标与实际输入版本；等待 LLM 不占数据库事务，提交时重新检查。
-- **模型路由边界**：ModelRuntime 位于 RealStep 内部，不是第三个 Pipeline 注入 seam；已注册 provider 通过共享模型 ID 切换，新增 provider 需要 Nextloop Provider 配置、credential 环境变量名与 key 契约。`callLlm` 是六节点共用 seam，Python worker 不改变 Pipeline。完整 HOW 只看 [wiki 016](./wiki/016-model-runtime-provider-config.md)。
+- **模型路由边界**：ModelRuntime 位于 RealStep 内部，不是第三个 Pipeline 注入 seam；已注册 provider 通过共享模型 ID 切换，新增 provider 需要 Nextloop Provider 配置、credential 环境变量名与 key 契约。`callLlm` 是六节点共用 seam，Python 原生 Nextloop 不改变 Pipeline。完整 HOW 只看 [wiki 016](./wiki/016-model-runtime-provider-config.md)。
 - **6 节点 kind**：caption/creative/outline/setting 每作品一份；beat/prose 每作品×每章，生产复用beat/prose逐章推进；章号是正安全整数，每章独立版本。Artifact.content 的 JSON 表示由共享 kind/status schema 校验；humanStatus: pending | approved；appendArtifact版本+1。Setting／Beat／Prose专用finalize同版本原子定稿，通用setStatus均拒绝。Prose saveArtifact追加版本并保留匹配基线状态，不改变其他产物保存策略。
 - **creative 保存语义**（#3c 起，取代「人工保存即通过」）：`PUT /artifacts/creative` = saveCreativeDraft，存全部方向、永远 pending、带 `expectedHeadVersion` 乐观锁；`POST /artifacts/creative/select` = selectCreativeDirection，落**单方向**新版本 + approved。`directionId` 由 server 注入（`${workId}-dir-N`），web 永不生成、编辑不可改。
 - **pipeline（#3c）**：definition 加 `consumes`（只指前序 outputKind，启动校验唯一/禁环）；`PipelineInput = {workId, seed, upstream}`，upstream 读**最新版且必须 approved**；`advance()` 链式推进到下一个关卡（上限 = definition 长度），per-work 互斥锁（finally 释放，冲突 → 409 `advance-in-progress`），当前章返回可穷举 outcome `advanced | awaiting-approval | complete | failed(stepId, code, retryable, attemptId)`；interview 机制零残留。
 - **读模型**：`GET /works/:id` 同快照附带 `workflowState`、`nextStepId`、`allowedActions` 及 `currentChapter/chapters`；生产新增awaiting-prose-review/prose-approved。pending正文动作save-draft/approve/regenerate，approved保留save-draft；完成章数只计approved正文head。outline-approved/setting-approved/beat-approved保留给旧定义。`generating`是Web本地瞬态；按pendingGate.kind分派，Web不重建关卡状态机，历史阅读按章摘要取得动作；`start-chapter` 使用明确章号与前章基线，不依阅读选择决定推进位置。
-- **LLM 调用**：`steps/llm-call.ts` 保留六节点共用接口，内部由 `runNextloop` 经 stdio 调用 Python Nextloop worker；继续使用 zod + maxOutputTokens（outline/setting/prose 16000，其余默认8000）+ 可配置超时 + 类型化错误。advance业务失败可为HTTP200 + failed outcome，不能只按HTTP成功判断。原始素材>100K字符截断，结构化上游不静默截断；Prose实际system+prompt超过400000字符在模型前拒绝。Setting/Beat/Prose显式 maxRetries=0；Pipeline不自动重试。ModelRuntime唯一HOW见 [Wiki 016](./wiki/016-model-runtime-provider-config.md)。
-- **CLI**：`./apps/cli/bin/a4n <cmd>`（stdout纯JSON）或`pnpm -s cli`；仅select/save-outline自动回填版本。Prose支持get、save-prose、approve-prose、regenerate-prose，文件显式绑定chapter/id/version，save另带expectedHumanStatus，重写另带instructions；结果未知最多回读一次，不自动重复写入。smoke延伸至正文生成、作者全文save、同版approve、精确回读prose-approved且无第二章；不是文学质量验收。独立run-step支持任意合法章号的Beat/Prose，后续章必须提供previousChapter，不写作品；start-chapter用文件显式绑定目标章与前章正文id/version。
+- **LLM 调用**：`apps/backend/src/agent4novel/agent/runtime.py` 保留六节点共用模型执行接口，Python 进程直接调用 Nextloop；使用 Pydantic + maxOutputTokens（outline/setting/prose 16000，其余默认8000）+ 可配置超时 + 类型化错误。advance业务失败可为HTTP200 + failed outcome，不能只按HTTP成功判断。原始素材>100K字符截断，结构化上游不静默截断；Prose实际system+prompt超过400000字符在模型前拒绝。Setting/Beat/Prose显式 maxRetries=0；Pipeline不自动重试。ModelRuntime唯一HOW见 [Wiki 016](./wiki/016-model-runtime-provider-config.md)。
+- **CLI**：`.venv/bin/a4n <cmd>`（stdout纯JSON）或`pnpm -s cli`；仅select/save-outline自动回填版本。Prose支持get、save-prose、approve-prose、regenerate-prose，文件显式绑定chapter/id/version，save另带expectedHumanStatus，重写另带instructions；结果未知最多回读一次，不自动重复写入。smoke延伸至正文生成、作者全文save、同版approve、精确回读prose-approved且无第二章；不是文学质量验收。独立run-step支持任意合法章号的Beat/Prose，后续章必须提供previousChapter，不写作品；start-chapter用文件显式绑定目标章与前章正文id/version。
 - **错误**：HTTP 统一 `{code, retryable, attemptId?, message, issues?}`；Setting 字段错误 issues 只含 path/code/message。合法且匹配命令的拒绝包才证明写前拒绝；传输/5xx/畸形响应（包括畸形 4xx）可能已写入，必须按对应恢复契约冻结请求并回读。
 - **Web 视觉演进**：#3c 的多巴胺点缀和预留亮暗主题是原视觉基线。#35 已交付黑白灰层次和显式主题选择，原设计与冻结审核保留在 [Wiki035](./wiki/035-frontend-design.md)；#47 的阅读比例与响应布局从 [Wiki047](./wiki/047-reading-layout-refinement.md) 读取，不把设计稿或前序验收当作本票实际产品验证。`styles.css` 继续作为全局样式入口，内联颜色使用 `var(--*)`。创意方向与保存、选定、版本保护等行为沿用既有模块。
-- 栈：pnpm workspaces + TS E2E、Vite+React(5173 /api proxy)、Hono(8787)、zod、Vitest、tsx；`apps/agent-loop` 以 Python 3.11 + `nextloop==1.0.0` 执行六节点模型调用，Node 继续承担应用与持久化。Setting 使用 mdast-util-from-markdown + 自有允许列表 React renderer；测试计数与最终命令证据只记本票 Wiki。
+- 栈：FastAPI + Pydantic + Python sqlite3（8787）、React + Vite（5173）、Python CLI、`nextloop==1.0.0`；`apps/backend` 统一承担 API、Pipeline、CLI、SQLite 与六节点模型调用。前端 contracts/Zod 仅用于 Web 校验，Node/pnpm 只承担前端构建和开发进程管理。Setting 使用 mdast-util-from-markdown + 自有允许列表 React renderer；测试计数与最终命令证据只记当前候选。
 
 ## 词汇红线（CONTEXT.md 单源）
 
@@ -95,7 +103,7 @@
 - contracts `export *` 双文件同名导出会被静默排除（inputStages 迁入 caption.ts 时踩过）→ 迁移期用显式 re-export。
 - AI SDK 错误按 `err.name` 分类：NoObjectGeneratedError → 模型输出非法；TimeoutError/AbortError → 超时。**v7 真机实测错误名带 `AI_` 前缀**（`AI_NoObjectGeneratedError`)，匹配要用 `includes`。
 - **outline 在 v4-flash 的失败有两种模式**（#14 遥测实证）：截断（finishReason=length 撞 8000 上限 → 已修 16000）与 schema 偏差（finishReason=stop 但不过校验，当时保留 causeMessage 辅助诊断；#5 已改为安全分类，不再输出原始错误）。修截断要同时收 prompt 篇幅（SKILL.md 纪律），否则拿质量换稳定。
-- **pnpm run 横幅污染 stdout**（`> pkg script …` 两行）：Agent 管道消费会炸 JSON 解析。要么 `./apps/cli/bin/a4n` 直跑，要么 `pnpm -s cli`。
+- **pnpm run 横幅污染 stdout**（`> pkg script …` 两行）：Agent 管道消费会炸 JSON 解析。要么 `.venv/bin/a4n` 直跑，要么 `pnpm -s cli`。
 - heredoc/perl 里带反引号的模板字符串会被 shell 吃掉——改代码用 Edit 工具，别用 perl -pi。
 
 ## 遗留 / 已知限制
@@ -135,7 +143,7 @@ CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化
 | #21 章节重生（已交付） | 历史章两阶段 beat/prose 重生；旧版本和后续章节保留；精确历史 GET 与连续性提示 | PR62 已合并关闭；TDD、双轴 review、CI 和远端完成评论见 [Wiki021](./wiki/021-chapter-regeneration.md) |
 | #18 冲突检测与作者澄清（设计已交付） | Setting 前非阻断 review note、作者 disposition、stale 和显式上下文 | 设计契约已固定；后续实现另行立票；不阻断 Setting、不增加 canonical Setting 字段 |
 | #17 设定演进（已交付） | append-only 扩展提案、原子审批、影响提示、版本输入引用与 SQLite v4 | PR65 已合并关闭；三轮 Loop、双轴 review、quality/container CI、远端 main 回读和完成评论见 [Wiki017](./wiki/017-setting-evolution.md)；不支持既有事实编辑/撤销/回退 |
-| #15 Hono RPC 技术整理（待 Human 确认） | Web 通过 `hc<AppType>` 消除手写 DTO 漂移，REST 语义不变 | 受保护 Eval r0.2 已独立校准 PASS；实现前需 Human 确认，避免把技术整理扩成行为变化 |
+| #15 Hono RPC 技术整理（由 ADR-0005 取代） | 不再作为最终 Web 类型边界；前端继续 Zod，Python 提供 Pydantic/OpenAPI 与 golden fixtures | 不再按原 Hono RPC 路线实施；不影响既有 REST 语义 |
 | #28/#29 扩展（第三期） | 设定查询工具循环、作品 Wiki 档案演进 | 当前均未实现，保持后置 |
 
 WHAT/AC 和依赖以 [父票 #1](https://github.com/12bitsD/agent4novel/issues/1) 及子票为准；[研究与决定清单](./research/mvp-delivery-options.md) 保存取舍。#33 的 SQLite 恢复 AC 原生依赖 #9；不为纯排期增加其他硬依赖。不迁移或清空旧内存实例；切换且内有重要作品时先保全。配置的实现和验收见Wiki007；坏例已交付见Wiki008，整体验收见Wiki001。SQLite、容器、配置、坏例分别以本票Wiki与远端状态为准。

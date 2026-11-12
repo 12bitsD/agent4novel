@@ -53,19 +53,19 @@ Stop with `docker compose stop`. Check health with `docker compose ps` and start
 
 <a id="start-demo-mode-from-source"></a>
 
-Use the project's pinned **Node.js 24.19.0 and pnpm 12.5.1**, plus **Python 3.11 or newer** for the Nextloop worker. These commands are for macOS and Linux; if you already have the source, enter its directory directly:
+Use the project's pinned **Node.js 24.19.0 and pnpm 12.5.1** for frontend builds and development process management, plus **Python 3.11 or newer** for the backend, CLI and Nextloop. These commands are for macOS and Linux; if you already have the source, enter its directory directly:
 
 ```bash
 git clone https://github.com/12bitsD/agent4novel.git
 cd agent4novel
 python3.11 -m venv .venv
-.venv/bin/python -m pip install -r apps/agent-loop/requirements.lock
-.venv/bin/python -m pip install -e 'apps/agent-loop[dev]'
+.venv/bin/python -m pip install -r apps/backend/requirements.lock
+.venv/bin/python -m pip install -e 'apps/backend[dev]'
 pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Leave the terminal running and open **[localhost:5173](http://localhost:5173)**. The initial bookcase is empty; create a work to begin. To prepopulate samples, start with `A4N_SEED_DEMO=1 pnpm dev`; only an empty bookcase is populated. Live-model startup checks the Python and Nextloop runtime. Demo mode without keys still uses built-in examples and makes no model calls.
+Leave the terminal running and open **[localhost:5173](http://localhost:5173)**. The initial bookcase is empty; create a work to begin. To prepopulate samples, start with `A4N_SEED_DEMO=1 pnpm dev`; only an empty bookcase is populated. The backend calls Nextloop directly in the Python process, with no stdio worker. Startup or generation validates the corresponding configuration; demo mode without keys still uses built-in examples and makes no model calls.
 
 CLI entry: `pnpm cli --help`. See [CLI documentation](./docs/wiki/014-agent-cli-telemetry.md) for work operations, isolated node tests and diagnostics.
 
@@ -74,7 +74,7 @@ CLI entry: `pnpm cli --help`. See [CLI documentation](./docs/wiki/014-agent-cli-
 When an agent needs the real input and output of one isolated node, pass `run-step` a new private directory:
 
 ```bash
-./apps/cli/bin/a4n run-step caption --seed-file seed.txt \
+.venv/bin/a4n run-step caption --seed-file seed.txt \
   --system-prompt-file caption-sp.md --record-dir .data/experiments/round-1/a
 ```
 

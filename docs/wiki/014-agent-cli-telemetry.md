@@ -5,12 +5,12 @@ ticket_state: done
 context_state: mixed
 summary: "JSON CLI 驱动作品链路或独立运行六个生产 Step；返回校验后的 content 与安全遥测，支持自定义 SP。"
 topics: ["agent-cli", "isolated-step", "system-prompt", "llm-telemetry", "workflow-smoke", "optimistic-locking", "failure-diagnostics"]
-code_paths: ["apps/cli/src/client.ts", "apps/cli/src/commands.ts", "apps/cli/src/main.ts", "apps/cli/src/local-step.ts", "apps/server/src/step-lab-main.ts", "apps/server/src/steps/isolated-runner.ts", "packages/contracts/src/step-experiment.ts", "packages/contracts/src/telemetry.ts", "apps/server/src/steps/llm-call.ts", ".claude/skills/agent4novel-drive/SKILL.md"]
-symbols: ["createClient", "CliError", "run-step", "runLocalStep", "runIsolatedStep", "stepExperimentRequestSchema", "smoke", "LlmTelemetry", "recordTelemetry", "telemetryFor", "callLlm"]
+code_paths: ["apps/backend/src/agent4novel/cli.py", "apps/backend/src/agent4novel/cli_http.py", "apps/backend/src/agent4novel/cli_special.py", "apps/backend/src/agent4novel/agent/isolated.py", "apps/backend/src/agent4novel/agent/recording.py", "apps/backend/src/agent4novel/agent/runtime.py", "apps/backend/src/agent4novel/services/submissions.py", "packages/contracts/src/step-experiment.ts", "packages/contracts/src/telemetry.ts", ".claude/skills/agent4novel-drive/SKILL.md"]
+symbols: ["HttpClient", "CliError", "run-step", "run_isolated_step", "StepExperimentRequest", "recover_submission", "smoke", "LlmTelemetry", "TelemetryBuffer", "callLlm"]
 inherits: ["004", "011"]
 changed_by: ["016", "013", "005", "025", "022", "006", "051"]
 read_when: ["drive-workflow-from-cli", "run-isolated-step", "compare-system-prompts", "debug-llm-failure", "change-cli-command", "change-telemetry", "run-end-to-end-smoke"]
-last_context_reviewed: "2026-09-29"
+last_context_reviewed: "2026-11-13"
 ---
 
 # 014 — Agent 可用性基建：CLI + 遥测内联 + 项目级 Skill
@@ -24,7 +24,8 @@ last_context_reviewed: "2026-09-29"
 - **后续变化**：[Wiki 016](./016-model-runtime-provider-config.md) 接管模型配置与 timeout 默认值；[Wiki 013](./013-setting-generation-review.md) 拥有 Setting 完整显式版本请求与结果对账规则，不沿用 Outline 自动补版本。
   [Wiki 005](./005-beat-generation-review.md) 增加按章命令、请求关联与写入结果，移除共享原始错误内容传播；Beat 恢复语义以该页为准。[Wiki 022](./022-prose-generation-review.md) 接管 Prose 专用请求、状态保留保存与未知提交恢复；旧五步 smoke 终点及五节点测试不代表当前完整范围。[Wiki 006](./006-chapter-continuation.md) 接管明确目标章的开始命令、前章输入和多章验证边界。
 - **入口语法变化**：[Wiki 025](./025-cli-command-safety.md) 将子命令帮助和严格语法校验前置到任何 I/O；本文的业务结果、遥测和单节点语义保持不变。
-- **代码入口**：[CLI commands](../../apps/cli/src/commands.ts)、[local-step](../../apps/cli/src/local-step.ts)、[isolated-runner](../../apps/server/src/steps/isolated-runner.ts)、[telemetry ledger](../../apps/server/src/steps/telemetry.ts)、[LLM call](../../apps/server/src/steps/llm-call.ts)、[drive skill](../../.claude/skills/agent4novel-drive/SKILL.md)。
+- **代码入口**：当前生产实现为 [Python CLI](../../apps/backend/src/agent4novel/cli.py)、[HTTP 客户端](../../apps/backend/src/agent4novel/cli_http.py)、[独立六节点](../../apps/backend/src/agent4novel/agent/isolated.py)、[提交恢复](../../apps/backend/src/agent4novel/services/submissions.py) 和 [模型运行时](../../apps/backend/src/agent4novel/agent/runtime.py)；[drive skill](../../.claude/skills/agent4novel-drive/SKILL.md)。旧 TypeScript 文件路径只用于历史设计追溯。
+- **当前实现**：2026-11-13 起 CLI、六节点独立执行、smoke、恢复规则和四文件记录均由 Python 直接实现，不再启动 Node 或 stdio worker。CLI 可执行文件为 `.venv/bin/a4n`，参数、JSON 输出、unknown 恢复和私有目录约束保持原契约。
 
 ## 设计目的
 
@@ -125,7 +126,7 @@ server stdout 的 llm.error 只含安全分类、长度、tokens、finishReason�
 | llm-timeout | provider 单次调用超时 | 按 retryable 手动 advance，并检查 wiki 016 的 timeout |
 | network-error | CLI 请求先结束或 server 不可达 | 区分 CLI timeout 与 server LLM timeout |
 
-当前模型执行由 Nextloop worker 返回安全错误分类，再由 `callLlm` 映射为既有 llm-invalid-output、llm-timeout 或 llm-unavailable。旧 AI SDK 的 NoObjectGeneratedError 名称包含判断仅保留作兼容防护，不再是生产 Provider 的来源。
+当前模型执行由 Nextloop worker 返回安全错误分类，再由 `callLlm` 映射为既有 llm-invalid-output、llm-timeout 或 llm-unavailable；已知上下文长度错误只返回 `context-limit` 分类，不携带原始响应。生产错误类型收敛为 `NextloopError`、`KnownError` 与 Zod，不再保留 AI SDK 异常名兼容分支。
 
 ### Smoke 探针
 
@@ -176,6 +177,14 @@ CLI 测试以注入 fetch 覆盖 REST 映射、自动回填版本、首方向缺
 - provider、credential、Base URL、wire protocol 和 timeout 默认值归 wiki 016。
 
 ## 上下文演进
+
+### 2026-11-12 — 清理旧 AI SDK 异常兼容
+
+- **触发证据**：Nextloop 迁移后仍有 AI SDK 异常名、`languageModel` 命名和虚构 transport 测试；同时 Wiki 005 要求保留 `context-limit` 安全分类。
+- **原假设**：删除全部旧错误分类即可完成清理。
+- **决定**：生产错误处理只保留 `NextloopError`、`KnownError` 和 Zod；`languageModel` 更名 `providerConfig`，旧异常测试改为真实类型。上下文长度错误由 worker 内部识别，仅返回 `context-limit`，不返回原始响应。
+- **影响**：减少无用兼容分支和重复虚构测试，保留公开错误码、遥测、CLI/API、invocation 文件格式和有效集成覆盖；全量 1102 项测试通过。
+- **上下文处理**：preserve 当前错误分类与历史验证记录；replace 现行实现和测试入口，不改写旧 AI SDK 研究。
 
 ### 2026-11-12 — 模型执行切换到 Nextloop
 

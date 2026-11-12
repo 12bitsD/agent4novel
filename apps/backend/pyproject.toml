@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent4novel-backend"
+version = "0.0.0"
+description = "Python backend for agent4novel"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi==0.162.5",
+  "httpx==0.28.1",
+  "nextloop==1.0.0",
+  "pydantic==2.14.3",
+  "pyyaml==6.0.3",
+  "uvicorn==0.54.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.13,<2",
+  "pytest>=8,<10",
+  "pytest-asyncio>=0.24,<2",
+  "ruff>=0.8,<1",
+  "types-jsonschema>=4.23,<5",
+  "types-pyyaml>=6.0.12,<7",
+]
+
+[project.scripts]
+a4n = "agent4novel.cli:main"
+a4n-api = "agent4novel.main:run"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+agent4novel = ["skills/**/*.md"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["agent4novel"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "SIM"]
