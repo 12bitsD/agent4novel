@@ -5,12 +5,12 @@ ticket_state: done
 context_state: mixed
 summary: "ModelRuntime 统一模型、凭据、结构化输出和超时；支持 DeepSeek、LongCat 与 Kimi。"
 topics: ["model-runtime", "provider-config", "generation-parameters", "thinking", "credentials", "base-url-security", "structured-output", "llm-timeouts"]
-code_paths: ["apps/server/src/index.ts", "apps/server/src/steps/llm.ts", "apps/server/src/steps/llm-call.ts", "apps/server/src/config/local-env.ts", "apps/server/src/start.ts", "apps/server/src/step-lab-main.ts", "apps/cli/src/local-step.ts", "packages/contracts/src/model.ts", "packages/contracts/src/step.ts", "packages/contracts/src/author-config.ts", "apps/cli/src/client.ts", ".env.example", "compose.yaml"]
-symbols: ["ModelRuntime", "SupportedModelId", "modelIdSchema", "providerForModel", "ModelConfigError", "createModelRuntime", "modelRuntime", "DEFAULT_KIMI_MODEL_ID", "DEFAULT_KIMI_BASE_URL", "generationSettings", "generationParametersSchema", "callLlm", "run-step", "DEFAULT_CLI_TIMEOUT_MS", "DEFAULT_ADVANCE_TIMEOUT_MS", "A4N_LLM_TIMEOUT_MS", "A4N_CLI_TIMEOUT_MS", "llm-timeout"]
+code_paths: ["apps/server/src/index.ts", "apps/server/src/steps/llm.ts", "apps/server/src/steps/llm-call.ts", "apps/server/src/steps/nextloop-client.ts", "apps/server/src/steps/nextloop-error.ts", "apps/agent-loop/**", "apps/server/src/config/local-env.ts", "apps/server/src/start.ts", "apps/server/src/step-lab-main.ts", "apps/cli/src/local-step.ts", "packages/contracts/src/model.ts", "packages/contracts/src/step.ts", "packages/contracts/src/author-config.ts", "apps/cli/src/client.ts", ".env.example", "compose.yaml", "Dockerfile"]
+symbols: ["ModelRuntime", "SupportedModelId", "modelIdSchema", "providerForModel", "ModelConfigError", "createModelRuntime", "modelRuntime", "DEFAULT_KIMI_MODEL_ID", "DEFAULT_KIMI_BASE_URL", "generationSettings", "generationParametersSchema", "callLlm", "runNextloop", "NextloopError", "run-step", "DEFAULT_CLI_TIMEOUT_MS", "DEFAULT_ADVANCE_TIMEOUT_MS", "A4N_LLM_TIMEOUT_MS", "A4N_CLI_TIMEOUT_MS", "A4N_NEXTLOOP_PYTHON", "llm-timeout"]
 inherits: ["014"]
 changed_by: ["013", "005", "033", "007", "060"]
 read_when: ["configure-model-provider", "configure-generation-parameters", "run-isolated-step", "add-model-provider", "debug-llm-runtime", "change-llm-timeout", "audit-credential-safety"]
-last_context_reviewed: "2026-10-20"
+last_context_reviewed: "2026-11-12"
 ---
 
 # 016 — 模型运行配置：统一多 Provider、凭据与超时
@@ -19,10 +19,10 @@ last_context_reviewed: "2026-10-20"
 
 - **读取时机**：配置或新增 provider、切换模型、调整 thinking/temperature/topP、运行独立节点、修改凭据/Base URL、排查结构化输出或 timeout 时读取。
 - **原始目的**：把散落且 DeepSeek-only 的运行时选择收敛到 ModelRuntime，使 Pipeline 与 RealStep 无需感知 provider。
-- **实际落地**：DeepSeek、LongCat 2.0 与 Kimi 共用 registry；源码server入口安全加载`.env.local`，编译/容器入口只接收运行期环境；共同校验 URL、模型、credential、单次 LLM timeout 和本地 Zod。generationSettings 统一生产与独立节点的生成参数；LongCat 默认 disabled/0.9/0.95，Kimi 使用 `kimi:kimi-k2.8-highspeed` 测试模型，既有接回验证状态见“测试与验证”。
+- **实际落地**：DeepSeek、LongCat 2.0 与 Kimi 共用 Nextloop Provider 配置；源码server入口安全加载`.env.local`，编译/容器入口只接收运行期环境；共同校验 URL、模型、credential、Nextloop Turn deadline 和本地 Zod。generationSettings 统一生产与独立节点的生成参数；LongCat 默认 disabled/0.9/0.95，Kimi 使用 `kimi:kimi-k2.8-highspeed` 测试模型。2026-11-12 起 `callLlm` 通过 Python 3.11 + `nextloop==1.0.0` 执行六节点模型调用，现有验证见“测试与验证”。
 - **当前价值**：本文是 provider 配置、运行时行为、错误语义与验证状态的当前唯一 HOW。
-- **后续变化**：CLI／telemetry／smoke 仍由 [Wiki 014](./014-agent-cli-telemetry.md) 拥有；[Wiki 013](./013-setting-generation-review.md) 新增 Setting，显式禁用该步骤的 SDK 重试并记录新实测。[Wiki 005](./005-beat-generation-review.md) 增加 Beat 独立预算、零 SDK 重试和共享安全错误分类。[Wiki 033](./033-local-docker-ci.md)持有本机容器启动与卷操作，模型HOW仍由本文维护。[Wiki007](./007-author-agent-config.md)持有作品可编辑配置、文件与操作快照，旧Work.config仅兼容来源；#60 增加 Kimi OpenAI-compatible provider，测试默认模型为 `kimi:kimi-k2.8-highspeed`；本文work ID均为历史进程快照，不代表当前仍存活。
-- **代码入口**：[ModelRuntime](../../apps/server/src/steps/llm.ts)、[LLM call](../../apps/server/src/steps/llm-call.ts)、[author config contract](../../packages/contracts/src/author-config.ts)、[generation schema](../../packages/contracts/src/step.ts)、[local env loader](../../apps/server/src/config/local-env.ts)、[独立 worker](../../apps/server/src/step-lab-main.ts)、[CLI timeout](../../apps/cli/src/client.ts)。
+- **后续变化**：CLI／telemetry／smoke 仍由 [Wiki 014](./014-agent-cli-telemetry.md) 拥有；[Wiki 013](./013-setting-generation-review.md) 新增 Setting，显式禁用 Provider 重试并记录新实测。[Wiki 005](./005-beat-generation-review.md) 增加 Beat 独立预算、零 Provider 重试和共享安全错误分类。[Wiki 033](./033-local-docker-ci.md)持有本机容器启动与卷操作，模型HOW仍由本文维护。[Wiki007](./007-author-agent-config.md)持有作品可编辑配置、文件与操作快照，旧Work.config仅兼容来源；#60 增加 Kimi OpenAI-compatible provider，测试默认模型为 `kimi:kimi-k2.8-highspeed`；ADR-0004 将模型执行切换为 Nextloop；本文work ID均为历史进程快照，不代表当前仍存活。
+- **代码入口**：[ModelRuntime](../../apps/server/src/steps/llm.ts)、[LLM call](../../apps/server/src/steps/llm-call.ts)、[Nextloop stdio client](../../apps/server/src/steps/nextloop-client.ts)、[Python worker](../../apps/agent-loop/src/agent4novel_nextloop/worker.py)、[author config contract](../../packages/contracts/src/author-config.ts)、[generation schema](../../packages/contracts/src/step.ts)、[local env loader](../../apps/server/src/config/local-env.ts)、[独立 worker](../../apps/server/src/step-lab-main.ts)、[CLI timeout](../../apps/cli/src/client.ts)。
 
 ## 设计目的
 
@@ -40,7 +40,7 @@ last_context_reviewed: "2026-10-20"
 
 ### 模块边界
 
-shell/CI 与 server 入口加载的 .env.local 进入 ModelRuntime，再由 registry 选择 DeepSeek、LongCat 或 Kimi；Work.config.model 可做内部覆盖。入口先 loadLocalEnv 再动态 import，测试直接 import 不加载本地文件；Node 不覆盖已有环境变量，所以 shell/CI 优先。callLlm 统一处理 generateObject、生成参数、AbortSignal、本地 Zod 与脱敏 telemetry，start.ts 按 mode 装配 RealStep 或 FakeStep。run-step 使用 server 包的独立 worker 加载配置和生产 Step，不依赖常驻 HTTP server；调用方式见 [Wiki 014](./014-agent-cli-telemetry.md#单节点实验-run-step)。
+shell/CI 与 server 入口加载的 .env.local 进入 ModelRuntime，再选择 DeepSeek、LongCat 或 Kimi 的 Nextloop Provider 配置；Work.config.model 可做内部覆盖。入口先 loadLocalEnv 再动态 import，测试直接 import 不加载本地文件；Node 不覆盖已有环境变量，所以 shell/CI 优先。callLlm 统一处理 Nextloop 请求、生成参数、Turn deadline、本地 Zod 与脱敏 telemetry，start.ts 按 mode 装配 RealStep 或 FakeStep，并在 live 启动时检查 Python 3.11 与 `nextloop==1.0.0`。run-step 使用 server 包的独立 Node worker 加载配置和生产 Step，再由 Python worker 执行模型调用，不依赖常驻 HTTP server；调用方式见 [Wiki 014](./014-agent-cli-telemetry.md#单节点实验-run-step)。
 
 ### 配置契约
 
@@ -53,7 +53,8 @@ shell/CI 与 server 入口加载的 .env.local 进入 ModelRuntime，再由 regi
 | LONGCAT_BASE_URL | LongCat OpenAI-compatible base | https://api.longcat.chat/openai/v1 |
 | KIMI_API_KEY | Kimi Bearer credential | 仅 server |
 | KIMI_BASE_URL | Kimi OpenAI-compatible base | https://api.moonshot.cn/v1 |
-| A4N_LLM_TIMEOUT_MS | server 单次 provider 调用上限 | 代码默认 120000；整数 1000..900000；.env.example 为 LongCat 建议值 300000 |
+| A4N_LLM_TIMEOUT_MS | server 单次 Nextloop Turn 上限 | 代码默认 120000；整数 1000..900000；.env.example 为 LongCat 建议值 300000 |
+| A4N_NEXTLOOP_PYTHON | Python Nextloop worker 解释器 | 默认依次寻找仓库/ server 上两级 `.venv/bin/python`；Docker 固定 `/opt/agent-loop/bin/python`；live 启动要求 Python 3.11+ 与 nextloop 1.0.0 |
 | A4N_BASE_URL | CLI 到 agent4novel server 的地址 | 默认 http://localhost:8787；不是 provider URL |
 | A4N_CLI_TIMEOUT_MS | CLI HTTP 请求或独立 worker 总等待上限的全局覆盖 | 未覆盖时普通 300000、advance 1820000、Beat 通过 30000／再生 920000／恢复 GET 10000、run-step 920000；整数 1000..3600000；--timeout-ms 优先 |
 
@@ -102,7 +103,7 @@ shell/CI 与 server 入口加载的 .env.local 进入 ModelRuntime，再由 regi
 
 run-step 的参数按“显式 flag → config-file 对应字段 → 所选模型的运行时默认值”逐字段取值。flag 不清空文件中其他字段；文件会先校验，因此 `temperature: 2` 不能靠后续 `--temperature 0.9` 掩盖。配置文件只接受上表字段，SP 使用独立的 `--system-prompt-file`。`--thinking` 用 on/off，JSON 用 enabled/disabled，不能混写。
 
-当前接口明确拒绝 `--top-k`，config-file 中的 topK、top_k 和其他未知字段也会失败；不会悄悄忽略或将其转换为 topP。参数通过 generateObject options 传给 adapter，telemetry.generation 只保留实际解析出的公开值，不包含 reasoning 内容。未在配置/模型解析前开始调用的失败不保证带 generation 或 telemetry。
+当前接口明确拒绝 `--top-k`，config-file 中的 topK、top_k 和其他未知字段也会失败；不会悄悄忽略或将其转换为 topP。参数经 `runNextloop` 转为 Nextloop Provider default_parameters，telemetry.generation 只保留实际解析出的公开值，不包含 reasoning 内容。未在配置/模型解析前开始调用的失败不保证带 generation 或 telemetry。
 
 原#16只通过内部AgentConfig覆盖；#7已扩展为独立作者配置revision、UI/API及操作快照，参数有效性仍由ModelRuntime保证。run-step 可用 config-file 选择模型和参数，但不保存 Work.config。它要求真实模型配置，缺 key 时失败，不切到 demo 或其他 provider；模型选择仍需符合本页 credential 与 Base URL 边界。
 
@@ -118,19 +119,19 @@ live 模式会把生成所需的 prompt、作品素材和上游产物发送给�
 
 | Provider | Adapter | 当前 wire API | 正确性边界 |
 |---|---|---|---|
-| DeepSeek | @ai-sdk/deepseek | Chat Completions | adapter 能力加本地 Zod |
-| LongCat 2.0 | @ai-sdk/openai-compatible | /chat/completions | json_object 响应模式加本地 Zod |
-| Kimi | @ai-sdk/openai-compatible | /chat/completions | json_object 响应模式加本地 Zod；wire model 为 `kimi-k2.8-highspeed` |
+| DeepSeek | Nextloop OpenAIProvider | Chat Completions | json_object 响应模式加本地 Zod |
+| LongCat 2.0 | Nextloop OpenAIProvider | /chat/completions | json_object 响应模式加本地 Zod |
+| Kimi | Nextloop OpenAIProvider | /chat/completions | json_object 响应模式加本地 Zod；wire model 为 `kimi-k2.8-highspeed` |
 
-LongCat 公共 Chat 文档未承诺 json_schema。其 provider 配置因此设置 supportsStructuredOutputs=false，让 AI SDK 发送 response_format type=json_object；最终正确性由生产 Step 的 Zod schema 判断。
+LongCat 公共 Chat 文档未承诺 json_schema。Node 把既有生成参数交给 Nextloop worker，统一发送 response_format type=json_object；最终正确性仍由生产 Step 的 Zod schema 判断。
 
-所有 RealStep 仍调用 generateObject。可解析 JSON 但 schema 不符，或截断后无法形成对象，都映射为可重试的 llm-invalid-output。
+所有 RealStep 仍经过 `callLlm`，其内部改由 `runNextloop` 调用 Python worker。可解析 JSON 但 schema 不符，或截断后无法形成对象，都映射为可重试的 llm-invalid-output。
 
-LongCat 的官方材料另有 Responses 支持信息，但当前 @ai-sdk/openai-compatible adapter 与本实现没有接入 Responses API。不能把 Chat Completions 的验证外推成 OpenAI 全协议兼容。
+LongCat 的官方材料另有 Responses 支持信息，但当前 Nextloop OpenAIProvider 与本实现没有接入 Responses API。不能把 Chat Completions 的验证外推成 OpenAI 全协议兼容。
 
 ### 两层 timeout 与重试
 
-A4N_LLM_TIMEOUT_MS 控制一次 generateObject；A4N_CLI_TIMEOUT_MS 或 --timeout-ms 统一覆盖 CLI 等待 server HTTP 请求的上限。没有显式覆盖时，普通请求保持 300000ms；一次 advance 可能串行执行多个自动通过步骤，所以它单独按 2 × 900000 加 20000 返回余量设置为 1820000ms。Beat 命令的默认完整期限为通过 30000ms、再生 920000ms，恢复 GET 10000ms；显式全局 CLI 覆盖仍优先。server 与 CLI timeout 不能混用。
+A4N_LLM_TIMEOUT_MS 控制一次 Nextloop Turn；A4N_CLI_TIMEOUT_MS 或 --timeout-ms 统一覆盖 CLI 等待 server HTTP 请求的上限。没有显式覆盖时，普通请求保持 300000ms；一次 advance 可能串行执行多个自动通过步骤，所以它单独按 2 × 900000 加 20000 返回余量设置为 1820000ms。Beat 命令的默认完整期限为通过 30000ms、再生 920000ms，恢复 GET 10000ms；显式全局 CLI 覆盖仍优先。server 与 CLI timeout 不能混用。
 
 run-step 默认给独立 worker 总计 920000ms，覆盖进程启动、模型调用与结果读取；`--timeout-ms` 优先于 CLI 父进程的 A4N_CLI_TIMEOUT_MS。单次 LLM 仍受 A4N_LLM_TIMEOUT_MS 限制。CLI deadline 到期会结束 worker 并返回 network-error；远程 provider 可能仍在处理请求，不能据此推断远端已取消或自动重跑。
 
@@ -141,7 +142,7 @@ Pipeline 不做 provider 自动重试，也不做跨 provider failover：
 - 已完成且已落库的上游 Step 不重跑。
 - POST /advance 可能 HTTP 200 但 JSON kind=failed；只看 exit code 会漏报失败。
 
-这不等于 SDK 内部请求重试为零。#13 核对已安装 SDK 后发现其默认重试次数为 2；Setting 与 Beat 显式传 maxRetries=0，其他步骤保留 SDK 默认值。一次 generateObject 的总等待仍受本页 LLM timeout 限制；具体证据与 Setting 验证见 Wiki 013。
+这不等于 Nextloop 内部 Provider 重试为零。`callLlm` 未传 maxRetries 时 worker 使用最多 3 次 Provider 尝试，对应原默认 1 次首调加 2 次重试；显式 maxRetries=0 时最多 1 次。Setting、Beat、Prose继续显式禁止重试。一次 Nextloop Turn 的总等待仍受本页 LLM timeout 限制；具体证据与 Setting 验证见 Wiki 013。
 
 ## 代码落点
 
@@ -158,7 +159,9 @@ Pipeline 不做 provider 自动重试，也不做跨 provider failover：
 
 ### 自动化边界
 
-ModelRuntime 测试以合成 key 与 fake fetch 覆盖选择、缺 key、非法 ID、URL 安全和 timeout；LongCat 与 Kimi transport 断言 Bearer、精确模型 ID、/chat/completions 与 json_object。Step 测试通过 languageModel seam 覆盖作品 override、成功、timeout 和非法输出；CLI 测试覆盖 REST、乐观锁、smoke、logs 与独立 timeout。#60 的通用 server/contracts/CLI/Web fixture 使用 `kimi:kimi-k2.8-highspeed`，LongCat/DeepSeek 专用测试仅保护既有 adapter 和 thinking 语义。
+ModelRuntime 测试以合成 key 覆盖选择、缺 key、非法 ID、URL 安全和 timeout；[nextloop-client.test.ts](../../apps/server/test/nextloop-client.test.ts) 经真实 Node → Python → Nextloop → loopback SSE 验证 Bearer、精确模型 ID、/chat/completions、json_object、生成参数、usage、Provider 失败脱敏和 timeout。Python worker 测试另覆盖真实 AgentLoop、重试预算、截断和 stdio 协议。Step 测试通过 `runNextloop` seam 覆盖作品 override、成功、timeout 和非法输出；CLI 测试覆盖 REST、乐观锁、smoke、logs 与独立 timeout。#60 的通用 server/contracts/CLI/Web fixture 使用 `kimi:kimi-k2.8-highspeed`，LongCat/DeepSeek 专用测试仅保护既有 Provider 配置和 thinking 语义。所有这些都是本地协议与集成证据，不是三家真实供应商验收或生成质量结论。
+
+2026-11-12 本次候选 `pnpm test` 共 1101 项通过（Python 9、contracts 141、CLI 243、server 490、Web 218），`pnpm typecheck` 与 `pnpm build` 通过。`node scripts/production-smoke.mjs` 验证编译后 live Node → Python → Nextloop → mock SSE；`node scripts/container-smoke.mjs` 验证镜像、无密钥两章和卷恢复，另有容器内 live Node server → Python worker → mock SSE 通过。`git diff --check HEAD`、Wiki/链接、敏感信息扫描及本次变更文件 ESLint 通过。根 `pnpm lint` 仍有两个未改动 Web 测试的旧 unused-variable 错误：`OutlineReview.version.test.tsx` 的 `init`、`Workspace.beat-compare.eval.test.tsx` 的 `actions`，本次不把它们记为 lint PASS。
 
 2026-09-13 接回的 [llm.test.ts](../../apps/server/test/llm.test.ts)、[isolated-runner.test.ts](../../apps/server/test/isolated-runner.test.ts)、[step-transport.test.ts](../../apps/cli/test/step-transport.test.ts) 覆盖 LongCat 默认及显式参数、DeepSeek thinking 拒绝、config/flag 优先级、topK 拒绝、worker 模型选择与安全 generation 遥测。本轮 contracts/server/CLI 共 280 测、web 64 测通过；四包 typecheck 与 workspace build 通过。仅保留 SDK 的 json_object 已知提示和 Vite 单 chunk 大于 500 kB 提示。命令、RED/GREEN 与剩余项见 [本轮验证记录](../experiments/caption-adoption-2026-09-13/plan.md#验证记录)；独立评阅和最终文档检查结果见该记录，没有新增真实 provider 调用或模型质量结论。
 
@@ -183,8 +186,17 @@ ModelRuntime 测试以合成 key 与 fake fetch 覆盖选择、缺 key、非法 
 - #16原票不做Responses API、动态provider DSL、自动发现、failover；每作品模型UI/API后来由#7扩展。
 - 不把 key 写入作品、SQLite、浏览器、产物或可查询 telemetry。
 - 不做持久化 store、后台 job、队列或异步 advance。
+- Nextloop 首版使用单次调用 InMemoryEventStore 和空 ToolRegistry；不增加跨重启恢复、工具执行或自治多 Step。
 
 ## 上下文演进
+
+### 2026-11-12 — 六节点模型执行切换到 Nextloop
+
+- **触发证据**：用户指定以 Nextloop 1.0.0 替换六节点 Agent loop；既有 ADR-0001 的模型层选择需要重开。
+- **原假设**：Vercel AI SDK 同时承担 Provider 与结构化对象调用，为避免 Python 分裂不引入独立 Agent 框架。
+- **决定**：保留 `callLlm` 和薄 TypeScript Pipeline，新增按次启动的 Python stdio worker 执行 Nextloop AgentLoop；Node 继续拥有 Hono、Web、CLI、SQLite 与人工关卡，架构决定见 [ADR-0004](../adr/0004-nextloop-model-execution.md)。
+- **影响**：AI SDK 依赖移除；Python 3.11 成为 live 与质量门禁依赖，Docker 内置锁定环境。现有 JSON mode、Zod、重试、timeout、遥测、invocation 和公开错误码保持；Nextloop 持久化恢复与 Tool 不进入首版。
+- **上下文处理**：preserve 原 provider 研究、历史实测、模型 ID 共享契约和审核证据；replace 当前模型执行、运行依赖与验证入口，不改写历史 research。
 
 ### 2026-10-20 — 共享模型 ID 校验与 provider 映射
 

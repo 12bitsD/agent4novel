@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { runStep, settingContentSchema } from '@agent4novel/contracts'
 
-const mocks = vi.hoisted(() => ({ generateObject: vi.fn() }))
-vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
+const mocks = vi.hoisted(() => ({ runNextloop: vi.fn() }))
+vi.mock('../src/steps/nextloop-client.js', () => ({ runNextloop: mocks.runNextloop }))
 vi.mock('../src/steps/llm.js', () => ({ modelRuntime: {
   defaultModelId: 'kimi:kimi-k2.8-highspeed', requestTimeoutMs: 120_000, generationSettings: () => ({ parameters: {}, options: {} }), languageModel: () => 'mock-model',
 } }))
@@ -29,7 +29,7 @@ async function input() {
   return { ...base, upstream: { caption, creative, outline } }
 }
 
-beforeEach(() => { mocks.generateObject.mockReset() })
+beforeEach(() => { mocks.runNextloop.mockReset() })
 
 describe('Setting Step model boundary', () => {
   it.each([
@@ -38,9 +38,9 @@ describe('Setting Step model boundary', () => {
   ])('propagates %s without another model attempt', async (name, code) => {
     const error = new Error('synthetic failure')
     error.name = name!
-    mocks.generateObject.mockRejectedValue(error)
+    mocks.runNextloop.mockRejectedValue(error)
     await expect(runStep(createSettingStep(), await input(), {})).rejects.toMatchObject({ code, retryable: true })
-    expect(mocks.generateObject).toHaveBeenCalledTimes(1)
+    expect(mocks.runNextloop).toHaveBeenCalledTimes(1)
   })
 
   it('provides a complete schema-valid demo Setting without calling a model', async () => {
@@ -48,19 +48,19 @@ describe('Setting Step model boundary', () => {
     const content = settingContentSchema.parse(result.content)
     expect(content.world.length).toBeGreaterThan(0)
     expect(content.characters.length).toBeGreaterThan(0)
-    expect(mocks.generateObject).not.toHaveBeenCalled()
+    expect(mocks.runNextloop).not.toHaveBeenCalled()
   })
 
   it('generates one complete Setting with server IDs from all four inputs in one call', async () => {
-    mocks.generateObject.mockResolvedValue({ object: draft, usage: {}, finishReason: 'stop' })
+    mocks.runNextloop.mockResolvedValue({ object: draft, usage: {}, finishReason: 'stop' })
     const source = await input()
     const result = await runStep(createSettingStep(), source, {})
     const content = settingContentSchema.parse(result.content)
     expect(content.overview).toBe(draft.overview)
     expect(content.world[0]!.itemId).toMatch(/^item-/)
     expect(content.extensions[0]!.sectionId).toMatch(/^section-/)
-    expect(mocks.generateObject).toHaveBeenCalledTimes(1)
-    const call = mocks.generateObject.mock.calls[0]![0]
+    expect(mocks.runNextloop).toHaveBeenCalledTimes(1)
+    const call = mocks.runNextloop.mock.calls[0]![0]
     expect(call.maxOutputTokens).toBe(16000)
     expect(call.maxRetries).toBe(0)
     expect(call.prompt).toContain(source.seed)
@@ -73,7 +73,7 @@ describe('Setting Step model boundary', () => {
   it('retains successful model telemetry separately from a rejected stale-output commit', async () => {
     let release!: () => void
     const blocked = new Promise<void>((resolve) => { release = resolve })
-    mocks.generateObject.mockImplementation(async () => {
+    mocks.runNextloop.mockImplementation(async () => {
       await blocked
       return { object: draft, usage: {}, finishReason: 'stop' }
     })

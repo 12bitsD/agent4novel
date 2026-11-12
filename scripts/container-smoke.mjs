@@ -67,6 +67,8 @@ try {
   assert.equal((await fetch(`${url}/.env.local`)).status, 404)
   await compose(['exec', '-T', 'app', 'node', '--input-type=module', '-e',
     "import assert from 'node:assert/strict'; import {existsSync,readdirSync} from 'node:fs'; assert.notEqual(process.getuid(),0); for(const path of ['/app/.env.local','/app/.git','/app/apps/server/src','/app/apps/server/test','/app/apps/server/node_modules/tsx']) assert.equal(existsSync(path),false,path); assert.deepEqual(readdirSync('/app/apps/server/dist/skills').sort(),['beat','caption','creative','outline','prose','setting']);"], { quiet: true })
+  await compose(['exec', '-T', 'app', '/opt/agent-loop/bin/python', '-c',
+    "import importlib.metadata,sys; assert sys.version_info >= (3,11); assert importlib.metadata.version('nextloop') == '1.0.0'; import agent4novel_nextloop.worker"], { quiet: true })
   assert.deepEqual(await cli(['list']), [])
   const smoke = await cli(['smoke', '--seed', '容器合成验收：雨夜发现线索，翌日走到旧桥。'])
   workId = smoke.workId

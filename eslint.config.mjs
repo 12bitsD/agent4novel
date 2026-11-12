@@ -9,6 +9,8 @@ export default tseslint.config(
       "**/build/**",
       "**/coverage/**",
       "**/.data/**",
+      "**/.venv/**",
+      "**/__pycache__/**",
       "**/*.log",
       ".npmrc",
     ],

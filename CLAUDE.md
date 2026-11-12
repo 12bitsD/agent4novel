@@ -5,10 +5,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -r apps/agent-loop/requirements.lock
+.venv/bin/python -m pip install -e 'apps/agent-loop[dev]'
 pnpm install          # pnpm workspaces (apps/* + packages/*)
 pnpm dev              # server :8787 (tsx watch) + web :5173 (vite), in parallel
-pnpm test             # vitest, all workspaces; fully faked, never networked
-pnpm typecheck
+pnpm test             # Python adapter + Vitest; local fakes and loopback only
+pnpm typecheck        # mypy + ruff + TypeScript
 pnpm build
 pnpm -s cli <cmd>     # CLI for driving the whole pipeline (or ./apps/cli/bin/a4n, cleaner stdout)
 ```
@@ -23,15 +26,15 @@ Model runtime rules live in `docs/wiki/016-model-runtime-provider-config.md`; us
 
 ## Architecture
 
-pnpm monorepo: `packages/contracts` (zod schemas + types, the shared contract), `apps/server` (Hono + Vercel AI SDK v7, `@ai-sdk/deepseek` + `@ai-sdk/openai-compatible`), `apps/web` (React 19 + Vite: 书架 Bookcase / 统一入口 Entry / 创作界面 Workspace). Contracts exports raw `.ts` — no build step.
+pnpm monorepo: `packages/contracts` (zod schemas + types, the shared contract), `apps/server` (Hono + the `callLlm` seam), `apps/agent-loop` (Python 3.11 + Nextloop stdio worker), `apps/web` (React 19 + Vite: 书架 Bookcase / 统一入口 Entry / 创作界面 Workspace). Contracts exports raw `.ts` — no build step.
 
 The system is a **human-in-the-loop pipeline**: machines generate, the author gates everything. Three core pieces:
 
 - **Pipeline** (`apps/server/src/pipeline/pipeline.ts`) — the orchestrator and the only owner of flow control. Steps run in a fixed `PipelineDefinitionEntry[]` order; each entry declares `outputKind` and optional `consumes` (explicit upstream deps — latest version must be `approved`) / `gateAfter` (output lands as `pending`, next step blocked until approved) / `gateBefore`. Stage (`ready | blocked | awaiting-approval | complete`) is **derived from artifact status**, not stored. `advance()` is chained (runs auto-approved steps until the next gate) under a per-work mutex, and returns an exhaustive outcome (`advanced | awaiting-approval | complete | failed`).
-- **Steps** (`apps/server/src/steps/`) — contract-bound AI generations executed via `runStep`, which zod-validates both input and output. Steps don't know their position in the pipeline. Prompts live in `steps/skills/<step>/SKILL.md` files (ADR-0002) — prompt iteration never touches code. Real steps call the model via `steps/llm-call.ts` (`generateObject` + provider-available JSON mode + local schema validation + timeout + typed LLM errors); oversized seeds are truncated there, in one place.
+- **Steps** (`apps/server/src/steps/`) — contract-bound AI generations executed via `runStep`, which zod-validates both input and output. Steps don't know their position in the pipeline. Prompts live in `steps/skills/<step>/SKILL.md` files (ADR-0002) — prompt iteration never touches code. Real steps call the model via `steps/llm-call.ts`; `runNextloop` passes the same JSON mode, generation settings and timeout to the Python Nextloop worker, then applies local Zod validation and typed LLM errors. Oversized seeds are truncated there, in one place.
 - **Artifacts** (`store/`) — append-only version chains keyed by `{kind, chapter?}`; `appendArtifact` bumps `version`, old versions stay. For `creative`: saving a draft = new version + `pending`; explicitly selecting a direction = single-direction new version + `approved`.
 
-The deliberate runtime seams are **storage** (`WorkStore` interface — `InMemoryStore` now, `SQLiteStore` planned in issue #9), **step implementation** (FakeStep/RealStep), and **model runtime** (`ModelRuntime` in `steps/llm.ts`, backed by an AI SDK provider registry). `A4N_MODEL` supplies the startup default; `Work.config.model` is the internal per-work override seam, with no public UI/API yet. Tests use fakes or mocked transports and never call a real provider.
+The deliberate runtime seams are **storage** (`WorkStore` interface), **step implementation** (FakeStep/RealStep), and **model runtime** (`ModelRuntime` in `steps/llm.ts`, producing Nextloop Provider configuration). `A4N_MODEL` supplies the startup default; author configuration supplies per-work and per-step overrides. Tests use fakes, mocked transports or loopback SSE and never call a real provider.
 
 The current pipeline definition wires `caption` (提炼稿, auto-approved) → `creative` (创意稿 direction packs, `gateAfter` = compare view) → `outline` (大纲, `gateAfter` = review). Assembly lives in `apps/server/src/start.ts`; `apps/server/src/index.ts` only loads `.env.local` before dynamically importing it. Setting/beat/prose contracts exist but their steps are not yet registered.
 

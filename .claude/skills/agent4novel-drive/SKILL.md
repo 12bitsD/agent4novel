@@ -17,10 +17,14 @@ description: 用命令行驱动 agent4novel 创作链路、独立运行节点和
 test -f .env.local || cp .env.example .env.local   # 首次初始化；不要覆盖已有本地 key
 chmod 600 .env.local
 # 用本地编辑器填写所需 key；不要把 key 写进命令、日志或聊天，也不要打印 .env.local
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -r apps/agent-loop/requirements.lock
+.venv/bin/python -m pip install -e 'apps/agent-loop[dev]'
+pnpm install --frozen-lockfile
 pnpm dev                         # server :8787 + web :5173
 ```
 
-Live 模式会把生成所需的素材和上游产物发送给所选远程 provider。
+Live 启动会先检查 Python 3.11 与 `nextloop==1.0.0`，失败时不监听端口；demo 不启动 worker。Live 模式会把生成所需的素材和上游产物发送给所选远程 provider。worker 默认解析仓库 `.venv`，自定义解释器只用 `A4N_NEXTLOOP_PYTHON` 指定路径，不把 key 写进该配置。
 
 服务默认读取项目根目录的 `.data/agent4novel.sqlite`；用 `A4N_DATA_DIR` 指向明确的数据目录。首次启动不自动放入示例作品；需要空库示例时显式设置 `A4N_SEED_DEMO=1`，初始化在事务中执行，非空库不重复添加。测试应使用独立临时目录和端口，勿把 smoke 写入用户作品库；不要停止或清空仍持有作品的旧版内存服务。备份前停止所有访问同一数据目录的进程，复制整个目录；恢复前先保留现有目录的备份，具体步骤看 Wiki 009。
 
@@ -53,7 +57,7 @@ Live 模式会把生成所需的素材和上游产物发送给所选远程 provi
   --system-prompt-file caption-sp.md --record-dir .data/experiments/round-1/a
 ```
 
-记录目录是Harness的一次读取资源，固定包含 `input.json`、`invocation.json`、`result.json`、`meta.json`。先读 `meta.json`：只有 `complete:true` 且 `status:"complete"` 才能把本次结果视为完整；再按 `meta.files` 一次读齐另外三份。`input.json` 是实际输入和来源路径，`invocation.json` 是 `callLlm` 传给SDK的实际 system/prompt、严格的 `effectiveConfig`（model、directionCount、thinking、temperature、topP）和有效选项，`result.json` 是最终节点结果（含结构ID）或安全的 failed/unknown，`meta.json` 关联版本、运行身份、时间和完成语义。没有捕获的信息明确为 `null`；不能从源文件重建未发生或未捕获的调用，未传的选项也不能猜 provider 默认值。`effectiveConfig` 不包含凭据或完整配置文件。目录为0700、文件为0600；目标或任一父级是符号链接、目录已存在或路径不安全时，CLI在调用provider前拒绝。
+记录目录是Harness的一次读取资源，固定包含 `input.json`、`invocation.json`、`result.json`、`meta.json`。先读 `meta.json`：只有 `complete:true` 且 `status:"complete"` 才能把本次结果视为完整；再按 `meta.files` 一次读齐另外三份。`input.json` 是实际输入和来源路径，`invocation.json` 是 `callLlm` 传给 Nextloop worker 的实际 system/prompt、严格的 `effectiveConfig`（model、directionCount、thinking、temperature、topP）和有效选项，`result.json` 是最终节点结果（含结构ID）或安全的 failed/unknown，`meta.json` 关联版本、运行身份、时间和完成语义。兼容字段 `sdkOptions` 当前保存 Nextloop Provider options。没有捕获的信息明确为 `null`；不能从源文件重建未发生或未捕获的调用，未传的选项也不能猜 provider 默认值。`effectiveConfig` 不包含凭据或完整配置文件。目录为0700、文件为0600；目标或任一父级是符号链接、目录已存在或路径不安全时，CLI在调用provider前拒绝。
 
 用两个新目录做A/B：复用同一份合成输入，只替换明确的SP或选项，分别读取四文件后比较 `meta`、`invocation` 和 `result`。comment写在记录目录旁的 `comments.md`，不修改机器记录；复跑先核对 `input`/来源，再用原有 `run-step` 和新的 `--record-dir` 发起，原记录只读保留。CLI timeout/worker failure 的目录若只有部分证据，读取时按 `meta.complete:false` 和 `result.status:"unknown"` 处理，不把迟到结果冒充成功。
 
@@ -117,7 +121,7 @@ Prose文件沿用章号/id/version基线，content为`{text}`；save额外必须
 
 #19 起，公开响应和六类产物内容统一校验。`invalid-response`、畸形错误包或资源身份不匹配不证明写入失败，即使 HTTP 为 4xx；保留原请求，按对应命令回读，不自动重发。合法命令错误中的 `writeOutcome: unknown` 优先于 HTTP 状态。独立 `run-step` 的成功内容也按 stepId 校验；共享边界与安全失败见 [Wiki 019](../../../docs/wiki/019-contract-governance.md)。
 
-`advance`或`start-chapter`返回`kind: "failed"`时，先读内联telemetry或运行logs，再根据retryable及writeOutcome决定后续动作；unknown先回读，不能因报错就认定没有落库。再次advance按当前关卡状态推进，已落库产物不会自动重跑。Pipeline不自动重试；Setting、Beat、Prose还显式设置SDK maxRetries:0，其他步骤沿用SDK默认请求重试行为。
+`advance`或`start-chapter`返回`kind: "failed"`时，先读内联telemetry或运行logs，再根据retryable及writeOutcome决定后续动作；unknown先回读，不能因报错就认定没有落库。再次advance按当前关卡状态推进，已落库产物不会自动重跑。Pipeline不自动重试；Setting、Beat、Prose还显式设置 maxRetries:0，其他步骤由 Nextloop 使用原默认最多 3 次 Provider 尝试。
 
 ## 已完成章的两阶段重生
 

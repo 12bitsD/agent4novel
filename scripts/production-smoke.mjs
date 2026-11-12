@@ -29,10 +29,11 @@ const provider = createServer(async (req, res) => {
     systems.push(system)
     requests += 1
     assert.ok(requests <= 2)
-    res.writeHead(200, { 'content-type': 'application/json' })
-    res.end(JSON.stringify({ id: 'synthetic-completion', object: 'chat.completion', model: 'kimi-k2.8-highspeed',
-      choices: [{ index: 0, message: { role: 'assistant', content: JSON.stringify(requests === 1 ? caption : creative) }, finish_reason: 'stop' }],
-      usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 } }))
+    res.writeHead(200, { 'content-type': 'text/event-stream' })
+    res.write(`data: ${JSON.stringify({ id: 'synthetic-completion', object: 'chat.completion', model: 'kimi-k2.8-highspeed',
+      choices: [{ index: 0, delta: { content: JSON.stringify(requests === 1 ? caption : creative) }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 } })}\n\n`)
+    res.end('data: [DONE]\n\n')
   } catch { res.writeHead(500); res.end('{}') }
 })
 let child
@@ -91,7 +92,7 @@ try {
   assert.ok(!systems[0].includes('mock-genre') && systems[1].includes('mock-genre'))
   assert.ok(!output.includes('synthetic-local-test') && !stderr.includes('synthetic-local-test'))
   assert.ok(!output.includes('AUTHOR_GUIDANCE_SENTINEL') && !stderr.includes('AUTHOR_GUIDANCE_SENTINEL'))
-  console.log('PASS: compiled server, same-origin Web, author revision/file hashes, actual system/model/sampling and real SDK schema via local mock transport')
+  console.log('PASS: compiled server, same-origin Web, author revision/file hashes, actual system/model/sampling and Nextloop schema via local mock transport')
 } finally {
   if (child && child.exitCode === null && child.signalCode === null) {
     await new Promise(resolve => {

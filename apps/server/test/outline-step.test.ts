@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { outlineContentSchema, runStep } from '@agent4novel/contracts'
 
 const mocks = vi.hoisted(() => ({
-  generateObject: vi.fn(),
+  runNextloop: vi.fn(),
   languageModel: vi.fn(() => 'mock-model'),
 }))
-vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
+vi.mock('../src/steps/nextloop-client.js', () => ({ runNextloop: mocks.runNextloop }))
 vi.mock('../src/steps/llm.js', () => ({
   modelRuntime: {
     defaultModelId: 'kimi:kimi-k2.8-highspeed',
@@ -53,13 +53,13 @@ function llmArc(title: string, segCount = 2) {
 const llmOutline = { arcs: [llmArc('开局'), llmArc('升级'), llmArc('收束')] }
 
 beforeEach(() => {
-  mocks.generateObject.mockReset()
+  mocks.runNextloop.mockReset()
   mocks.languageModel.mockClear()
 })
 
 describe('outline RealStep', () => {
   it('returns arcs with server-injected arcId/segmentId', async () => {
-    mocks.generateObject.mockResolvedValue({ object: llmOutline, usage: {}, finishReason: 'stop' })
+    mocks.runNextloop.mockResolvedValue({ object: llmOutline, usage: {}, finishReason: 'stop' })
     const out = await runStep(step, baseInput, {})
     const content = outlineContentSchema.parse(out.content)
     expect(content.arcs).toHaveLength(3)
@@ -71,20 +71,20 @@ describe('outline RealStep', () => {
   })
 
   it('prompt 同时含素材与选定方向包', async () => {
-    mocks.generateObject.mockResolvedValue({ object: llmOutline, usage: {}, finishReason: 'stop' })
+    mocks.runNextloop.mockResolvedValue({ object: llmOutline, usage: {}, finishReason: 'stop' })
     await runStep(step, baseInput, {})
-    const arg = mocks.generateObject.mock.calls[0]![0] as { prompt: string; system: string }
+    const arg = mocks.runNextloop.mock.calls[0]![0] as { prompt: string; system: string }
     expect(arg.prompt).toContain('一个悬疑小镇故事')
     expect(arg.prompt).toContain('预言外卖员')
     expect(arg.system).toContain('大纲')
   })
 
   it('模型输出未过 schema(SDK NoObjectGeneratedError)→ llm-invalid-output', async () => {
-    // 真实路径:generateObject 内部按 outlineLlmOutputSchema 校验失败抛 AI_NoObjectGeneratedError
+    // 真实路径:runNextloop 内部按 outlineLlmOutputSchema 校验失败抛 AI_NoObjectGeneratedError
     // (v7 实际错误名带 AI_ 前缀,真机实测确认),llm-call 按 err.name 映射;mock 不走 SDK 校验,这里直接模拟
     const err = new Error('schema validation failed')
     err.name = 'AI_NoObjectGeneratedError'
-    mocks.generateObject.mockRejectedValue(err)
+    mocks.runNextloop.mockRejectedValue(err)
     await expect(runStep(step, baseInput, {})).rejects.toMatchObject({
       code: 'llm-invalid-output',
       retryable: true,

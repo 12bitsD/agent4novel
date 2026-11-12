@@ -15,8 +15,15 @@ RUN pnpm --filter @agent4novel/server build && pnpm --filter @agent4novel/web bu
 RUN pnpm --filter @agent4novel/server deploy --prod /production/server
 
 FROM node:24.19.0-bookworm-slim AS runtime
-ENV NODE_ENV=production A4N_HOST=0.0.0.0 A4N_PORT=8787 A4N_DATA_DIR=/data A4N_SERVE_WEB=1 A4N_SEED_DEMO=0 A4N_CONTAINER=1
+ENV NODE_ENV=production A4N_HOST=0.0.0.0 A4N_PORT=8787 A4N_DATA_DIR=/data A4N_SERVE_WEB=1 A4N_SEED_DEMO=0 A4N_CONTAINER=1 \
+    A4N_NEXTLOOP_PYTHON=/opt/agent-loop/bin/python PYTHONPATH=/opt/agent-loop/src
 WORKDIR /app/apps/server
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+COPY apps/agent-loop/requirements.lock /opt/agent-loop/requirements.lock
+RUN python3 -m venv /opt/agent-loop \
+    && /opt/agent-loop/bin/pip install --no-cache-dir -r /opt/agent-loop/requirements.lock
+COPY apps/agent-loop/src /opt/agent-loop/src
 COPY --from=build --chown=node:node /production/server ./
 COPY --from=build --chown=node:node /build/apps/web/dist /app/apps/web/dist
 RUN mkdir /data && chown node:node /data

@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { creativeContentSchema, runStep } from '@agent4novel/contracts'
 
 const mocks = vi.hoisted(() => ({
-  generateObject: vi.fn(),
+  runNextloop: vi.fn(),
   languageModel: vi.fn(() => 'mock-model'),
 }))
-vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
+vi.mock('../src/steps/nextloop-client.js', () => ({ runNextloop: mocks.runNextloop }))
 vi.mock('../src/steps/llm.js', () => ({
   modelRuntime: {
     defaultModelId: 'kimi:kimi-k2.8-highspeed',
@@ -40,13 +40,13 @@ function llmPack(title: string) {
 }
 
 beforeEach(() => {
-  mocks.generateObject.mockReset()
+  mocks.runNextloop.mockReset()
   mocks.languageModel.mockClear()
 })
 
 describe('creative RealStep', () => {
   it('returns N directions with server-injected directionId(默认 2)', async () => {
-    mocks.generateObject.mockResolvedValue({
+    mocks.runNextloop.mockResolvedValue({
       object: { directions: [llmPack('A'), llmPack('B')] },
       usage: {},
       finishReason: 'stop',
@@ -58,32 +58,32 @@ describe('creative RealStep', () => {
   })
 
   it('honors config.directionCount(1/3)并写入 prompt', async () => {
-    mocks.generateObject.mockResolvedValue({
+    mocks.runNextloop.mockResolvedValue({
       object: { directions: [llmPack('A'), llmPack('B'), llmPack('C')] },
       usage: {},
       finishReason: 'stop',
     })
     const out = await runStep(step, baseInput, { directionCount: 3 })
     expect(creativeContentSchema.parse(out.content).directions).toHaveLength(3)
-    const arg = mocks.generateObject.mock.calls[0]![0] as { prompt: string }
+    const arg = mocks.runNextloop.mock.calls[0]![0] as { prompt: string }
     expect(arg.prompt).toContain('3 个')
   })
 
   it('prompt 同时含素材与提炼稿', async () => {
-    mocks.generateObject.mockResolvedValue({
+    mocks.runNextloop.mockResolvedValue({
       object: { directions: [llmPack('A'), llmPack('B')] },
       usage: {},
       finishReason: 'stop',
     })
     await runStep(step, baseInput, {})
-    const arg = mocks.generateObject.mock.calls[0]![0] as { prompt: string; system: string }
+    const arg = mocks.runNextloop.mock.calls[0]![0] as { prompt: string; system: string }
     expect(arg.prompt).toContain('一个悬疑小镇故事')
     expect(arg.prompt).toContain('提炼。')
     expect(arg.system).toContain('创意')
   })
 
   it('模型给出数量与 directionCount 不符 → llm-invalid-output(严格校验)', async () => {
-    mocks.generateObject.mockResolvedValue({
+    mocks.runNextloop.mockResolvedValue({
       object: { directions: [llmPack('A')] },
       usage: {},
       finishReason: 'stop',
@@ -95,7 +95,7 @@ describe('creative RealStep', () => {
   })
 
   it('directionCount=1:恰好 1 个方向(仍需后续显式 select)', async () => {
-    mocks.generateObject.mockResolvedValue({
+    mocks.runNextloop.mockResolvedValue({
       object: { directions: [llmPack('A')] },
       usage: {},
       finishReason: 'stop',

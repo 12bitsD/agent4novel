@@ -1,10 +1,7 @@
-import { createDeepSeek } from '@ai-sdk/deepseek'
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { createProviderRegistry } from 'ai'
-import type { LanguageModel } from 'ai'
 import { agentConfigSchema, generationParametersSchema, parseModelId as parseSupportedModelId, providerForModel } from '@agent4novel/contracts'
 import type { AgentConfig, GenerationParameters, SupportedModelId } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
+import type { NextloopModel } from './nextloop-client.js'
 
 export const DEFAULT_DEEPSEEK_MODEL_ID = 'deepseek:deepseek-chat' as const
 export const DEFAULT_LONGCAT_MODEL_ID = 'longcat:LongCat-2.0' as const
@@ -32,11 +29,9 @@ export type ModelRuntime = {
   readonly mode: 'demo' | 'live'
   readonly defaultModelId: SupportedModelId
   readonly requestTimeoutMs: number
-  languageModel(modelOverride?: string): LanguageModel
+  languageModel(modelOverride?: string): NextloopModel
   generationSettings(config?: AgentConfig): GenerationSettings
 }
-
-const UNCONFIGURED_KEY = 'a4n-unconfigured-provider'
 
 function value(env: NodeJS.ProcessEnv, name: string): string | undefined {
   const text = env[name]?.trim()
@@ -85,10 +80,7 @@ function timeoutMs(env: NodeJS.ProcessEnv): number {
   return parsed
 }
 
-export function createModelRuntime(
-  env: NodeJS.ProcessEnv,
-  deps: { fetch?: typeof globalThis.fetch } = {},
-): ModelRuntime {
+export function createModelRuntime(env: NodeJS.ProcessEnv): ModelRuntime {
   const deepseekKey = value(env, 'DEEPSEEK_API_KEY')
   const longcatKey = value(env, 'LONGCAT_API_KEY')
   const kimiKey = value(env, 'KIMI_API_KEY') ?? value(env, 'MOONSHOT_API_KEY')
@@ -118,29 +110,20 @@ export function createModelRuntime(
     throw new ModelConfigError(`A4N_MODEL selects provider "${provider}" but its API key is missing`)
   }
 
-  const registry = createProviderRegistry({
-    deepseek: createDeepSeek({
-      apiKey: deepseekKey ?? UNCONFIGURED_KEY,
-      baseURL: baseUrl(env, 'DEEPSEEK_BASE_URL', 'https://api.deepseek.com'),
-      ...(deps.fetch ? { fetch: deps.fetch } : {}),
-    }),
-    longcat: createOpenAICompatible({
-      name: 'longcat',
-      apiKey: longcatKey ?? UNCONFIGURED_KEY,
-      baseURL: baseUrl(env, 'LONGCAT_BASE_URL', DEFAULT_LONGCAT_BASE_URL),
-      // LongCat 文档未声明 json_schema；AI SDK 会退回较宽松的 json_object。
-      supportsStructuredOutputs: false,
-      ...(deps.fetch ? { fetch: deps.fetch } : {}),
-    }),
-    kimi: createOpenAICompatible({
-      name: 'kimi',
-      apiKey: kimiKey ?? UNCONFIGURED_KEY,
-      baseURL: baseUrl(env, 'KIMI_BASE_URL', DEFAULT_KIMI_BASE_URL),
-      // Use the shared JSON mode; keep final Zod validation local to the application.
-      supportsStructuredOutputs: false,
-      ...(deps.fetch ? { fetch: deps.fetch } : {}),
-    }),
-  })
+  const providers = {
+    deepseek: {
+      baseUrl: baseUrl(env, 'DEEPSEEK_BASE_URL', 'https://api.deepseek.com'),
+      apiKeyEnv: 'DEEPSEEK_API_KEY' as const,
+    },
+    longcat: {
+      baseUrl: baseUrl(env, 'LONGCAT_BASE_URL', DEFAULT_LONGCAT_BASE_URL),
+      apiKeyEnv: 'LONGCAT_API_KEY' as const,
+    },
+    kimi: {
+      baseUrl: baseUrl(env, 'KIMI_BASE_URL', DEFAULT_KIMI_BASE_URL),
+      apiKeyEnv: value(env, 'KIMI_API_KEY') ? 'KIMI_API_KEY' as const : 'MOONSHOT_API_KEY' as const,
+    },
+  }
 
   return {
     mode: configured(defaultModelId) ? 'live' : 'demo',
@@ -184,7 +167,11 @@ export function createModelRuntime(
           retryable: false,
         })
       }
-      return registry.languageModel(modelId)
+      const provider = providerForModel(modelId)!
+      return {
+        modelId: modelId.slice(modelId.indexOf(':') + 1),
+        ...providers[provider],
+      }
     },
   }
 }

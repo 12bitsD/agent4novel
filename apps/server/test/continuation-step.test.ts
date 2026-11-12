@@ -6,8 +6,8 @@ import { createProseStep } from '../src/steps/prose-step.js'
 import { runIsolatedStep } from '../src/steps/isolated-runner.js'
 import { resetTelemetry, telemetryFor } from '../src/steps/telemetry.js'
 
-const mocks = vi.hoisted(() => ({ generateObject: vi.fn() }))
-vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
+const mocks = vi.hoisted(() => ({ runNextloop: vi.fn() }))
+vi.mock('../src/steps/nextloop-client.js', () => ({ runNextloop: mocks.runNextloop }))
 vi.mock('../src/steps/llm.js', () => ({ modelRuntime: { mode: 'live', defaultModelId: 'kimi:kimi-k2.8-highspeed', requestTimeoutMs: 120_000, generationSettings: () => ({ parameters: {}, options: {} }), languageModel: () => 'mock-model' } }))
 
 async function source() {
@@ -21,18 +21,18 @@ async function source() {
   return { base, outline, setting, beat, previousChapter }
 }
 
-beforeEach(() => { mocks.generateObject.mockReset(); resetTelemetry() })
+beforeEach(() => { mocks.runNextloop.mockReset(); resetTelemetry() })
 
 describe('chapter continuation step boundary', () => {
   it.each(['beat', 'prose'] as const)('passes the complete previous chapter and current %s context to the model and telemetry', async stepId => {
     const data = await source()
     const output = stepId === 'beat' ? { ...beatContentSchema.parse(data.beat), writingPlan: [{ title: '追随线索', content: '从桥边继续行动。' }] } : { text: '第二章完整正文。' }
-    mocks.generateObject.mockResolvedValue({ object: output, usage: {}, finishReason: 'stop' })
+    mocks.runNextloop.mockResolvedValue({ object: output, usage: {}, finishReason: 'stop' })
     const upstream = { ...(stepId === 'beat' ? { outline: data.outline } : { beat: data.beat }), setting: data.setting, previousChapter: data.previousChapter }
     const result = await runIsolatedStep({ stepId, input: { seed: data.base.seed, chapter: 2, upstream } })
     expect(result.kind).toBe('succeeded')
-    expect(mocks.generateObject).toHaveBeenCalledTimes(1)
-    const call = mocks.generateObject.mock.calls[0]![0]
+    expect(mocks.runNextloop).toHaveBeenCalledTimes(1)
+    const call = mocks.runNextloop.mock.calls[0]![0]
     expect(call.prompt).toContain(JSON.stringify(data.previousChapter))
     expect(call.prompt).toContain(JSON.stringify(data.setting))
     expect(call.prompt).toContain(JSON.stringify(stepId === 'beat' ? data.outline : data.beat))
@@ -51,21 +51,21 @@ describe('chapter continuation step boundary', () => {
       { chapter: 2, upstream: { ...upstream, previousChapter: { ...data.previousChapter, extra: 'ignored?' } } },
       ...[0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1].map(chapter => ({ chapter, upstream })),
     ]) await expect(runStep(step, { ...data.base, ...invalid }, {})).rejects.toThrow()
-    expect(mocks.generateObject).not.toHaveBeenCalled()
+    expect(mocks.runNextloop).not.toHaveBeenCalled()
   })
 
   it.each(['beat', 'prose'] as const)('includes previous text in the %s assembled budget and rejects rather than truncating', async stepId => {
     const data = await source()
     const input = { ...data.base, chapter: 2, upstream: { ...(stepId === 'beat' ? { outline: data.outline } : { beat: data.beat }), setting: data.setting, previousChapter: data.previousChapter } }
     const makeStep = stepId === 'beat' ? createBeatStep : createProseStep
-    mocks.generateObject.mockResolvedValue({ object: stepId === 'beat' ? { ...beatContentSchema.parse(data.beat), writingPlan: [{ title: '推进', content: '继续' }] } : { text: '正文' }, usage: {}, finishReason: 'stop' })
+    mocks.runNextloop.mockResolvedValue({ object: stepId === 'beat' ? { ...beatContentSchema.parse(data.beat), writingPlan: [{ title: '推进', content: '继续' }] } : { text: '正文' }, usage: {}, finishReason: 'stop' })
     await runStep(makeStep({ systemPrompt: '' }), input, {})
-    const promptChars = mocks.generateObject.mock.calls[0]![0].prompt.length
-    mocks.generateObject.mockClear()
+    const promptChars = mocks.runNextloop.mock.calls[0]![0].prompt.length
+    mocks.runNextloop.mockClear()
     await expect(runStep(makeStep({ systemPrompt: 's'.repeat(400001 - promptChars) }), input, {})).rejects.toMatchObject({
       code: 'input-budget-exceeded', inputBudget: { actualLength: 400001, previousChapterChars: JSON.stringify(data.previousChapter).length },
     })
-    expect(mocks.generateObject).not.toHaveBeenCalled()
+    expect(mocks.runNextloop).not.toHaveBeenCalled()
     expect(telemetryFor(data.base.workId)).toHaveLength(1)
   })
 

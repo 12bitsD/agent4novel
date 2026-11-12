@@ -16,6 +16,10 @@ async function start(): Promise<void> {
   const store = openPersistentStore(config)
   try {
     const { app, demo } = createProductionApp(store, webRoot, config.dataDir)
+    if (!demo) {
+      const { assertNextloopReady } = await import('./steps/nextloop-client.js')
+      await assertNextloopReady()
+    }
     const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {
       const host = config.host.includes(':') ? `[${config.host}]` : config.host
       console.log(`agent4novel server listening on http://${host}:${info.port}`)

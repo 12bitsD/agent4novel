@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { generateObject } from 'ai'
-import { seedCharBudget, authorConfigLimits, agentConfigSchema, parseModelId } from '@agent4novel/contracts'
+import { seedCharBudget, authorConfigLimits, agentConfigSchema } from '@agent4novel/contracts'
 import type { AgentConfig, GenerationParameters } from '@agent4novel/contracts'
 import type { z } from 'zod'
 import { KnownError } from '../errors.js'
 import { modelRuntime } from './llm.js'
+import { runNextloop } from './nextloop-client.js'
+import { NextloopError } from './nextloop-error.js'
 import { recordTelemetry, currentRequest } from './telemetry.js'
 import { safeLog } from '../safe-log.js'
 import { currentStepRecorder, StepRecordError } from './step-record.js'
@@ -42,6 +43,12 @@ function hash12(text: string): string {
 const safeFinish = (value: unknown) => typeof value === 'string' && ['stop', 'length', 'content-filter', 'tool-calls', 'error', 'other', 'unknown'].includes(value) ? value : 'unknown'
 const safeTokens = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined
 function classify(error: unknown): string {
+  if (error instanceof NextloopError) {
+    if (error.code === 'llm-timeout') return 'timeout'
+    if (error.finishReason === 'length') return 'output-truncated'
+    if (error.code === 'llm-invalid-output') return 'output-schema'
+    return 'network'
+  }
   const e = error as { name?: string; finishReason?: unknown; code?: unknown; data?: { error?: { code?: unknown } } }
   const name = typeof e?.name === 'string' ? e.name : ''
   if (name === 'TimeoutError' || name === 'AbortError') return 'timeout'
@@ -53,9 +60,9 @@ function classify(error: unknown): string {
   return 'unknown'
 }
 
-// LLM 调用小帮手(#3c 决策 15/16):generateObject + zod + token 上限 + 超时;类型化错误。
+// 六节点共用 Nextloop + zod + token 上限 + 超时;类型化错误。
 // 日志只记 attemptId/model/latency/token/finishReason/长度+hash,不落素材/prompt 全文。
-// #14:每次调用(成败)都记一条 telemetry 进账本,systemHash 让 prompt 版本可追。
+// 每次调用(成败)都记一条 telemetry 进账本,systemHash 让 prompt 版本可追。
 export async function callLlm<T>(args: {
   schema: z.ZodType<T>
   system: string
@@ -67,7 +74,7 @@ export async function callLlm<T>(args: {
   attemptId: string
   /** 默认 8000;长产物步骤(如 outline)实测会撞顶截断(#14 排查),可上调 */
   maxOutputTokens?: number
-  /** Setting/Beat/Prose 显式传 0 关闭 SDK 重试；其余步骤省略此参数并沿用 SDK 默认。 */
+  /** 仅整份设定明确关闭 Provider 重试；其他步骤保留现有默认行为。 */
   maxRetries?: number
   /** Node assembly settings already resolved by the production step. */
   effectiveConfig?: { directionCount?: number }
@@ -79,7 +86,7 @@ export async function callLlm<T>(args: {
     stepId: args.stepId,
     ...(args.chapter !== undefined ? { chapter: args.chapter } : {}),
     attemptId: args.attemptId,
-    model: parseModelId(model) ?? 'unrecognized-model',
+    model: /^(deepseek:[a-zA-Z0-9_.-]{1,96}|kimi:[a-zA-Z0-9_.-]{1,96}|longcat:LongCat-2\.0)$/.test(model) ? model : 'unrecognized-model',
     ...(currentRequest() ? { requestId: currentRequest()!.requestId } : {}),
     promptChars: args.prompt.length,
     promptHash: hash12(args.prompt),
@@ -117,17 +124,18 @@ export async function callLlm<T>(args: {
       maxRetries: args.maxRetries ?? null,
       requestTimeoutMs: modelRuntime.requestTimeoutMs,
     })
-    const { object, usage, finishReason } = await generateObject({
+    const { object, usage, finishReason } = await runNextloop({
       model: languageModel,
       ...settings.options,
       schema: args.schema,
       system: args.system,
       prompt: args.prompt,
+      attemptId: args.attemptId,
+      timeoutMs: modelRuntime.requestTimeoutMs,
       maxOutputTokens: args.maxOutputTokens ?? 8000,
       ...(args.maxRetries !== undefined ? { maxRetries: args.maxRetries } : {}),
-      abortSignal: AbortSignal.timeout(modelRuntime.requestTimeoutMs),
     })
-    if (finishReason === 'length') throw Object.assign(new Error('output truncated'), { name: 'AI_NoObjectGeneratedError', finishReason, usage })
+    if (finishReason === 'length') throw new NextloopError('llm-invalid-output', true, usage, finishReason)
     const validated = args.schema.parse(object)
     const telemetry = {
       ...base,
@@ -172,7 +180,15 @@ export async function callLlm<T>(args: {
         attemptId: args.attemptId,
       })
     }
-    // generateObject 的 schema 校验失败(AI SDK 抛 NoObjectGeneratedError,v7 实际名为 AI_ 前缀)→ 模型输出非法
+    if (err instanceof NextloopError) {
+      const message = err.code === 'llm-timeout' ? 'llm request timed out'
+        : err.code === 'llm-invalid-output' ? 'llm output failed schema validation' : 'llm request unavailable'
+      throw new KnownError(err.code, message, {
+        retryable: err.retryable,
+        attemptId: args.attemptId,
+      })
+    }
+    // Zod 校验失败统一映射为模型输出非法，不暴露原始响应。
     if (name.includes('NoObjectGeneratedError') || name === 'AI_TypeValidationError' || name === 'ZodError') {
       throw new KnownError('llm-invalid-output', 'llm output failed schema validation', {
         retryable: true,

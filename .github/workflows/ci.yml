@@ -29,7 +29,11 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
+        with:
+          python-version: '3.11'
       - run: pnpm install --frozen-lockfile
+      - run: python -m venv .venv && .venv/bin/python -m pip install -r apps/agent-loop/requirements.lock && .venv/bin/python -m pip install -e 'apps/agent-loop[dev]'
       - run: pnpm test
       - run: pnpm typecheck
       - run: pnpm build

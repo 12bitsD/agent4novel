@@ -125,7 +125,7 @@ server stdout 的 llm.error 只含安全分类、长度、tokens、finishReason�
 | llm-timeout | provider 单次调用超时 | 按 retryable 手动 advance，并检查 wiki 016 的 timeout |
 | network-error | CLI 请求先结束或 server 不可达 | 区分 CLI timeout 与 server LLM timeout |
 
-错误名不能只等于 NoObjectGeneratedError。AI SDK v7 实际可能返回 AI_NoObjectGeneratedError；当前映射使用名称包含判断，并将该类失败归入 llm-invalid-output。
+当前模型执行由 Nextloop worker 返回安全错误分类，再由 `callLlm` 映射为既有 llm-invalid-output、llm-timeout 或 llm-unavailable。旧 AI SDK 的 NoObjectGeneratedError 名称包含判断仅保留作兼容防护，不再是生产 Provider 的来源。
 
 ### Smoke 探针
 
@@ -176,6 +176,14 @@ CLI 测试以注入 fetch 覆盖 REST 映射、自动回填版本、首方向缺
 - provider、credential、Base URL、wire protocol 和 timeout 默认值归 wiki 016。
 
 ## 上下文演进
+
+### 2026-11-12 — 模型执行切换到 Nextloop
+
+- **触发证据**：用户指定以 Nextloop 1.0.0 替换六节点 Agent loop；Node/Python 跨进程成功、Provider 失败和 timeout 测试已接入。
+- **原假设**：`callLlm` 内直接使用 AI SDK `generateObject`，错误分类需要识别 SDK 异常名。
+- **决定**：保留 `callLlm`、telemetry、CLI 与 smoke 接口，内部改为 `runNextloop` stdio worker；公开错误码与安全消息保持不变。
+- **影响**：CLI 和 run-step 仍复用同一生产 Step；Python 3.11 成为 live 运行依赖，demo、作品数据、遥测字段和恢复规则不变。
+- **上下文处理**：preserve 原 CLI、遥测和历史失败证据；replace 当前模型执行与错误来源说明。
 
 ### 2026-09-29 — 显式续章命令与前章实验输入
 

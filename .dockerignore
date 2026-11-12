@@ -11,6 +11,11 @@ backups
 **/*.log
 **/test
 **/tests
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
 docs
 .agents
 .claude

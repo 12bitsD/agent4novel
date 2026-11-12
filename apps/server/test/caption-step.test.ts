@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { runStep } from '@agent4novel/contracts'
+import { NextloopError } from '../src/steps/nextloop-error.js'
 
 // vi.mock 提升:mock 引用必须经 vi.hoisted 定义
 const mocks = vi.hoisted(() => ({
-  generateObject: vi.fn(),
+  runNextloop: vi.fn(),
   languageModel: vi.fn(() => 'mock-model'),
 }))
-vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
+vi.mock('../src/steps/nextloop-client.js', () => ({ runNextloop: mocks.runNextloop }))
 vi.mock('../src/steps/llm.js', () => ({
   modelRuntime: {
     defaultModelId: 'kimi:kimi-k2.8-highspeed',
@@ -29,7 +30,7 @@ const validCaption = {
 }
 
 beforeEach(() => {
-  mocks.generateObject.mockReset()
+  mocks.runNextloop.mockReset()
   mocks.languageModel.mockClear()
 })
 
@@ -38,7 +39,7 @@ describe('caption RealStep', () => {
     const marker = 'SYNTHETIC_PRIVATE_MARKER'
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     resetTelemetry()
-    mocks.generateObject.mockRejectedValue(Object.assign(new Error(marker), {
+    mocks.runNextloop.mockRejectedValue(Object.assign(new Error(marker), {
       name: 'AI_NoObjectGeneratedError', text: marker, cause: new Error(marker), finishReason: 'stop', usage: { outputTokens: 20 },
     }))
     try {
@@ -46,62 +47,73 @@ describe('caption RealStep', () => {
       expect(JSON.stringify(log.mock.calls)).not.toContain(marker)
       expect(JSON.stringify(telemetryFor('w1'))).not.toContain(marker)
       expect(telemetryFor('w1')).toMatchObject([{ error: 'output-schema', requestId: '11111111-1111-4111-8111-111111111111' }])
-      mocks.generateObject.mockRejectedValue(new Error(marker))
+      mocks.runNextloop.mockRejectedValue(new Error(marker))
       await expect(runStep(step, baseInput, {})).rejects.toMatchObject({ message: 'llm request unavailable' })
     } finally { log.mockRestore() }
   })
   it('returns schema-valid caption content', async () => {
-    mocks.generateObject.mockResolvedValue({ object: validCaption, usage: {}, finishReason: 'stop' })
+    mocks.runNextloop.mockResolvedValue({ object: validCaption, usage: {}, finishReason: 'stop' })
     const out = await runStep(step, baseInput, {})
     expect(out.content).toEqual(validCaption)
   })
 
-  it('assembles system(skill)+ prompt(seed) into generateObject with timeout', async () => {
-    mocks.generateObject.mockResolvedValue({ object: validCaption, usage: {}, finishReason: 'stop' })
+  it('assembles system(skill)+ prompt(seed) into runNextloop with timeout', async () => {
+    mocks.runNextloop.mockResolvedValue({ object: validCaption, usage: {}, finishReason: 'stop' })
     await runStep(step, baseInput, {})
-    const arg = mocks.generateObject.mock.calls[0]![0] as {
+    const arg = mocks.runNextloop.mock.calls[0]![0] as {
       model: unknown
       system: string
       prompt: string
-      abortSignal: unknown
+      timeoutMs: number
+      attemptId: string
     }
     expect(arg.model).toBe('mock-model')
     expect(arg.system).toContain('你是故事开发编辑。')
     expect(arg.prompt).toContain('一个都市异能校园故事')
-    expect(arg.abortSignal).toBeDefined()
+    expect(arg.timeoutMs).toBe(120_000)
+    expect(arg.attemptId).toBeDefined()
   })
 
   it('config.model overrides the default model id', async () => {
-    mocks.generateObject.mockResolvedValue({ object: validCaption, usage: {}, finishReason: 'stop' })
+    mocks.runNextloop.mockResolvedValue({ object: validCaption, usage: {}, finishReason: 'stop' })
     await runStep(step, baseInput, { model: 'kimi:other' })
     expect(mocks.languageModel).toHaveBeenCalledWith('kimi:other')
   })
 
   it('truncates oversized seed at the prompt assembly point', async () => {
-    mocks.generateObject.mockResolvedValue({ object: validCaption, usage: {}, finishReason: 'stop' })
+    mocks.runNextloop.mockResolvedValue({ object: validCaption, usage: {}, finishReason: 'stop' })
     const big = 'x'.repeat(150_000)
     await runStep(step, { ...baseInput, seed: big }, {})
-    const arg = mocks.generateObject.mock.calls[0]![0] as { prompt: string }
+    const arg = mocks.runNextloop.mock.calls[0]![0] as { prompt: string }
     expect(arg.prompt.length).toBeLessThan(110_000)
   })
 
   it('schema-invalid model output → llm-invalid-output (retryable)', async () => {
     const err = Object.assign(new Error('no object'), { name: 'NoObjectGeneratedError' })
-    mocks.generateObject.mockRejectedValue(err)
+    mocks.runNextloop.mockRejectedValue(err)
     await expect(runStep(step, baseInput, {})).rejects.toMatchObject({
       code: 'llm-invalid-output',
       retryable: true,
     })
   })
 
-  it('timeout → llm-timeout', async () => {
-    const err = Object.assign(new Error('aborted'), { name: 'TimeoutError' })
-    mocks.generateObject.mockRejectedValue(err)
-    await expect(runStep(step, baseInput, {})).rejects.toMatchObject({ code: 'llm-timeout' })
+  it('Nextloop timeout → llm-timeout with the existing safe message', async () => {
+    mocks.runNextloop.mockRejectedValue(new NextloopError('llm-timeout', true))
+    await expect(runStep(step, baseInput, {})).rejects.toMatchObject({
+      code: 'llm-timeout',
+      message: 'llm request timed out',
+      retryable: true,
+    })
+  })
+
+  it('preserves the output-truncated telemetry classification', async () => {
+    mocks.runNextloop.mockRejectedValue(new NextloopError('llm-invalid-output', true, { outputTokens: 8000 }, 'length'))
+    await expect(runStep(step, baseInput, {})).rejects.toMatchObject({ code: 'llm-invalid-output' })
+    expect(telemetryFor('w1').at(-1)).toMatchObject({ error: 'output-truncated', outputTokens: 8000, finishReason: 'length' })
   })
 
   it('network failure → llm-unavailable', async () => {
-    mocks.generateObject.mockRejectedValue(new Error('fetch failed'))
+    mocks.runNextloop.mockRejectedValue(new Error('fetch failed'))
     await expect(runStep(step, baseInput, {})).rejects.toMatchObject({ code: 'llm-unavailable' })
   })
 })

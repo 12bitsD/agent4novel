@@ -6,6 +6,7 @@ import { mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync,
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { cliBin, cliTestEnv } from './cli-process.js'
+import { writeChatCompletion } from './sse.js'
 import { createClient } from '../src/client.js'
 import { helpFor } from '../src/command-line.js'
 import { regenerateCreative } from '../src/commands.js'
@@ -48,7 +49,7 @@ it('E6 runs creative regeneration through the executable and captures all four s
     requests.push(source)
     res.setHeader('Content-Type', 'application/json')
     const pack = (title: string) => ({ title, hook: 'new hook', tags: ['canary'], synopsis: 'new synopsis', characters: [], setting: [], payoffs: [], outline: [] })
-    res.end(JSON.stringify({ id: 'creative-record', model: 'kimi-k2.8-highspeed', choices: [{ index: 0, message: { role: 'assistant', content: JSON.stringify({ directions: [pack('new-A'), pack('new-B')] }) }, finish_reason: 'stop' }] }))
+    writeChatCompletion(res, { directions: [pack('new-A'), pack('new-B')] })
   })
   server.listen(0, '127.0.0.1'); await once(server, 'listening')
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing provider address')

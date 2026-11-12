@@ -17,6 +17,7 @@ import {
   stepExperimentRecordMetaSchema,
 } from '@agent4novel/contracts'
 import { cliBin as bin, cliTestEnv } from './cli-process.js'
+import { writeChatCompletion } from './sse.js'
 
 const artifactA = { id: 'beat-a', workId: 'work-test', kind: 'beat' as const, chapter: 1, version: 1, humanStatus: 'pending' as const, createdAt: '2026-10-10T00:00:00.000Z', content: { title: '旧章纲', goal: '旧目标', writingPlan: [{ itemId: 'item-old', title: '旧安排', content: '旧内容' }], ending: '旧落点' } }
 
@@ -61,7 +62,7 @@ describe('E20 CLI/Harness acceptance: beat variant selection', () => {
 
   it('exposes the regeneration source and actual transport in run-step records', async () => {
     const directory = mkdtempSync(join(realpathSync(tmpdir()), 'a4n-beat-record-cli-')); const recordDir = join(directory, 'beat-run'); const provider = createServer(async (_req, res) => {
-      res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ id: 'mock-beat-record', model: 'kimi-k2.8-highspeed', choices: [{ index: 0, message: { role: 'assistant', content: JSON.stringify({ title: '模型新章纲', goal: '推进', writingPlan: [{ title: '行动', content: '继续追踪' }], ending: '留下线索' }) }, finish_reason: 'stop' }] }))
+      writeChatCompletion(res, { title: '模型新章纲', goal: '推进', writingPlan: [{ title: '行动', content: '继续追踪' }], ending: '留下线索' })
     })
     provider.listen(0, '127.0.0.1'); await once(provider, 'listening'); const address = provider.address(); if (!address || typeof address === 'string') throw new Error('missing provider address')
     try {

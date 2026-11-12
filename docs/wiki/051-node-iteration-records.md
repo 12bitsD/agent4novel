@@ -50,9 +50,9 @@ C1证据：/tmp/a4n-node-iteration-dev-evidence中的open-issues-baseline.json�
 
 ### 2. 捕获边界与结果语义
 
-在callLlm实际构造generateObject参数的位置捕获system、prompt、解析后的model/generation以及明确传入的输出上限/重试选项。使用仅runIsolatedStep范围启用的observer/上下文，避免全局可变sink污染并发调用；生产调用没有sink时不产生全文记录。
+在callLlm实际构造 Nextloop 请求的位置捕获system、prompt、解析后的model/generation以及明确传入的输出上限/重试选项。使用仅runIsolatedStep范围启用的observer/上下文，避免全局可变sink污染并发调用；生产调用没有sink时不产生全文记录。
 
-捕获的是传给SDK的值，不是SDK/provider后续转换的HTTP报文。未传入的选项保留缺失语义，不猜SDK/provider默认或是否真正遵循。捕获文本逐字符匹配SDK入参，schema与既有consume guards不绕过。
+捕获的是传给 Nextloop worker 的值，不是 Provider 后续转换的HTTP报文。未传入的选项保留缺失语义，不猜 Provider 默认或是否真正遵循。捕获文本逐字符匹配 worker 入参，schema与既有consume guards不绕过。
 
 最终结果由独立runner/worker返回或记录：Creative/Outline/Setting/Beat在模型之后补结构ID，仅在callLlm记录model object不足以代表最终产物。result保存现有StepExperimentResponse的校验后content/失败与telemetry；不声称是provider原始输出，失败原始文本不在范围内。
 
@@ -60,9 +60,9 @@ C1证据：/tmp/a4n-node-iteration-dev-evidence中的open-issues-baseline.json�
 
 Agent指定尚不存在的本次记录目录，推荐.data/experiments/<本轮>/<A或B>（占位示例，非现存目录）。目录在发请求前做路径/权限/碰撞检查；拒绝破坏性覆盖、保留旧记录。实际实现对符号链接/路径归属及文件权限的保证由确定性测试锁定。
 
-实际固定4份记录：`input.json`（供实验使用的输入与 `sources`）、`invocation.json`（`callLlm`实际传给 `generateObject` 的 system/prompt、`effectiveConfig`、有效SDK选项，或明确未捕获）、`result.json`（最终节点结果或安全失败/unknown）、`meta.json`（格式版本、节点/run标识、时间、代码commit/dirty、来源与完成标志）。`effectiveConfig` 严格只含 model、directionCount、thinking、temperature、topP；它补足影响节点装配但不一定进入generation的配置，不记录凭据或完整配置文件。Harness把同一目录的这四个文件作为一次读取资源：先读 `meta.json`，只有 `complete: true` 且 `status: "complete"` 才把本次结果视为完整，再按 `meta.files` 一次读齐其余三份；`in-progress`/`incomplete` 目录只能作为部分证据，不能冒充成功。
+实际固定4份记录：`input.json`（供实验使用的输入与 `sources`）、`invocation.json`（`callLlm`实际传给 Nextloop worker 的 system/prompt、`effectiveConfig`、有效选项，或明确未捕获）、`result.json`（最终节点结果或安全失败/unknown）、`meta.json`（格式版本、节点/run标识、时间、代码commit/dirty、来源与完成标志）。兼容字段 `sdkOptions` 当前保存 Nextloop Provider options。`effectiveConfig` 严格只含 model、directionCount、thinking、temperature、topP；它补足影响节点装配但不一定进入generation的配置，不记录凭据或完整配置文件。Harness把同一目录的这四个文件作为一次读取资源：先读 `meta.json`，只有 `complete: true` 且 `status: "complete"` 才把本次结果视为完整，再按 `meta.files` 一次读齐其余三份；`in-progress`/`incomplete` 目录只能作为部分证据，不能冒充成功。
 
-缺失信息保留为 `null`（例如输入校验/guard 在SDK前失败时，`invocation` 的 captured/system/prompt/model/选项不会被源文件重建）；未传给SDK的可选项也不猜 provider 默认值，记录为 `null` 或不出现。`result.json` 的成功内容是节点最终校验并补齐结构ID后的结果，不声称是provider原始文本。文件命名和有限schema已固定；不建立服务/数据库。`comments.md`由Agent在记录目录旁另存用户原话与解释，不改四个机器记录。
+缺失信息保留为 `null`（例如输入校验/guard 在调用前失败时，`invocation` 的 captured/system/prompt/model/选项不会被源文件重建）；未传给 worker 的可选项也不猜 provider 默认值，记录为 `null` 或不出现。`result.json` 的成功内容是节点最终校验并补齐结构ID后的结果，不声称是provider原始文本。文件命名和有限schema已固定；不建立服务/数据库。`comments.md`由Agent在记录目录旁另存用户原话与解释，不改四个机器记录。
 
 CLI在发起worker前只接受尚不存在的记录目录；目标或任何父级是符号链接、目录已存在或路径不安全时直接拒绝且不调用provider。目录权限为0700，四个文件权限为0600；CLI timeout/worker failure 会保留已有调用证据并写 `result.status: "unknown"`、`meta.complete: false`，不能把迟到provider结果或局部文件说成成功。
 
@@ -129,6 +129,14 @@ AC映射：AC1/5→S2；AC2→S1；AC3/4/6→S1+S2；AC7→S3；AC8→三片公�
 第一版只落实实际调用可检查和结果/comment可读写。文件式归档也有权限、碰撞、部分写入和迟到结果风险，必须测试；不因“本地文件”声称自动具备事务或崩溃恢复。
 
 ## 上下文演进
+
+### 2026-11-12 — 捕获边界切换到 Nextloop
+
+- **触发证据**：六节点共同模型执行已从 AI SDK 切换到 Nextloop stdio worker；六节点 invocation 测试继续通过。
+- **原假设**：`generateObject` 是实际模型调用边界，`sdkOptions` 表示 AI SDK 入参。
+- **决定**：在相同 `callLlm` 位置记录 Nextloop worker 请求；四文件 schema、权限和完成语义不变，兼容字段 `sdkOptions` 保留名称但含义改为 Nextloop Provider options。
+- **影响**：Agent 仍按 `meta.json` 和四文件读取真实 system/prompt、配置与最终节点结果；没有原始 Provider 报文或凭据进入记录。
+- **上下文处理**：preserve 原记录契约、私有文件安全和历史验收；replace 当前模型执行名称与字段含义。
 
 ### 2026-10-07 — 从已对齐的简单工作流进入开发claim
 

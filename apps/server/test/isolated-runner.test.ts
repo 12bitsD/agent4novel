@@ -3,19 +3,19 @@ import { mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync, rmSync, wr
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { JsonValue } from '@agent4novel/contracts'
-const mocks = vi.hoisted(() => ({ generateObject: vi.fn(), runtime: { mode: 'live', defaultModelId: 'kimi:kimi-k2.8-highspeed', requestTimeoutMs: 300000, generationSettings: () => ({ parameters: {}, options: {} }), languageModel: () => 'mock' } }))
-vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
+const mocks = vi.hoisted(() => ({ runNextloop: vi.fn(), runtime: { mode: 'live', defaultModelId: 'kimi:kimi-k2.8-highspeed', requestTimeoutMs: 300000, generationSettings: () => ({ parameters: {}, options: {} }), languageModel: () => 'mock' } }))
+vi.mock('../src/steps/nextloop-client.js', () => ({ runNextloop: mocks.runNextloop }))
 vi.mock('../src/steps/llm.js', () => ({ modelRuntime: mocks.runtime }))
 import { runIsolatedStep } from '../src/steps/isolated-runner.js'
 const content = { inputStage: '脑洞', summary: '合成测试', elements: [], gaps: [] }
-beforeEach(() => { mocks.generateObject.mockReset(); mocks.runtime.mode = 'live' })
+beforeEach(() => { mocks.runNextloop.mockReset(); mocks.runtime.mode = 'live' })
 it('isolates concurrent system overrides and preserves production caption prompt', async () => {
-  mocks.generateObject.mockImplementation(async () => ({ object: content, usage: {}, finishReason: 'stop' }))
+  mocks.runNextloop.mockImplementation(async () => ({ object: content, usage: {}, finishReason: 'stop' }))
   const results = await Promise.all(['version-a', 'version-b'].map(systemPrompt => runIsolatedStep({ stepId: 'caption', input: { seed: '合成素材' }, systemPrompt })))
   expect(results.map(r => r.kind)).toEqual(['succeeded', 'succeeded'])
   expect(results[0]!.runId).not.toBe(results[1]!.runId)
-  expect(mocks.generateObject.mock.calls.map(([call]) => call.system)).toEqual(['version-a', 'version-b'])
-  for (const [call] of mocks.generateObject.mock.calls) {
+  expect(mocks.runNextloop.mock.calls.map(([call]) => call.system)).toEqual(['version-a', 'version-b'])
+  for (const [call] of mocks.runNextloop.mock.calls) {
     expect(call.prompt).toBe('作者原始素材:\n合成素材\n\n请输出提炼稿。')
     expect(call.maxOutputTokens).toBe(8000)
     expect(call.maxRetries).toBeUndefined()
@@ -23,31 +23,31 @@ it('isolates concurrent system overrides and preserves production caption prompt
 })
 it('rejects missing upstream without a model call', async () => {
   expect(await runIsolatedStep({ stepId: 'outline', input: { seed: '合成素材' } })).toMatchObject({ kind: 'failed', code: 'invalid-input' })
-  expect(mocks.generateObject).not.toHaveBeenCalled()
+  expect(mocks.runNextloop).not.toHaveBeenCalled()
 })
 it('rejects absent credentials instead of using demo output', async () => {
   mocks.runtime.mode = 'demo'
   expect(await runIsolatedStep({ stepId: 'caption', input: { seed: '合成素材' } })).toMatchObject({ kind: 'failed', code: 'llm-unavailable' })
-  expect(mocks.generateObject).not.toHaveBeenCalled()
+  expect(mocks.runNextloop).not.toHaveBeenCalled()
 })
 it('forwards creative regeneration through the run-step worker into the production prompt', async () => {
   const f = await fixtures()
   const regenerated = { directions: f.creative.directions.map(({ directionId: _directionId, ...value }) => value) }
-  mocks.generateObject.mockResolvedValue({ object: regenerated, usage: {}, finishReason: 'stop' })
+  mocks.runNextloop.mockResolvedValue({ object: regenerated, usage: {}, finishReason: 'stop' })
   const result = await runIsolatedStep({
     stepId: 'creative',
     input: { seed: '合成素材', upstream: { caption: f.caption }, regeneration: { content: f.creative, instructions: '把冲突推进得更快' } },
     config: { directionCount: 1 },
   })
   expect(result.kind).toBe('succeeded')
-  expect(mocks.generateObject).toHaveBeenCalledTimes(1)
-  const call = mocks.generateObject.mock.calls[0]![0]
+  expect(mocks.runNextloop).toHaveBeenCalledTimes(1)
+  const call = mocks.runNextloop.mock.calls[0]![0]
   expect(call.prompt).toContain('当前已保存方向包(仅供本次再生参考):')
   expect(call.prompt).toContain(JSON.stringify(f.creative, null, 2))
   expect(call.prompt).toContain('作者补充想法:\n把冲突推进得更快')
 })
 it('does not expose provider errors', async () => {
-  mocks.generateObject.mockRejectedValue(new Error('PRIVATE_PROVIDER_RESPONSE'))
+  mocks.runNextloop.mockRejectedValue(new Error('PRIVATE_PROVIDER_RESPONSE'))
   const result = await runIsolatedStep({ stepId: 'caption', input: { seed: '合成素材' } })
   expect(result).toMatchObject({ kind: 'failed', code: 'llm-unavailable' })
   expect(JSON.stringify(result)).not.toContain('PRIVATE_PROVIDER_RESPONSE')
@@ -69,7 +69,7 @@ it('uses production selected-direction guard before invoking outline', async () 
   const source = await fixtures()
   source.creative.directions.push({ ...source.creative.directions[0]!, directionId: 'second' })
   expect(await runIsolatedStep({ stepId: 'outline', input: { seed: '合成素材', upstream: { creative: source.creative } } })).toMatchObject({ kind: 'failed', code: 'direction-not-selected' })
-  expect(mocks.generateObject).not.toHaveBeenCalled()
+  expect(mocks.runNextloop).not.toHaveBeenCalled()
 })
 it('returns direction-not-selected for Setting with multiple creative directions', async () => {
   const source = await fixtures()
@@ -78,7 +78,7 @@ it('returns direction-not-selected for Setting with multiple creative directions
     stepId: 'setting',
     input: { seed: '合成素材', upstream: { caption: source.caption, creative: source.creative, outline: source.outline } },
   })).toMatchObject({ kind: 'failed', code: 'direction-not-selected' })
-  expect(mocks.generateObject).not.toHaveBeenCalled()
+  expect(mocks.runNextloop).not.toHaveBeenCalled()
 })
 it.each(['creative', 'outline', 'setting', 'beat'] as const)('preserves %s production budget, context and output IDs with custom SP', async stepId => {
   const f = await fixtures()
@@ -86,11 +86,11 @@ it.each(['creative', 'outline', 'setting', 'beat'] as const)('preserves %s produ
     : stepId === 'outline' ? { arcs: f.outline.arcs.map(({ arcId: _arcId, segments, ...arc }) => ({ ...arc, segments: segments.map(({ segmentId: _segmentId, ...s }) => s) })) }
     : stepId === 'setting' ? { ...f.setting, world: f.setting.world.map(({ itemId: _itemId, ...v }) => v), characters: f.setting.characters.map(({ itemId: _itemId, ...v }) => v), factions: [], relationships: [], extensions: [] }
     : { ...f.beat, writingPlan: f.beat.writingPlan.map(({ itemId: _itemId, ...v }) => v) }
-  mocks.generateObject.mockResolvedValue({ object: raw, usage: {}, finishReason: 'stop' })
+  mocks.runNextloop.mockResolvedValue({ object: raw, usage: {}, finishReason: 'stop' })
   const upstream: Record<string, JsonValue> = stepId === 'beat' ? { outline: f.outline, setting: f.setting } : { caption: f.caption, creative: f.creative, outline: f.outline, setting: f.setting }
   const result = await runIsolatedStep({ stepId, input: { seed: '合成素材', upstream, ...(stepId === 'beat' ? { chapter: 1 as const } : {}) }, config: { directionCount: 1 }, systemPrompt: 'CUSTOM_SYSTEM' })
   expect(result.kind).toBe('succeeded')
-  const call = mocks.generateObject.mock.calls[0]![0]
+  const call = mocks.runNextloop.mock.calls[0]![0]
   expect(call.system).toBe('CUSTOM_SYSTEM')
   expect(call.maxOutputTokens).toBe(stepId === 'setting' || stepId === 'outline' ? 16000 : 8000)
   expect(call.maxRetries).toBe(stepId === 'setting' || stepId === 'beat' ? 0 : undefined)
@@ -107,10 +107,10 @@ it('keeps Beat assembled-input budget with overridden system', async () => {
   f.setting.overview = '\u0000'.repeat(20000)
   const result = await runIsolatedStep({ stepId: 'beat', input: { seed: '', chapter: 1, upstream: { outline: f.outline, setting: f.setting } }, systemPrompt: 'x'.repeat(100000) })
   expect(result).toMatchObject({ kind: 'failed', code: 'input-budget-exceeded' })
-  expect(mocks.generateObject).not.toHaveBeenCalled()
+  expect(mocks.runNextloop).not.toHaveBeenCalled()
 })
 
-it('records the actual SDK invocation and final step result only when explicitly requested', async () => {
+it('records the actual Nextloop invocation and final step result only when explicitly requested', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'a4n-step-record-server-'))
   const recordDir = join(directory, 'run-a')
   mkdirSync(recordDir, { mode: 0o700 })
@@ -118,7 +118,7 @@ it('records the actual SDK invocation and final step result only when explicitly
     parameters: { temperature: 0.4, topP: 0.6 },
     options: { temperature: 0.4, topP: 0.6 },
   })
-  mocks.generateObject.mockResolvedValue({ object: content, usage: {}, finishReason: 'stop' })
+  mocks.runNextloop.mockResolvedValue({ object: content, usage: {}, finishReason: 'stop' })
   try {
     const result = await runIsolatedStep({ stepId: 'caption', input: { seed: 'recorded seed' },
       systemPrompt: 'recorded system', config: { model: 'kimi:kimi-k2.8-highspeed' },
@@ -155,11 +155,11 @@ it('records a pre-call validation failure without fabricating an invocation', as
     const recordedResult = JSON.parse(readFileSync(join(recordDir, 'result.json'), 'utf8'))
     expect(invocation).toEqual(expect.objectContaining({ captured: false, system: null, prompt: null, model: null, generation: null, maxOutputTokens: null, maxRetries: null }))
     expect(recordedResult).toMatchObject({ status: 'failed', content: null, diagnostic: { code: 'invalid-input' } })
-    expect(mocks.generateObject).not.toHaveBeenCalled()
+    expect(mocks.runNextloop).not.toHaveBeenCalled()
   } finally { rmSync(directory, { recursive: true, force: true }) }
 })
 
-it.each(['caption', 'creative', 'outline', 'setting', 'beat', 'prose'] as const)('records the actual SDK boundary for %s with nulls for omitted options', async stepId => {
+it.each(['caption', 'creative', 'outline', 'setting', 'beat', 'prose'] as const)('records the actual Nextloop boundary for %s with nulls for omitted options', async stepId => {
   const f = await fixtures()
   const directory = mkdtempSync(join(tmpdir(), `a4n-step-record-${stepId}-`))
   const recordDir = join(directory, 'run-a')
@@ -176,13 +176,13 @@ it.each(['caption', 'creative', 'outline', 'setting', 'beat', 'prose'] as const)
     : stepId === 'setting' ? { ...f.setting, world: f.setting.world.map(({ itemId: _itemId, ...value }) => value), characters: f.setting.characters.map(({ itemId: _itemId, ...value }) => value) }
     : stepId === 'beat' ? { ...f.beat, writingPlan: f.beat.writingPlan.map(({ itemId: _itemId, ...value }) => value) }
     : { text: '合成正文。' }
-  mocks.generateObject.mockResolvedValue({ object, usage: {}, finishReason: 'stop' })
+  mocks.runNextloop.mockResolvedValue({ object, usage: {}, finishReason: 'stop' })
   try {
     const result = await runIsolatedStep({ stepId, input, systemPrompt: 'recorded system', config: { model: 'kimi:kimi-k2.8-highspeed', ...(stepId === 'creative' ? { directionCount: 1 } : {}) },
       record: { dir: recordDir, sources: { input: 'input-file', inputPath: '/private/input.json', systemPromptPath: '/private/sp.md', configPath: null }, version: { gitCommit: null, gitDirty: null } } })
     expect(result).toMatchObject({ kind: 'succeeded', recording: { status: 'complete', dir: recordDir } })
-    expect(mocks.generateObject).toHaveBeenCalledTimes(1)
-    const call = mocks.generateObject.mock.calls[0]![0]
+    expect(mocks.runNextloop).toHaveBeenCalledTimes(1)
+    const call = mocks.runNextloop.mock.calls[0]![0]
     const invocation = JSON.parse(readFileSync(join(recordDir, 'invocation.json'), 'utf8'))
     expect(invocation.system).toBe(call.system)
     expect(invocation.prompt).toBe(call.prompt)
@@ -212,6 +212,6 @@ it('refuses an existing input record without calling the model or changing the o
     } as never)
     expect(result).toMatchObject({ kind: 'failed', code: 'recording-failed', recording: { status: 'failed' } })
     expect(readFileSync(join(recordDir, 'input.json'), 'utf8')).toBe(original)
-    expect(mocks.generateObject).not.toHaveBeenCalled()
+    expect(mocks.runNextloop).not.toHaveBeenCalled()
   } finally { rmSync(directory, { recursive: true, force: true }) }
 })

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { cliBin as bin, cliTestEnv } from './cli-process.js'
+import { writeChatCompletion } from './sse.js'
 import {
   stepExperimentRecordInputSchema, stepExperimentRecordInvocationSchema,
   stepExperimentRecordResultSchema, stepExperimentRecordMetaSchema,
@@ -44,17 +45,24 @@ const workerLog = ${JSON.stringify(workerLog)}
 if (process.argv[1]?.endsWith('step-lab-main.ts')) {
   appendFileSync(workerLog, String(process.pid) + '\\n')
   if (mode === 'crash-after-fetch') {
-    const originalFetch = globalThis.fetch.bind(globalThis)
-    globalThis.fetch = async (...args) => {
-      const response = await originalFetch(...args)
-      await response.arrayBuffer()
-      writeFileSync(observation, JSON.stringify({
-        invocation: readFileSync(join(recordDir, 'invocation.json'), 'utf8'),
-        meta: readFileSync(join(recordDir, 'meta.json'), 'utf8'),
-        resultExists: existsSync(join(recordDir, 'result.json')),
-      }))
-      process.exit(23)
+    const { createRequire, syncBuiltinESMExports } = await import('node:module')
+    const childProcess = createRequire(import.meta.url)('node:child_process')
+    const originalSpawn = childProcess.spawn
+    childProcess.spawn = (...args) => {
+      const child = originalSpawn(...args)
+      if (args[1]?.includes('agent4novel_nextloop.worker')) {
+        child.stdout.on('data', () => {
+          writeFileSync(observation, JSON.stringify({
+            invocation: readFileSync(join(recordDir, 'invocation.json'), 'utf8'),
+            meta: readFileSync(join(recordDir, 'meta.json'), 'utf8'),
+            resultExists: existsSync(join(recordDir, 'result.json')),
+          }))
+          process.exit(23)
+        })
+      }
+      return child
     }
+    syncBuiltinESMExports()
   } else {
     const originalWrite = process.stdout.write.bind(process.stdout)
     process.stdout.write = (...args) => {
@@ -85,8 +93,7 @@ async function startSyntheticCaptionProvider() {
     requestCount++
     req.resume()
     res.setHeader('Content-Type', 'application/json')
-    res.end(JSON.stringify({ id: 'mock-step-failure', model: 'kimi-k2.8-highspeed', choices: [{ index: 0,
-      message: { role: 'assistant', content: JSON.stringify(caption) }, finish_reason: 'stop' }] }))
+    writeChatCompletion(res, caption)
   })
   server.listen(0, '127.0.0.1'); await once(server, 'listening')
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
@@ -112,8 +119,7 @@ describe('run-step through a local mock provider', () => {
       let source = ''; for await (const chunk of req) source += chunk
       expect(JSON.parse(source)).toMatchObject({ model: 'kimi-k2.8-highspeed', response_format: { type: 'json_object' } })
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ id: 'mock-record', model: 'kimi-k2.8-highspeed', choices: [{ index: 0,
-        message: { role: 'assistant', content: JSON.stringify(caption) }, finish_reason: 'stop' }] }))
+      writeChatCompletion(res, caption)
     })
     server.listen(0, '127.0.0.1'); await once(server, 'listening')
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
@@ -147,8 +153,7 @@ describe('run-step through a local mock provider', () => {
       const system = request.messages.find(message => message.role === 'system')?.content ?? ''
       const text = system.includes('B版') ? 'B版正文：第二段更具体。' : 'A版正文：第二段仍需调整。'
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ id: 'mock-iteration-loop', model: 'kimi-k2.8-highspeed', choices: [{ index: 0,
-        message: { role: 'assistant', content: JSON.stringify({ text }) }, finish_reason: 'stop' }] }))
+      writeChatCompletion(res, { text })
     })
     server.listen(0, '127.0.0.1'); await once(server, 'listening')
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
@@ -238,8 +243,7 @@ describe('run-step through a local mock provider', () => {
       let source = ''; for await (const chunk of req) source += chunk
       requests.push(JSON.parse(source))
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ id: 'mock-prose-two', model: 'kimi-k2.8-highspeed', choices: [{ index: 0,
-        message: { role: 'assistant', content: JSON.stringify({ text: '第二章正文。' }) }, finish_reason: 'stop' }] }))
+      writeChatCompletion(res, { text: '第二章正文。' })
     })
     server.listen(0, '127.0.0.1'); await once(server, 'listening')
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
@@ -276,8 +280,7 @@ describe('run-step through a local mock provider', () => {
       let source = ''; for await (const chunk of req) source += chunk
       requests.push(JSON.parse(source))
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ id: 'mock-model-override', model: 'kimi-k2.8-highspeed', choices: [{ index: 0,
-        message: { role: 'assistant', content: JSON.stringify(caption) }, finish_reason: 'stop' }] }))
+      writeChatCompletion(res, caption)
     })
     server.listen(0, '127.0.0.1'); await once(server, 'listening')
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
@@ -307,9 +310,7 @@ describe('run-step through a local mock provider', () => {
       let source = ''; for await (const chunk of req) source += chunk
       requests.push(JSON.parse(source))
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ id: 'mock-caption', model: 'LongCat-2.0', choices: [{ index: 0,
-        message: { role: 'assistant', content: JSON.stringify(caption) }, finish_reason: 'stop' }],
-        usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 } }))
+      writeChatCompletion(res, caption, 'LongCat-2.0')
     })
     server.listen(0, '127.0.0.1'); await once(server, 'listening')
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
@@ -333,9 +334,7 @@ describe('run-step through a local mock provider', () => {
       let source = ''; for await (const chunk of req) source += chunk
       requests.push(JSON.parse(source))
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ id: 'mock-caption', model: 'LongCat-2.0', choices: [{ index: 0,
-        message: { role: 'assistant', content: JSON.stringify(caption) }, finish_reason: 'stop' }],
-        usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 } }))
+      writeChatCompletion(res, caption, 'LongCat-2.0')
     })
     server.listen(0, '127.0.0.1'); await once(server, 'listening')
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
@@ -403,9 +402,7 @@ describe('run-step through a local mock provider', () => {
       let source = ''; for await (const chunk of req) source += chunk
       requests.push(JSON.parse(source))
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ id: 'mock-caption', model: 'kimi-k2.8-highspeed', choices: [{ index: 0,
-        message: { role: 'assistant', content: JSON.stringify(caption) }, finish_reason: 'stop' }],
-        usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 } }))
+      writeChatCompletion(res, caption)
     })
     server.listen(0, '127.0.0.1'); await once(server, 'listening')
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')
@@ -452,8 +449,7 @@ describe('run-step through a local mock provider', () => {
     const server = createServer((_req, res) => {
       calls++
       res.setHeader('Content-Type', 'application/json')
-      res.end(JSON.stringify({ id: 'mock-utf8', model: 'kimi-k2.8-highspeed', choices: [{ index: 0,
-        message: { role: 'assistant', content: JSON.stringify(caption) }, finish_reason: 'stop' }] }))
+      writeChatCompletion(res, caption)
     })
     server.listen(0, '127.0.0.1'); await once(server, 'listening')
     const address = server.address(); if (!address || typeof address === 'string') throw new Error('missing mock address')

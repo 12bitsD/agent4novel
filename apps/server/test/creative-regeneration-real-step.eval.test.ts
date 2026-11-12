@@ -5,8 +5,8 @@ import { Pipeline } from '../src/pipeline/pipeline.js'
 import { fakeArtifactStep } from './fakes.js'
 import { createCreativeStep } from '../src/steps/creative-step.js'
 
-const mocks = vi.hoisted(() => ({ generateObject: vi.fn(), languageModel: vi.fn(() => 'creative-canary-model') }))
-vi.mock('ai', () => ({ generateObject: mocks.generateObject }))
+const mocks = vi.hoisted(() => ({ runNextloop: vi.fn(), languageModel: vi.fn(() => 'creative-canary-model') }))
+vi.mock('../src/steps/nextloop-client.js', () => ({ runNextloop: mocks.runNextloop }))
 vi.mock('../src/steps/llm.js', () => ({
   modelRuntime: {
     defaultModelId: 'kimi:kimi-k2.8-highspeed', requestTimeoutMs: 120_000,
@@ -35,10 +35,10 @@ function makeApp(store: InMemoryStore) {
 }
 
 describe('creative regeneration HTTP with the production Step', () => {
-  beforeEach(() => mocks.generateObject.mockReset())
+  beforeEach(() => mocks.runNextloop.mockReset())
 
   it('E2 sends the exact frozen package through HTTP to createCreativeStep and commits a new pending head', async () => {
-    mocks.generateObject.mockResolvedValue({ object: { directions: [pack('new-A'), pack('new-B')] }, usage: {}, finishReason: 'stop' })
+    mocks.runNextloop.mockResolvedValue({ object: { directions: [pack('new-A'), pack('new-B')] }, usage: {}, finishReason: 'stop' })
     const store = new InMemoryStore()
     const work = store.createWork({ seed: 'REAL-SEED-CANARY' })
     store.appendArtifact(work.id, 'caption', caption, { humanStatus: 'approved' })
@@ -54,8 +54,8 @@ describe('creative regeneration HTTP with the production Step', () => {
     const result = await response.json() as { id: string }
     expect(result).toMatchObject({ workId: work.id, kind: 'creative', version: 2, humanStatus: 'pending', id: expect.any(String) })
     expect(result.id).not.toBe(old.id)
-    expect(mocks.generateObject).toHaveBeenCalledTimes(1)
-    const call = mocks.generateObject.mock.calls[0]![0] as { system: string; prompt: string }
+    expect(mocks.runNextloop).toHaveBeenCalledTimes(1)
+    const call = mocks.runNextloop.mock.calls[0]![0] as { system: string; prompt: string }
     expect(call.system).toContain('创意')
     for (const value of ['REAL-SEED-CANARY', 'REAL-CAPTION-CANARY', 'OLD-PACKAGE-CANARY', 'REAL-INSTRUCTION-CANARY']) expect(call.prompt).toContain(value)
     expect(mocks.languageModel).toHaveBeenCalledWith('kimi:kimi-k2.8-highspeed')
