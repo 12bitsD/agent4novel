@@ -407,8 +407,8 @@ describe('Pipeline(#3c 链式 advance)', () => {
     const pipeline = new Pipeline({ store, steps: new Map([['caption', failing]]), definition: definition.slice(0, 1), resolveConfig: () => ({}) })
     const works = Array.from({ length: 1001 }, (_, index) => store.createWork({ seed: `work-${index}` }))
     for (const work of works) expect((await pipeline.advance(work.id)).kind).toBe('failed')
-    expect(pipeline.failureOf(works[0]!.id)).toBeNull()
-    expect(pipeline.failureOf(works.at(-1)!.id)).toMatchObject({ stepId: 'caption', retryable: false })
+    expect(pipeline.failureOf(works[0]!.id, 'caption')).toBeNull()
+    expect(pipeline.failureOf(works.at(-1)!.id, 'caption')).toMatchObject({ stepId: 'caption', retryable: false })
   })
 
   it('reuses one work snapshot per advance iteration and one after each write', async () => {

@@ -21,7 +21,7 @@ last_context_reviewed: "2026-11-13"
 - **原始目的**：[#33](https://github.com/12bitsD/agent4novel/issues/33)把Docker/CI从#7拆出，交付本机单用户可运行产物。
 - **实际落地**：compiled server＋精简依赖、同源静态Web/健康接口、非root镜像和Compose已落地；本机Linux容器两章、旧章修改、重建与整个目录备份恢复通过。quality/container workflow已配置；[PR37](https://github.com/12bitsD/agent4novel/pull/37)已合并，#33已关闭，最终源提交两项[CI](https://github.com/12bitsD/agent4novel/actions/runs/36653441274)均成功。
 - **当前价值**：继承 #9 整个数据目录、v1 迁移、短事务、显式 seed 与不自动恢复模型生成；部署范围由用户明确选择。
-- **后续变化**：[Wiki007](./007-author-agent-config.md)扩展恢复联验，验证作者配置与Prompt/Skill文件；[Wiki008](./008-bad-example-collection.md)再覆盖不可变坏例及SQLite v3恢复。公网/账号/镜像发布/自动部署不在本票。
+- **后续变化**：[Wiki007](./007-author-agent-config.md)扩展恢复联验，验证作者配置与Prompt/Skill文件；[Wiki008](./008-bad-example-collection.md)再覆盖不可变坏例及SQLite v3恢复。公网/账号/镜像发布/自动部署不在本票；[Wiki 072](./072-runtime-static-lifecycle.md) 负责静态缓存与 listen/shutdown 证据。
 - **代码入口**：Hono公开应用、生产装配、server构建、Docker/Compose、质量/容器CI及验收脚本。
 
 

@@ -278,6 +278,7 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
       const prior = this.extensionRecord(workId, request.requestId)
       const record = proposeExtension(work, request, prior)
       if (record !== prior) this.putExtensionRecord(record)
+      else this.validateExtensionCandidate(prior)
       return extensionReceipt(record, 'propose')
     })
   }

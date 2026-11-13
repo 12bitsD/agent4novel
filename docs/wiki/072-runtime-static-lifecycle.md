@@ -18,7 +18,7 @@ last_context_reviewed: "2026-11-13"
 ## Agent Context
 
 - **读取时机**：修改静态文件 serving、缓存头、生产启动、listen error 或 shutdown 时。
-- **原始目的**：#72 承接 #67 的后端治理，要求减少每个静态请求的同步文件系统工作，并证明启动/退出资源回收可靠。
+- **原始目的**：本票 issue 为 [#72](https://github.com/12bitsD/agent4novel/issues/72)，承接 #67 的后端治理，减少每个静态请求的同步文件系统工作，并证明启动/退出资源回收可靠。
 - **实际落地**：异步 realpath/stat，hash 资产长期缓存、HTML no-cache，真实 EADDRINUSE 后 Store 可重开，shutdown 回归通过。
 - **当前价值**：Wiki 043 的路径安全、单次解码、realpath containment、symlink/API/HEAD/range 约束不放宽。
 - **后续变化**：无。
@@ -34,7 +34,7 @@ last_context_reviewed: "2026-11-13"
 
 ## 技术方案
 
-请求期路径校验改为 fs/promises，并以 `O_NOFOLLOW` 打开、dev/inode 同一性和打开后 realpath 复核绑定实际读取；GET/HEAD/range 从同一文件描述符流式返回，避免校验后路径替换。仅在成功响应上，对 `assets/` 下符合构建指纹约定 `名称-至少八位 hash.扩展名` 的文件设置 `public, max-age=31536000, immutable`，HTML 按请求目标设置 `no-cache`；416/API miss/未知资源不继承缓存。真实双进程验证端口冲突后的 Store 重开。
+请求期路径校验改为 fs/promises，在首次 realpath 前记录候选 dev/inode，再以 `O_NOFOLLOW` 打开并复核 fd 同一性和打开后 realpath；GET/HEAD/range 从同一文件描述符流式返回，覆盖目录换出后恢复的双交换。仅在成功响应上，按请求 URL 对 `assets/` 下符合构建指纹约定 `名称-至少八位 hash.扩展名` 的文件设置 `public, max-age=31536000, immutable`，稳定别名不继承；HTML 按请求目标设置 `no-cache`；416/API miss/未知资源不继承缓存。真实双进程验证端口冲突后的 Store 重开。
 
 ## 代码落点
 

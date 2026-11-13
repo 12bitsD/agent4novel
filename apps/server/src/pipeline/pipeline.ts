@@ -604,7 +604,7 @@ export class Pipeline {
   }
 
   // 读模型用:最近一次失败(无 → null)。审批等人工动作也会清掉它。
-  failureOf(workId: string, nextStepId?: string | null): { stepId: string; code: string; retryable: boolean } | null {
+  failureOf(workId: string, nextStepId: string | null): { stepId: string; code: string; retryable: boolean } | null {
     const failure = this.lastFailure.get(workId)
     if (!failure) return null
     if (nextStepId !== undefined && failure.stepId !== nextStepId) {

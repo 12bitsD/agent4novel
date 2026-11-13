@@ -36,9 +36,10 @@ export function staticWeb(directory: string): MiddlewareHandler {
     let handle: Awaited<ReturnType<typeof open>> | undefined
     let stream: ReturnType<typeof createReadStream> | undefined
     try {
-      const file = await realpath(join(root, path === '/' ? 'index.html' : path))
+      const candidate = join(root, path === '/' ? 'index.html' : path)
+      const expected = await stat(candidate)
+      const file = await realpath(candidate)
       if (!contained(root, file)) return next()
-      const expected = await stat(file)
       handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW)
       const stats = await handle.stat()
       if (!stats.isFile() || stats.dev !== expected.dev || stats.ino !== expected.ino || await realpath(file) !== file) {
@@ -76,7 +77,7 @@ export function staticWeb(directory: string): MiddlewareHandler {
         c.header('Content-Range', `bytes ${start}-${end}/${size}`)
       }
       if (path === '/' || path === '/index.html') c.header('Cache-Control', 'no-cache')
-      else if (/\/assets\/.+-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9.]+$/.test(file)) {
+      else if (/\/assets\/.+-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9.]+$/.test(path)) {
         c.header('Cache-Control', 'public, max-age=31536000, immutable')
       }
       if (c.req.method === 'HEAD' || size === 0) {

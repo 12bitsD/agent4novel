@@ -75,6 +75,32 @@ describe('static file validation/open race', () => {
     } finally { rmSync(folder, { recursive: true, force: true }) }
   })
 
+  it('rejects a directory swapped out and restored around the open call', async () => {
+    const { folder, app } = fixture()
+    try {
+      const outside = join(folder, 'outside')
+      mkdirSync(outside)
+      writeFileSync(join(outside, 'race-abcdef12.txt'), 'PRIVATE_STATIC_MARKER')
+      let calls = 0
+      control.afterRealpath = () => {
+        calls += 1
+        if (calls === 1) {
+          renameSync(join(folder, 'web', 'assets'), join(folder, 'web', 'assets-original'))
+          symlinkSync(outside, join(folder, 'web', 'assets'))
+        } else {
+          rmSync(join(folder, 'web', 'assets'), { recursive: true })
+          renameSync(join(folder, 'web', 'assets-original'), join(folder, 'web', 'assets'))
+        }
+      }
+      const response = await app.request('/assets/race-abcdef12.txt')
+      expect(response.status).toBe(404)
+      expect(response.headers.get('cache-control')).toBeNull()
+      expect(await response.text()).not.toContain('PRIVATE_STATIC_MARKER')
+      expect(control.closes).toHaveLength(1)
+      expect(control.closes[0]).toHaveBeenCalledTimes(1)
+    } finally { rmSync(folder, { recursive: true, force: true }) }
+  })
+
   it('closes a directory handle before falling through to not-found', async () => {
     const { folder, app } = fixture()
     try {

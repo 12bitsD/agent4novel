@@ -91,7 +91,7 @@ describe('first chapter Beat', () => {
     const second = await ready(async () => { beatContentSchema.parse({}); throw new Error('unreachable') })
     const invalid = await (await second.app.request(`/api/works/${second.work.id}/advance`, { method: 'POST' })).json()
     expect(invalid).toMatchObject({ code: 'llm-invalid-output', beatCommand: { failureStage: 'output' } })
-    expect(second.pipeline.failureOf(second.work.id)?.code).toBe('llm-invalid-output')
+    expect(second.pipeline.failureOf(second.work.id, 'beat')?.code).toBe('llm-invalid-output')
   })
   it('isolates work and artifact identities across Store lifetimes', () => {
     const first = new InMemoryStore()

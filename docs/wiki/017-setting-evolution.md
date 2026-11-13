@@ -36,7 +36,7 @@ last_context_reviewed: "2026-11-13"
 
 ### 资源与状态
 
-`SettingExtensionDraft` 只含 `title` 与无 ID 的 items。propose request 含 UUID `requestId`、`expectedBase: ArtifactRef` 和 draft；标题、条目标题和内容在原始长度校验后去除首尾空白。服务端生成 section/item IDs，记录带同一 `workId` 的 request、基准、扩展、状态和 candidate ref。Proposal record 读取时校验外层与 request 的 workId/requestId/base 一致性、request.extension 与 record.extension 的规范化内容一致性及 status/candidate 不变量。#70 起，approved record 在 GET 与 approve replay 都通过共享 validator 按 candidate 和 expectedBase 的精确 id/version 读取历史 Artifact，核对 setting/approved、完整内容为基准加末尾扩展、inputs 恰好只有 stored base；pending/cancelled 不查 candidate。GET 的 `stale` 是 pending proposal 与当前 Setting head 不同的派生状态；它不写回状态。
+`SettingExtensionDraft` 只含 `title` 与无 ID 的 items。propose request 含 UUID `requestId`、`expectedBase: ArtifactRef` 和 draft；标题、条目标题和内容在原始长度校验后去除首尾空白。服务端生成 section/item IDs，记录带同一 `workId` 的 request、基准、扩展、状态和 candidate ref。Proposal record 读取时校验外层与 request 的 workId/requestId/base 一致性、request.extension 与 record.extension 的规范化内容一致性及 status/candidate 不变量。#70 起，approved record 在 GET、propose replay 与 approve replay 都通过共享 validator 按 candidate 和 expectedBase 的精确 id/version 读取历史 Artifact，核对 setting/approved、完整内容为基准加末尾扩展、inputs 恰好只有 stored base；pending/cancelled 不查 candidate。GET 的 `stale` 是 pending proposal 与当前 Setting head 不同的派生状态；它不写回状态。
 
 动作回执固定包含 `requestId/workId/operation/outcome/writeOutcome/proposal/candidate/errorCode`。操作失败使用公共 error envelope 和固定 extension error code。terminal replay 先校验请求 expectedBase；approve replay 还重验 candidate/base，合法重放返回原 committed receipt 且不 UPDATE record，损坏时安全失败。pending proposal 在 approve 时重新检查 Setting CAS 和所有当前 Beat/Prose pending，cancel 可处理 derived-stale proposal。
 

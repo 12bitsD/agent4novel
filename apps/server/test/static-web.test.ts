@@ -167,6 +167,18 @@ it('serves suffix and exact ranges and rejects empty or zero suffixes', async ()
   }
 })
 
+it('does not make a stable alias immutable when its target has a hashed name', async () => {
+  const { webRoot, deps } = fixture()
+  writeFileSync(join(webRoot, 'assets', 'target-abcdef12.txt'), 'version one')
+  symlinkSync(join(webRoot, 'assets', 'target-abcdef12.txt'), join(webRoot, 'assets', 'stable.txt'))
+  const app = createApp({ ...deps, webRoot })
+  const alias = await app.request('/assets/stable.txt')
+  expect(alias.status).toBe(200)
+  expect(alias.headers.get('cache-control')).toBeNull()
+  const direct = await app.request('/assets/target-abcdef12.txt')
+  expect(direct.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+})
+
 it('marks HTML no-cache even when index.html is a symlink inside the build', async () => {
   const { webRoot, deps } = fixture()
   rmSync(join(webRoot, 'index.html'))

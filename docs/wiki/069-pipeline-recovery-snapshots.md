@@ -18,8 +18,8 @@ last_context_reviewed: "2026-11-13"
 ## Agent Context
 
 - **读取时机**：修改失败读模型、advance 快照、作者配置保存/解析或 Beat/Prose 输入预算时。
-- **原始目的**：#67 要求修复旧失败阻断生成，并消除完整作品快照、文件读取和大对象序列化的确定性重复工作。
-- **实际落地**：计划让失败随步骤与配置保存失效，增加有界缓存；状态投影复用 WorkDetail；单次配置 resolve 复用唯一文件；预算统计复用已序列化文本。
+- **原始目的**：本票 issue 为 [#69](https://github.com/12bitsD/agent4novel/issues/69)，承接 #67，修复旧失败阻断生成，并消除完整作品快照、文件读取和大对象序列化的确定性重复工作。
+- **实际落地**：失败随步骤与配置保存失效且有界；状态投影复用 WorkDetail；单次配置 resolve 复用唯一文件；预算统计复用已序列化文本。
 - **当前价值**：原错误响应 retryable 不变，模型期间 Store CAS 与 operation 配置冻结不变，不做跨请求文件缓存。
 - **后续变化**：#73 将在此接缝上传播取消 signal。
 - **代码入口**：`Pipeline.getStateFromWork()`、`failureOf()`、`AuthorConfigService.resolve()`。

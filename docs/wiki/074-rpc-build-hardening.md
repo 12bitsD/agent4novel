@@ -18,7 +18,7 @@ last_context_reviewed: "2026-11-13"
 ## Agent Context
 
 - **读取时机**：#15 基线固定后，修改 typed input、写路由 body limit、declaration Docker 输入或构建产物替换时。
-- **原始目的**：#67 要求修复 RPC 候选的重复/无界 body 读取和生产构建输入/原子性缺口。
+- **原始目的**：本票 issue 为 [#74](https://github.com/12bitsD/agent4novel/issues/74)，承接 #67，修复 RPC 候选的重复/无界 body 读取和生产构建输入/原子性缺口。
 - **实际落地**：未实施；问题与最小修复已交接 #15 评论，不在治理分支夹带其未提交工作。
 - **当前价值**：33 路由 manifest、wire matrix、Setting golden 和专属错误 envelope 是必须保留的边界。
 - **后续变化**：等待 #15 和 #73 基线。

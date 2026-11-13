@@ -18,8 +18,8 @@ last_context_reviewed: "2026-11-13"
 ## Agent Context
 
 - **读取时机**：修改作品/Artifact 查询、SQLite schema、书架列表或迁移时。
-- **原始目的**：#67 的后端性能与稳定性治理要求消除 `listWorks()` 的 N+1 和作品查询缺少索引的问题，不能牺牲既有持久化保障。
-- **实际落地**：计划新增 v5 普通作品索引，并在一次读事务中批量构造书架摘要。
+- **原始目的**：本票 issue 为 [#68](https://github.com/12bitsD/agent4novel/issues/68)，承接 #67 的后端性能与稳定性治理，消除 `listWorks()` 的 N+1 和作品查询缺少索引的问题，不能牺牲既有持久化保障。
+- **实际落地**：新增 v5 普通作品索引，并在一次读事务中批量构造书架摘要。
 - **当前价值**：保留部分唯一索引、全部 head 的损坏数据校验、作品顺序、UTF-16 seedPreview、approved 正文章数及事务 CAS。
 - **后续变化**：#70 在同一 SQLite 实现之后处理 Setting extension 完整性。
 - **代码入口**：`sqlite-schema.ts` 的迁移清单；`sqlite-store.ts` 的 `readDetail()` / `listWorks()`。

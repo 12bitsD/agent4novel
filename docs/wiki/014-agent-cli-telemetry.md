@@ -21,7 +21,7 @@ last_context_reviewed: "2026-11-13"
 - **原始目的**：消除 Agent 手拼 curl 和手记 expectedHeadVersion 的易错操作，并让一次 advance 同时返回结果与诊断。
 - **实际落地**：a4n 提供作品命令与本地 worker 单节点实验，支持自定义 SP、生成参数、校验后的 content 与安全 telemetry。#22 将 run-step 扩至六节点，新增 Prose 保存／通过／重写文件命令，smoke 延伸至正文保存、通过与逐字符回读；[Wiki 006](./006-chapter-continuation.md) 进一步加入 start-chapter 和任意合法章号的 Beat/Prose 独立输入；默认 smoke 仍停在首章。本页旧五节点与首章验证只属对应历史候选。
 - **当前价值**：本文拥有 CLI 命令语义、单节点输入与结果边界、遥测契约、smoke 流程和 outline 截断的排障经验；生成参数与 timeout 默认值由 Wiki 016 维护。
-- **后续变化**：[Wiki 016](./016-model-runtime-provider-config.md) 接管模型配置与 timeout 默认值；[Wiki 013](./013-setting-generation-review.md) 拥有 Setting 完整显式版本请求与结果对账规则，不沿用 Outline 自动补版本。
+- **后续变化**：[Wiki 016](./016-model-runtime-provider-config.md) 接管模型配置与 timeout 默认值；[Wiki 013](./013-setting-generation-review.md) 拥有 Setting 完整显式版本请求与结果对账规则，不沿用 Outline 自动补版本；[Wiki 071](./071-runner-lifecycle.md) 负责独立 runner 回收与安全错误分类。
   [Wiki 005](./005-beat-generation-review.md) 增加按章命令、请求关联与写入结果，移除共享原始错误内容传播；Beat 恢复语义以该页为准。[Wiki 022](./022-prose-generation-review.md) 接管 Prose 专用请求、状态保留保存与未知提交恢复；旧五步 smoke 终点及五节点测试不代表当前完整范围。[Wiki 006](./006-chapter-continuation.md) 接管明确目标章的开始命令、前章输入和多章验证边界。
 - **入口语法变化**：[Wiki 025](./025-cli-command-safety.md) 将子命令帮助和严格语法校验前置到任何 I/O；本文的业务结果、遥测和单节点语义保持不变。
 - **代码入口**：[CLI commands](../../apps/cli/src/commands.ts)、[local-step](../../apps/cli/src/local-step.ts)、[isolated-runner](../../apps/server/src/steps/isolated-runner.ts)、[telemetry ledger](../../apps/server/src/steps/telemetry.ts)、[LLM call](../../apps/server/src/steps/llm-call.ts)、[drive skill](../../.claude/skills/agent4novel-drive/SKILL.md)。

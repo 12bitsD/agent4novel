@@ -18,8 +18,8 @@ last_context_reviewed: "2026-11-13"
 ## Agent Context
 
 - **读取时机**：修改 Setting extension 状态机、candidate readback、终态重放或两个 Store 的扩展写入时。
-- **原始目的**：关闭 Wiki 017 留下的两个 P2：approved replay 绕过 candidate 对账，以及 validator 只检查“包含”而非精确 append-only。
-- **实际落地**：GET/approve replay 共用 candidate+base 精确校验，合法无变化 replay 不再 INSERT/UPDATE/REPLACE。
+- **原始目的**：本票 issue 为 [#70](https://github.com/12bitsD/agent4novel/issues/70)，关闭 Wiki 017 留下的两个 P2：approved replay 绕过 candidate 对账，以及 validator 只检查“包含”而非精确 append-only。
+- **实际落地**：GET/propose replay/approve replay 共用 candidate+base 精确校验，合法无变化 replay 不再 INSERT/UPDATE/REPLACE。
 - **当前价值**：合法重放回执不变，损坏持久数据安全失败且零写入；不改公开 API、状态机或历史章节。
 - **后续变化**：无。
 - **代码入口**：`isValidApprovedExtensionCandidate()`、两个 Store 的 `actSettingExtension()`。

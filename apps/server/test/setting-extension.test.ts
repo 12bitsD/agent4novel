@@ -376,6 +376,7 @@ describe('append-only setting extension', () => {
       const prepare = adapter === 'sqlite' ? vi.spyOn(Database.prototype, 'prepare') : undefined
       for (const action of [
         () => store.getSettingExtension(f.work.id, requestId),
+        () => store.proposeSettingExtension(f.work.id, proposal(f.base)),
         () => store.approveSettingExtension(f.work.id, { requestId, expectedBase: f.base }),
       ]) expect(action).toThrow(expect.objectContaining({ code: 'invalid-stored-data' }))
       expect(store.headVersion(f.work.id, 'setting')).toBe(2)
