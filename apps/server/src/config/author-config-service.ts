@@ -41,7 +41,8 @@ function parseSkill(text: string): { name: string; description: string; body: st
 
 export class AuthorConfigService {
   private readonly root: string
-  constructor(private readonly store: WorkStore, private readonly repository: AuthorConfigRepository, dataDir: string, private readonly runtime: ModelRuntime = modelRuntime) {
+  constructor(private readonly store: WorkStore, private readonly repository: AuthorConfigRepository, dataDir: string, private readonly runtime: ModelRuntime = modelRuntime,
+    private readonly onSaved: (workId: string) => void = () => {}) {
     this.root = resolve(dataDir, 'prompts')
   }
   private path(file: AgentFile): string { return join(this.root, hash(file.workId), file.id, file.name, 'SKILL.md') }
@@ -139,6 +140,15 @@ export class AuthorConfigService {
   private resolve(work: WorkDetail, document: AuthorConfigDocument, revision: number) {
     const files = this.repository.listAgentFiles(work.id)
     const legacy = revision === 0 ? work.config : {}
+    const parsedFiles = new Map<string, ReturnType<typeof parseSkill>>()
+    const readParsed = (file: AgentFile) => {
+      let parsed = parsedFiles.get(file.id)
+      if (!parsed) {
+        parsed = parseSkill(this.readText(file))
+        parsedFiles.set(file.id, parsed)
+      }
+      return parsed
+    }
     const configs: Record<string, AgentConfig> = {}
     const effective = authorStepIds.map(id => {
       const selected = { ...document.defaults, ...document.steps[id] }
@@ -159,8 +169,8 @@ export class AuthorConfigService {
       )))
       const guidance = [
         ...(Object.keys(appliedPreferences).length ? [`Author preferences: ${JSON.stringify(appliedPreferences)}`] : []),
-        ...(prompt ? [parseSkill(this.readText(prompt)).body] : selected.systemPromptRef === null ? [] : legacy.systemPrompt ? [legacy.systemPrompt] : []),
-        ...skills.map(file => `Skill ${file.name}:\n${parseSkill(this.readText(file)).body}`),
+        ...(prompt ? [readParsed(prompt).body] : selected.systemPromptRef === null ? [] : legacy.systemPrompt ? [legacy.systemPrompt] : []),
+        ...skills.map(file => `Skill ${file.name}:\n${readParsed(file).body}`),
       ].join('\n\n')
       if (guidance.length > authorConfigLimits.systemChars) throw invalid()
       config.systemPrompt = guidance
@@ -197,10 +207,13 @@ export class AuthorConfigService {
       if (prior.revision !== request.expectedRevision + 1 || JSON.stringify(prior.document) !== JSON.stringify(request.document)) {
         throw new KnownError('version-conflict', 'request identity already used')
       }
+      this.onSaved(workId)
       return prior
     }
     this.resolve(this.work(workId), authorConfigDocumentSchema.parse(request.document), request.expectedRevision + 1)
-    return this.repository.saveAuthorConfig(workId, request)
+    const receipt = this.repository.saveAuthorConfig(workId, request)
+    this.onSaved(workId)
+    return receipt
   }
   snapshot(work: WorkDetail): Record<string, AgentConfig> {
     const saved = this.repository.getAuthorConfig(work.id)

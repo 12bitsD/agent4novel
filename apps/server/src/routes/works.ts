@@ -243,7 +243,7 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
       const state = pipeline.getState(workId)
       const targetWorkflow = operation === 'regenerate' ? chapterWorkflow(store.getWork(workId)!, head.data.chapter, pipeline.repeatChapters) : null
       return c.json(beatCommandResponseSchema.parse({ ...result,
-        workflow: targetWorkflow ?? { ...workflowOf(state, pipeline.failureOf(workId), pipeline.completionKind), nextStepId: state.nextStepId },
+        workflow: targetWorkflow ?? { ...workflowOf(state, pipeline.failureOf(workId, state.nextStepId), pipeline.completionKind), nextStepId: state.nextStepId },
         telemetry: currentRequest()!.telemetry,
       }))
     } catch (err) {
@@ -323,7 +323,7 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
         const state = pipeline.getState(workId)
         const targetWorkflow = operation === 'regenerate' ? chapterWorkflow(store.getWork(workId)!, head.data.chapter, pipeline.repeatChapters) : null
         return c.json(proseCommandResponseSchema.parse({ ...result,
-          workflow: targetWorkflow ?? { ...workflowOf(state, pipeline.failureOf(workId), pipeline.completionKind), nextStepId: state.nextStepId },
+          workflow: targetWorkflow ?? { ...workflowOf(state, pipeline.failureOf(workId, state.nextStepId), pipeline.completionKind), nextStepId: state.nextStepId },
           telemetry: currentRequest()!.telemetry,
         }))
       } catch (cause) {
@@ -432,11 +432,11 @@ export function worksRoutes({ store, pipeline, meta }: WorksRoutesDeps): Hono {
     const workId = c.req.param('id')
     const work = store.getWork(workId)
     if (!work) return c.json(errorBody('work-not-found', 'not found'), 404)
-    const state = pipeline.getState(workId)
+    const state = pipeline.getStateFromWork(work)
     const view: WorkView = {
       ...work,
       currentChapter: currentChapterOf(work), chapters: chapterSummaries(work, pipeline.repeatChapters),
-      ...workflowOf(state, pipeline.failureOf(workId), pipeline.completionKind),
+      ...workflowOf(state, pipeline.failureOf(workId, state.nextStepId), pipeline.completionKind),
       nextStepId: state.nextStepId,
     }
     const parsed = workViewSchema.safeParse(view)

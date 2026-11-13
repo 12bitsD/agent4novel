@@ -11,19 +11,23 @@ export function createProseStep(options: { systemPrompt?: string } = {}): Artifa
     async run(input, config) {
       const { chapter, upstream, regeneration } = proseStepInputSchema.parse(input)
       const system = systemFor('prose', config, options.systemPrompt)
+      const beatText = JSON.stringify(upstream.beat)
+      const settingText = JSON.stringify(upstream.setting)
+      const previousChapterText = upstream.previousChapter ? JSON.stringify(upstream.previousChapter) : undefined
+      const draftText = regeneration ? JSON.stringify(regeneration.content) : undefined
       const prompt = [
         `模式：${regeneration ? 'regenerate' : 'initial'}；当前章号：${chapter}`,
-        `完整已通过章纲：\n${JSON.stringify(upstream.beat)}`,
-        `完整已通过设定：\n${JSON.stringify(upstream.setting)}`,
-        ...(upstream.previousChapter ? [`完整已通过上一章（实际正文优先于章纲计划）：\n${JSON.stringify(upstream.previousChapter)}`] : []),
-        ...(regeneration ? [`作者当前编辑的正文：\n${JSON.stringify(regeneration.content)}`, `本次修改意见：\n${regeneration.instructions}`] : []),
+        `完整已通过章纲：\n${beatText}`,
+        `完整已通过设定：\n${settingText}`,
+        ...(previousChapterText ? [`完整已通过上一章（实际正文优先于章纲计划）：\n${previousChapterText}`] : []),
+        ...(regeneration ? [`作者当前编辑的正文：\n${draftText}`, `本次修改意见：\n${regeneration.instructions}`] : []),
         `请返回第 ${chapter} 章完整正文，供作者独立把关。保持章纲方向及章末落点，不提前续写第 ${chapter + 1} 章。`,
       ].join('\n\n')
       if (system.length + prompt.length > proseLimits.maxPromptChars) throw new KnownError('input-budget-exceeded', 'assembled prose context exceeds budget', {
         inputBudget: { limit: proseLimits.maxPromptChars, actualLength: system.length + prompt.length, systemChars: system.length,
-          beatChars: JSON.stringify(upstream.beat).length, settingChars: JSON.stringify(upstream.setting).length,
-          previousChapterChars: upstream.previousChapter ? JSON.stringify(upstream.previousChapter).length : 0,
-          draftChars: regeneration ? JSON.stringify(regeneration.content).length : 0, instructionsChars: regeneration?.instructions.length ?? 0,
+          beatChars: beatText.length, settingChars: settingText.length,
+          previousChapterChars: previousChapterText?.length ?? 0,
+          draftChars: draftText?.length ?? 0, instructionsChars: regeneration?.instructions.length ?? 0,
         },
       })
       const content = await callLlm({ schema: proseContentSchema, system, prompt, config, workId: input.workId,

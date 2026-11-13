@@ -1,13 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { randomUUID, createHash } from 'node:crypto'
-import type { AgentConfig } from '@agent4novel/contracts'
+import type { AgentConfig, AgentFile } from '@agent4novel/contracts'
 import { SqliteStore } from '../src/store/sqlite-store.js'
 import { AuthorConfigService } from '../src/config/author-config-service.js'
 import { Pipeline } from '../src/pipeline/pipeline.js'
 import { createFakeCaptionStep, createFakeCreativeStep, createFakeOutlineStep } from '../src/steps/fake-step.js'
+import { modelRuntime } from '../src/steps/llm.js'
+import { KnownError } from '../src/errors.js'
 
 describe('operation configuration snapshot', () => {
   it('keeps already read file text during an operation and rejects a changed file before the next call', async () => {
@@ -63,6 +65,38 @@ describe('operation configuration snapshot', () => {
       pipeline.approve(work.id, 'creative')
       expect((await pipeline.advance(work.id)).kind).toBe('advanced')
       expect(seen.at(-1)).toMatchObject({ configRevision: 2, temperature: 0.8 })
+    } finally { store.close(); rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  it('reads each unique file once per resolve and checks it again on the next resolve', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'a4n-config-file-reads-')), store = new SqliteStore(join(dir, 'db.sqlite'))
+    try {
+      const work = store.createWork({ seed: 'file reads' }), service = new AuthorConfigService(store, store, dir)
+      const file = service.upload(work.id, { requestId: randomUUID(), kind: 'skill', text: '---\nname: shared\ndescription: Shared file\n---\nshared guidance' })
+      service.save(work.id, { requestId: randomUUID(), expectedRevision: 0, document: { preferences: {}, defaults: { skills: [file.id] }, steps: {} } })
+      const readText = vi.spyOn(service as unknown as { readText(file: AgentFile): string }, 'readText')
+      expect(service.get(work.id).effective).toHaveLength(6)
+      expect(readText).toHaveBeenCalledTimes(1)
+      expect(service.get(work.id).effective).toHaveLength(6)
+      expect(readText).toHaveBeenCalledTimes(2)
+      writeFileSync(join(dir, 'prompts', createHash('sha256').update(work.id).digest('hex'), file.id, file.name, 'SKILL.md'), 'changed file')
+      expect(() => service.get(work.id)).toThrow(expect.objectContaining({ code: 'agent-file-unavailable' }))
+      expect(readText).toHaveBeenCalledTimes(3)
+    } finally { store.close(); rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  it('clears a non-retryable generation failure after a valid configuration save', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'a4n-config-failure-recovery-')), store = new SqliteStore(join(dir, 'db.sqlite'))
+    try {
+      const work = store.createWork({ seed: 'configuration recovery' })
+      const caption = createFakeCaptionStep()
+      caption.run = async () => { throw new KnownError('llm-unavailable', 'invalid model configuration', { retryable: false }) }
+      const pipeline = new Pipeline({ store, steps: new Map([['caption', caption]]), definition: [{ stepId: 'caption', outputKind: 'caption' }], resolveConfig: () => ({}) })
+      const service = new AuthorConfigService(store, store, dir, modelRuntime, workId => pipeline.clearFailure(workId))
+      expect(await pipeline.advance(work.id)).toMatchObject({ kind: 'failed', stepId: 'caption', retryable: false })
+      expect(pipeline.failureOf(work.id, 'caption')).not.toBeNull()
+      service.save(work.id, { requestId: randomUUID(), expectedRevision: 0, document: { preferences: {}, defaults: {}, steps: {} } })
+      expect(pipeline.failureOf(work.id, 'caption')).toBeNull()
     } finally { store.close(); rmSync(dir, { recursive: true, force: true }) }
   })
 })
