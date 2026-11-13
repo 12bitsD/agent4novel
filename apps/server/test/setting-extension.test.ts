@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { beatContentSchema, proseContentSchema, settingContentSchema, settingExtensionReceiptSchema, settingExtensionResourceSchema } from '@agent4novel/contracts'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { beatContentSchema, proseContentSchema, settingContentSchema, settingExtensionProposalRecordSchema, settingExtensionReceiptSchema, settingExtensionResourceSchema } from '@agent4novel/contracts'
 import { createApp } from '../src/app.js'
 import { InMemoryStore } from '../src/store/in-memory-store.js'
 import { SqliteStore } from '../src/store/sqlite-store.js'
@@ -9,6 +9,7 @@ import { fakeArtifactStep } from './fakes.js'
 import { approveSetting } from '../src/setting-review.js'
 import { approveBeat } from '../src/beat-review.js'
 import { approveProse } from '../src/prose-review.js'
+import { isValidApprovedExtensionCandidate } from '../src/setting-extension.js'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -85,6 +86,7 @@ async function chapterFixture() {
 }
 
 describe('append-only setting extension', () => {
+  afterEach(() => vi.restoreAllMocks())
   it.each([['memory', () => new InMemoryStore()], ['sqlite', () => new SqliteStore(':memory:')]] as const)('proposes, approves and replays on %s', async (_name, makeStore) => {
     const f = fixture(makeStore())
     const proposed = await f.app.request(`/api/works/${f.work.id}/setting-extensions`, { method: 'POST', headers, body: JSON.stringify(proposal(f.base)) })
@@ -314,5 +316,99 @@ describe('append-only setting extension', () => {
       expect(store.getWork(f.work.id)!.artifacts.filter(a => a.kind === 'setting')).toHaveLength(1)
       store.close()
     } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  it('requires the candidate to equal exactly the base plus one trailing extension and one base input', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'a4n-setting-extension-exact-'))
+    const path = join(dir, 'db.sqlite')
+    try {
+      const store = new SqliteStore(path)
+      const f = fixture(store)
+      const base = f.store.getArtifactVersion(f.work.id, 'setting', undefined, f.base.artifactId, f.base.version)!
+      store.proposeSettingExtension(f.work.id, proposal(f.base))
+      const receipt = store.approveSettingExtension(f.work.id, { requestId, expectedBase: f.base })
+      const candidate = f.store.getArtifactVersion(f.work.id, 'setting', undefined, receipt.candidate!.artifactId, receipt.candidate!.version)!
+      const raw = new Database(path)
+      const row = raw.prepare('SELECT record FROM setting_extension_proposals WHERE work_id = ? AND request_id = ?').get(f.work.id, requestId) as { record: string }
+      raw.close()
+      const record = settingExtensionProposalRecordSchema.parse(JSON.parse(row.record))
+      expect(isValidApprovedExtensionCandidate(record, candidate, base)).toBe(true)
+      const content = settingContentSchema.parse(candidate.content)
+      const variants = [
+        { ...candidate, content: { ...content, overview: 'tampered old content' } },
+        { ...candidate, content: { ...content, extensions: [...content.extensions, content.extensions[0]!] } },
+        { ...candidate, content: { ...content, extensions: [content.extensions[0]!, ...content.extensions] } },
+        { ...candidate, inputs: [...candidate.inputs!, candidate.inputs![0]!] },
+        { ...candidate, inputs: [] },
+      ]
+      for (const variant of variants) expect(isValidApprovedExtensionCandidate(record, variant, base)).toBe(false)
+      expect(isValidApprovedExtensionCandidate(record, candidate, undefined)).toBe(false)
+      store.close()
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  it.each(['memory', 'sqlite'] as const)('rejects a tampered approved candidate on GET and approve replay on %s', adapter => {
+    const dir = mkdtempSync(join(tmpdir(), 'a4n-setting-extension-replay-corrupt-'))
+    const path = join(dir, 'db.sqlite')
+    try {
+      class CorruptMemoryStore extends InMemoryStore {
+        override getArtifactVersion(...args: Parameters<InMemoryStore['getArtifactVersion']>) {
+          const artifact = super.getArtifactVersion(...args)
+          if (artifact?.kind === 'setting' && artifact.version === 2) {
+            const content = settingContentSchema.parse(artifact.content)
+            return { ...artifact, content: { ...content, overview: 'tampered old content' } }
+          }
+          return artifact
+        }
+      }
+      const store = adapter === 'memory' ? new CorruptMemoryStore() : new SqliteStore(path)
+      const f = fixture(store)
+      store.proposeSettingExtension(f.work.id, proposal(f.base))
+      const receipt = store.approveSettingExtension(f.work.id, { requestId, expectedBase: f.base })
+      expect(receipt.candidate).not.toBeNull()
+      if (adapter === 'sqlite') {
+        const candidate = store.getArtifactVersion(f.work.id, 'setting', undefined, receipt.candidate!.artifactId, receipt.candidate!.version)!
+        const content = settingContentSchema.parse(candidate.content)
+        const raw = new Database(path)
+        raw.prepare('UPDATE artifacts SET content = ? WHERE id = ?').run(JSON.stringify({ ...content, overview: 'tampered old content' }), candidate.id)
+        raw.close()
+      }
+      const prepare = adapter === 'sqlite' ? vi.spyOn(Database.prototype, 'prepare') : undefined
+      for (const action of [
+        () => store.getSettingExtension(f.work.id, requestId),
+        () => store.approveSettingExtension(f.work.id, { requestId, expectedBase: f.base }),
+      ]) expect(action).toThrow(expect.objectContaining({ code: 'invalid-stored-data' }))
+      expect(store.headVersion(f.work.id, 'setting')).toBe(2)
+      const writes = prepare?.mock.calls.map(([sql]) => sql).filter(sql => sql.includes('setting_extension_proposals') && /^(INSERT|UPDATE|REPLACE)\b/.test(sql.trimStart()))
+      expect(writes ?? []).toEqual([])
+      prepare?.mockRestore()
+      if (store instanceof SqliteStore) store.close()
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+
+  it('skips record updates for legal propose, approve and cancel replays', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'a4n-setting-extension-replay-writes-'))
+    const path = join(dir, 'db.sqlite')
+    const prepare = vi.spyOn(Database.prototype, 'prepare')
+    try {
+      const store = new SqliteStore(path)
+      const f = fixture(store)
+      store.proposeSettingExtension(f.work.id, proposal(f.base))
+      const approved = store.approveSettingExtension(f.work.id, { requestId, expectedBase: f.base })
+      const secondBase = approved.candidate!
+      const secondId = '66666666-6666-4666-8666-666666666666'
+      store.proposeSettingExtension(f.work.id, proposal(secondBase, secondId))
+      store.cancelSettingExtension(f.work.id, { requestId: secondId, expectedBase: secondBase })
+      prepare.mockClear()
+      store.proposeSettingExtension(f.work.id, proposal(f.base))
+      store.approveSettingExtension(f.work.id, { requestId, expectedBase: f.base })
+      store.cancelSettingExtension(f.work.id, { requestId: secondId, expectedBase: secondBase })
+      const writes = prepare.mock.calls.map(([sql]) => sql).filter(sql => sql.includes('setting_extension_proposals') && /^(INSERT|UPDATE|REPLACE)\b/.test(sql.trimStart()))
+      expect(writes).toEqual([])
+      store.close()
+    } finally {
+      prepare.mockRestore()
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

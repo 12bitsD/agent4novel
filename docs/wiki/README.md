@@ -185,3 +185,4 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [060 Kimi API provider 与测试模型切换](./060-kimi-provider.md) | [#60](https://github.com/12bitsD/agent4novel/issues/60) | current | Kimi OpenAI-compatible provider、凭据/Base URL、通用测试模型与回归边界 |
 | [068 SQLite 索引与书架读放大](./068-sqlite-read-scaling.md) | [#68](https://github.com/12bitsD/agent4novel/issues/68) | current | SQLite v5 作品索引、书架批量读取与确定性查询验证 |
 | [069 流水线恢复、快照与配置重复工作](./069-pipeline-recovery-snapshots.md) | [#69](https://github.com/12bitsD/agent4novel/issues/69) | current | 失败恢复、有界缓存、作品快照与单配置文件复用 |
+| [070 Setting extension 完整性与重放](./070-setting-extension-integrity.md) | [#70](https://github.com/12bitsD/agent4novel/issues/70) | current | candidate/base 精确对账与合法终态重放零写入 |

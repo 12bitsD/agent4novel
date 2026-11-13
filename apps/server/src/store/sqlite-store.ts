@@ -263,12 +263,21 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
       .run(snapshot.workId, snapshot.requestId, JSON.stringify(snapshot))
   }
 
+  private validateExtensionCandidate(record: SettingExtensionProposalRecord | undefined): void {
+    if (!record || record.status !== 'approved') return
+    const candidate = record.candidate === null ? undefined
+      : this.artifactVersion(record.workId, 'setting', undefined, record.candidate.artifactId, record.candidate.version)
+    const base = this.artifactVersion(record.workId, 'setting', undefined, record.expectedBase.artifactId, record.expectedBase.version)
+    if (!isValidApprovedExtensionCandidate(record, candidate, base)) throw new StoreContractError('invalid-stored-data')
+  }
+
   proposeSettingExtension(workId: string, request: SettingExtensionProposeRequest): SettingExtensionReceipt {
     return this.write(() => {
       this.requireWork(workId)
       const work = this.readDetail(workId)!
-      const record = proposeExtension(work, request, this.extensionRecord(workId, request.requestId))
-      this.putExtensionRecord(record)
+      const prior = this.extensionRecord(workId, request.requestId)
+      const record = proposeExtension(work, request, prior)
+      if (record !== prior) this.putExtensionRecord(record)
       return extensionReceipt(record, 'propose')
     })
   }
@@ -279,7 +288,12 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
       // All current heads are read under the same IMMEDIATE writer transaction
       // as both writes; a route/service pre-read cannot satisfy this guard.
       const work = this.readDetail(workId)!
-      const plan = actOnExtension(work, request, this.extensionRecord(workId, request.requestId), operation)
+      const prior = this.extensionRecord(workId, request.requestId)
+      const plan = actOnExtension(work, request, prior, operation)
+      if (plan.replay) {
+        if (operation === 'approve') this.validateExtensionCandidate(prior)
+        return extensionReceipt(plan.record, operation)
+      }
       if (plan.artifact) this.insertArtifact(plan.artifact)
       this.putExtensionRecord(plan.record)
       return extensionReceipt(plan.record, operation)
@@ -298,10 +312,7 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
     return this.read(() => {
       this.requireWork(workId)
       const record = this.extensionRecord(workId, requestId)
-      const candidate = record?.status === 'approved' && record.candidate !== null
-        ? this.artifactVersion(workId, 'setting', undefined, record.candidate.artifactId, record.candidate.version)
-        : undefined
-      if (record && !isValidApprovedExtensionCandidate(record, candidate)) throw new StoreContractError('invalid-stored-data')
+      this.validateExtensionCandidate(record)
       return extensionResource(this.readDetail(workId)!, requestId, record)
     })
   }

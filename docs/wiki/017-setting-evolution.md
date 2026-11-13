@@ -8,9 +8,9 @@ topics: ["setting-extension", "append-only", "cas", "sqlite-migration", "harness
 code_paths: ["packages/contracts/src/setting-extension.ts", "apps/server/src/setting-extension.ts", "apps/server/src/store/work-store.ts", "apps/server/src/store/in-memory-store.ts", "apps/server/src/store/sqlite-store.ts", "apps/server/src/routes/setting-extensions.ts"]
 symbols: ["SettingExtensionResource", "SettingExtensionReceipt", "proposeSettingExtension", "approveSettingExtension", "setting_extension_proposals"]
 inherits: ["013", "018", "019", "021"]
-changed_by: []
+changed_by: ["070"]
 read_when: ["implement-setting-extension", "trace-setting-evolution", "debug-setting-extension", "verify-setting-input-refs"]
-last_context_reviewed: "2026-10-11"
+last_context_reviewed: "2026-11-13"
 ---
 
 # 017 — 设定演进
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-10-11"
 - **原始目的**：允许作者在已有 approved Setting 后追加一组新的补充设定，同时保留既有事实、历史章节和可回读操作证据。
 - **实际落地**：第一轮实现新增严格 propose、approve、cancel、GET 资源；proposal 是独立操作资源。InMemory 与 SQLite 共用领域规划逻辑，SQLite 使用 v4 表和事务；action 路由先校验 path UUID，再校验 body requestId 与 path 一致，之后才进入 proposal lookup；未提供既有事实编辑、删除、撤销、回退、自动重写或真实模型调用。
 - **当前价值**：受保护 Eval r0.3 是实现边界，SHA-256 为 `1d017caad04a8bbb03a29dfc40be1cb12f00e2abbdf7f8a37f9193ee4e53504e`。外部预检已覆盖内存／SQLite公共 HTTP、第二章 Beat 消费 Setting v2、历史引用、终态重放、413 与 SQLite restart；后续两轮补齐 proposal record 不变量、规范化值、Harness 用户入口和 approved candidate 历史 readback；最终候选仍需主 Agent 独立复验和双轴审核。
-- **后续变化**：无。#18 只提供非阻断冲突 review 设计，不被本票升级为冲突检测或自动回退。
+- **后续变化**：#70 关闭 approved replay 与 candidate/base 精确对账缺口；#18 只提供非阻断冲突 review 设计，不被本票升级为冲突检测或自动回退。
 - **代码入口**：`packages/contracts/src/setting-extension.ts`、`apps/server/src/setting-extension.ts`、`apps/server/src/routes/setting-extensions.ts`、`apps/server/src/store/work-store.ts`、两个 Store 实现及 `apps/server/test/setting-extension.test.ts`。
 
 ## 设计目的
@@ -36,9 +36,9 @@ last_context_reviewed: "2026-10-11"
 
 ### 资源与状态
 
-`SettingExtensionDraft` 只含 `title` 与无 ID 的 items。propose request 含 UUID `requestId`、`expectedBase: ArtifactRef` 和 draft；标题、条目标题和内容在原始长度校验后去除首尾空白。服务端生成 section/item IDs，记录带同一 `workId` 的 request、基准、扩展、状态和 candidate ref。Proposal record 读取时校验外层与 request 的 workId/requestId/base 一致性、request.extension 与 record.extension 的规范化内容一致性及 status/candidate 不变量。approved record 还通过共享 readback validator 按 candidate 的精确 id/version 读取历史 Artifact，核对 setting/approved、扩展内容和 stored base input；pending/cancelled 不查 candidate。GET 的 `stale` 是 pending proposal 与当前 Setting head 不同的派生状态；它不写回状态。
+`SettingExtensionDraft` 只含 `title` 与无 ID 的 items。propose request 含 UUID `requestId`、`expectedBase: ArtifactRef` 和 draft；标题、条目标题和内容在原始长度校验后去除首尾空白。服务端生成 section/item IDs，记录带同一 `workId` 的 request、基准、扩展、状态和 candidate ref。Proposal record 读取时校验外层与 request 的 workId/requestId/base 一致性、request.extension 与 record.extension 的规范化内容一致性及 status/candidate 不变量。#70 起，approved record 在 GET 与 approve replay 都通过共享 validator 按 candidate 和 expectedBase 的精确 id/version 读取历史 Artifact，核对 setting/approved、完整内容为基准加末尾扩展、inputs 恰好只有 stored base；pending/cancelled 不查 candidate。GET 的 `stale` 是 pending proposal 与当前 Setting head 不同的派生状态；它不写回状态。
 
-动作回执固定包含 `requestId/workId/operation/outcome/writeOutcome/proposal/candidate/errorCode`。操作失败使用公共 error envelope 和固定 extension error code。terminal replay 先校验请求 expectedBase，再返回原 committed receipt；pending proposal 在 approve 时重新检查 Setting CAS 和所有当前 Beat/Prose pending，cancel 可处理 derived-stale proposal。
+动作回执固定包含 `requestId/workId/operation/outcome/writeOutcome/proposal/candidate/errorCode`。操作失败使用公共 error envelope 和固定 extension error code。terminal replay 先校验请求 expectedBase；approve replay 还重验 candidate/base，合法重放返回原 committed receipt 且不 UPDATE record，损坏时安全失败。pending proposal 在 approve 时重新检查 Setting CAS 和所有当前 Beat/Prose pending，cancel 可处理 derived-stale proposal。
 
 ### 原子性与输入引用
 
@@ -114,6 +114,14 @@ impact 是读时投影：当前 approved prose 的去重章数、当前 pending 
 - **影响**：later Setting head 不会使合法历史 candidate 失效；缺失、错位或篡改 candidate 的 SQLite record 不再暴露为合法 resource；r0.3 API、状态机和 canonical store 边界不变。
 - **上下文处理**：preserve。
 
+### 2026-11-13 — #70 精确 candidate/base 对账与重放零写入
+
+- **触发证据**：本页保留的两个 P2 由当前代码复核确认：approved terminal replay 未完整复用 candidate 校验，且“包含”检查不能证明旧内容和 inputs 精确不变。
+- **原假设**：正常 HTTP 原子写入与历史 candidate 身份检查足以覆盖后续重放，但人工/恶意篡改持久记录也可经合法重放被包装成成功。
+- **决定**：GET 与 approve replay 按精确 id/version 同时读取 candidate 和 expectedBase，深比较“基准内容 + 末尾 proposal extension”及唯一基准 inputs；合法 propose/approve/cancel 重放跳过 record UPDATE。
+- **影响**：损坏 candidate/base 在两个 Store 均以 `invalid-stored-data` 失败且 head 不增长；合法回执和公开协议不变，SQLite 重放不再产生无意义写锁和磁盘提交。
+- **上下文处理**：preserve 本页原始三轮实现与风险记录；当前硬化方案归 Wiki 070。
+
 ## 交接结论
 
-主 Agent 可以从本页继续最终 Loop，但不能把第一轮定向绿灯当作票据完成。实现需严格保持 protected Eval r0.3 的范围；若需要修改既有事实、自动重写章节、静默 rebase stale proposal 或新增 canonical Setting store，应返回 Human review。
+主 Agent 可以从本页继续最终 Loop，但不能把第一轮定向绿灯当作票据完成。实现需严格保持 protected Eval r0.3 的范围；若需要修改既有事实、自动重写章节、静默 rebase stale proposal 或新增 canonical Setting store，应返回 Human review。#70 的 candidate/base 精确对账与重放零写入测试是当前完整性边界。
