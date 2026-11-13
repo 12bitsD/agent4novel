@@ -46,13 +46,13 @@ last_context_reviewed: "2026-11-13"
 
 ### 完成审核证据
 
-- **清单与候选**：固定点 `c060be489c21d6646fff1b59615a8eb71d8951b2`，前序 #68/#69/#70 已落地；T0/T1 待候选。
-- **逐项判定**：C1 已完成；C2–C6 待实施与独立审查。
-- **验收与 TDD**：issue #71；忽略 SIGTERM、父进程信号、未知异常、正常/错误单次终态 RED/GREEN 待记录。
-- **本地门禁**：候选定向与全量门禁待执行。
-- **双轴 review**：待完成。
-- **修复与回归**：待完成。
-- **知识维护**：本页新建；Wiki 014/051 待链接；schema/CONTEXT/ADR/README 预计 N/A。
+- **清单与候选**：固定点 `c060be489c21d6646fff1b59615a8eb71d8951b2`，前序 #68/#69/#70 已落地；实现提交 `eabbc88`；T0/T1 待最终统一收口。
+- **逐项判定**：C1/C2 PASS；C3/C4 定向证据已取得；C5 三轴审查发现已修复并复审关闭；C6 待最终统一 attestation。
+- **验收与 TDD**：issue #71；旧实现只 SIGTERM 且父进程不回收先 RED；fault-injection 证明 SIGTERM→SIGKILL→close，运行中 kill error 不伪造 close，父进程信号回收；非零 success/malformed 输出拒绝，合法 failed response 保留。
+- **本地门禁**：CLI 17 项、server 23 项及双 typecheck 通过；真实 transport timeout 的 unknown/incomplete 保持；最终全量 `pnpm test`、`pnpm typecheck`、`pnpm build`、production/container smoke 与 `git diff --check <fixed-point>` 均通过。
+- **双轴 review**：已关闭 kill error 竞态、非零 close 绕过和 runtime 顶层导入副作用，增量复现无剩余发现。
+- **修复与回归**：统一 closed/settled，spawn failure 与运行 error 分离，close 后拒绝；错误分类测试无 provider 初始化副作用。
+- **知识维护**：本页与 Wiki index 新建；Wiki 014/016/051 changed_by 已链接；schema/CONTEXT/ADR/research/README/运行 skill N/A；handoff 待统一更新。
 - **发布前裁决**：pending；默认仅本地分支。
 
 ## 边界与非目标

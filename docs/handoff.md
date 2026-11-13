@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。最后更新：2026-10-11。本机 MVP 已发布；#35/PR45、#47/PR48 与 #49/PR50 已关闭/合并（本轮 GitHub 回读）。当前进入 MVP 后第二期；#12、#20、#51、#46 已合并关闭。#60 Kimi provider 已合并关闭。#21 章节重生已完成：允许历史章重生，后续章保留并只提示连续性；#21/PR62 已合并关闭。#18 冲突设计已完成：Setting 前非阻断旁路、作者 disposition 和显式上下文。#17 设定扩展已按 Loop 完成并合入 main（PR65、CI 与 issue close 已回读）；剩余两个恶意持久 JSON 篡改硬化风险见 Wiki017，不是正常 HTTP 路径。下一步是先对齐 #15 Hono RPC 技术整理；实现尚未获 Human 确认。#28/#29 与长篇质量评估保持后置。
+> 用途：context compaction / 新会话接力。最后更新：2026-11-13。本机 MVP 已发布；#35/PR45、#47/PR48 与 #49/PR50 已关闭/合并（本轮 GitHub 回读）。当前进入 MVP 后第二期；#12、#20、#51、#46 已合并关闭。#60 Kimi provider 已合并关闭。#21 章节重生已完成：允许历史章重生，后续章保留并只提示连续性；#21/PR62 已合并关闭。#18 冲突设计已完成：Setting 前非阻断旁路、作者 disposition 和显式上下文。#17 设定扩展已按 Loop 完成并合入 main（PR65、CI 与 issue close 已回读）；原两个恶意持久 JSON 篡改硬化风险已由 #70 关闭，见 Wiki017/Wiki070。下一步是先对齐 #15 Hono RPC 技术整理；实现尚未获 Human 确认。#28/#29 与长篇质量评估保持后置。2026-11-13 起启动 #67 后端性能与稳定性治理：#68-#72 已在独立分支完成实现、定向回归、三轴审查和全量门禁；#73/#74 等 #15 基线固定。默认仅本地交付，不 push、不远端 merge、不关闭票据。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -16,7 +16,7 @@
 
 ## 当前里程碑与验证边界
 
-此前 #49 的范围与工程证据从 [Wiki049](./wiki/049-author-workbench.md) 进入，已随 PR50 合入。六种材料的保存差异、显式续章、原文/UTF-16、配置和坏例保护继续有效。新大纲通过绑定作者所见 ID/版本；旧通用通过命令仍读取服务端当前 head。通用任意历史全文和浏览器历史协议未新增；#21 仅新增按精确 ID/version 读取 Beat/Prose 历史版本。当前第二期的范围、顺序和非目标集中在 [第二期路线](./plans/mvp-phase2-roadmap.md)。#21 的实现、CI、远端 main 和 issue close 已完成；#18 只完成设计，不提供冲突检测代码能力；#17 已由 [PR65](https://github.com/12bitsD/agent4novel/pull/65) 合入并关闭，当前下一票为尚未获 Human 实施确认的 #15 技术整理。
+此前 #49 的范围与工程证据从 [Wiki049](./wiki/049-author-workbench.md) 进入，已随 PR50 合入。六种材料的保存差异、显式续章、原文/UTF-16、配置和坏例保护继续有效。新大纲通过绑定作者所见 ID/版本；旧通用通过命令仍读取服务端当前 head。通用任意历史全文和浏览器历史协议未新增；#21 仅新增按精确 ID/version 读取 Beat/Prose 历史版本。当前第二期的范围、顺序和非目标集中在 [第二期路线](./plans/mvp-phase2-roadmap.md)。#21 的实现、CI、远端 main 和 issue close 已完成；#18 只完成设计，不提供冲突检测代码能力；#17 已由 [PR65](https://github.com/12bitsD/agent4novel/pull/65) 合入并关闭，当前下一票为尚未获 Human 实施确认的 #15 技术整理。#67 治理的本地交付入口为 Wiki068-072；#73 模型取消与 #74 RPC/构建硬化仍需等 #15 形成已提交基线。
 
 **本机 MVP 已发布，整体验证与边界从 [Wiki001](./wiki/001-mvp-acceptance.md) 进入。** 2026-10-03 回读 #1 及 #6/#19/#9/#33/#7/#8 均已关闭，对应 PR 均已合并；[PR40](https://github.com/12bitsD/agent4novel/pull/40) 对应源提交的 CI 与 [main CI](https://github.com/12bitsD/agent4novel/actions/runs/36727036119) 均成功。文档 #41/PR42、修复 #43/PR44 与视觉 #35/PR45 也已关闭/合并；#47/#49 的后续交接分别见 Wiki047 与 Wiki049。#35 的 [main CI](https://github.com/12bitsD/agent4novel/actions/runs/37100590655/attempts/2) 最终成功；其首轮 SQLite 并发初始化失败由 #46 独立跟踪，重试通过不表示该竞争已修复。关闭记录证明交付状态，不能消除未来新发现。
 
@@ -135,6 +135,9 @@ CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化
 | #21 章节重生（已交付） | 历史章两阶段 beat/prose 重生；旧版本和后续章节保留；精确历史 GET 与连续性提示 | PR62 已合并关闭；TDD、双轴 review、CI 和远端完成评论见 [Wiki021](./wiki/021-chapter-regeneration.md) |
 | #18 冲突检测与作者澄清（设计已交付） | Setting 前非阻断 review note、作者 disposition、stale 和显式上下文 | 设计契约已固定；后续实现另行立票；不阻断 Setting、不增加 canonical Setting 字段 |
 | #17 设定演进（已交付） | append-only 扩展提案、原子审批、影响提示、版本输入引用与 SQLite v4 | PR65 已合并关闭；三轮 Loop、双轴 review、quality/container CI、远端 main 回读和完成评论见 [Wiki017](./wiki/017-setting-evolution.md)；不支持既有事实编辑/撤销/回退 |
+| #67 后端治理（本地实现完成） | #68 SQLite 读放大、#69 流水线恢复/快照、#70 扩展完整性、#71 runner 回收、#72 静态/生命周期 | 全量 test/typecheck/build 与 production/container smoke 通过；仅本地分支，未 push/远端 merge/关闭 |
+| #73 模型取消（阻塞） | 断连 signal 贯通并释放生成锁，shutdown 复用取消入口 | 等 #15 和 #69 基线；未实施 |
+| #74 RPC/构建硬化（阻塞） | bounded body 单次读取、写路由限额、declaration Docker 输入与 staging 构建 | 等 #15 和 #73 基线；未实施，当前 RPC 候选问题已交接 #15 |
 | #15 Hono RPC 技术整理（待 Human 确认） | Web 通过 `hc<AppType>` 消除手写 DTO 漂移，REST 语义不变 | 受保护 Eval r0.2 已独立校准 PASS；实现前需 Human 确认，避免把技术整理扩成行为变化 |
 | #28/#29 扩展（第三期） | 设定查询工具循环、作品 Wiki 档案演进 | 当前均未实现，保持后置 |
 

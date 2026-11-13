@@ -47,13 +47,13 @@ last_context_reviewed: "2026-11-13"
 
 ### 完成审核证据
 
-- **清单与候选**：固定点 `c060be489c21d6646fff1b59615a8eb71d8951b2`，M1 为先行提交；T0/T1 待候选。
-- **逐项判定**：C1 已完成计划、票据、上下文与固定点核对；C2–C6 待实施与独立审查。
-- **验收与 TDD**：issue #69；失败恢复、缓存上限、读取次数、文件篡改和预算 RED/GREEN 待记录。
-- **本地门禁**：固定点与 M1 定向证据已记录于 #68；候选门禁待执行。
-- **双轴 review**：待完成。
-- **修复与回归**：待完成。
-- **知识维护**：本页新建；schema/CONTEXT/ADR/README 预计 N/A；handoff 与运行 skill 待最终核对。
+- **清单与候选**：固定点 `c060be489c21d6646fff1b59615a8eb71d8951b2`，M1 为先行提交；实现提交 `a9dec06`；T0/T1 待最终统一收口。
+- **逐项判定**：C1/C2 PASS；C3/C4 定向证据已取得；C5 三轴审查发现已修复并复审关闭；C6 待最终统一 attestation。
+- **验收与 TDD**：issue #69；失败不失效、缓存无上限、advance 9 次读取、详情 2 次、配置文件 6 次均先 RED；实现后 advance 4 次、详情 1 次、唯一文件每次 resolve 1 次，旧失败随步骤/配置失效且缓存有界，篡改下次仍拒绝，Beat 超预算只序列化三个 section。
+- **本地门禁**：相关 12 个测试文件 165 项及 server typecheck 通过；修复后 74 项定向复验通过；最终全量 `pnpm test`、`pnpm typecheck`、`pnpm build`、production/container smoke 与 `git diff --check <fixed-point>` 均通过。
+- **双轴 review**：已关闭 Beat 二次序列化与清理分散，Spec/Risk 复审无剩余代码发现。
+- **修复与回归**：`clearFailure` 统一入口；状态投影与配置/文件复用仅限明确快照；CAS、配置 revision 冻结和 unknown-write 语义不变。
+- **知识维护**：本页与 Wiki index 新建；schema/CONTEXT/ADR/research/README/运行 skill N/A；handoff 待统一更新。
 - **发布前裁决**：pending；默认仅本地分支。
 
 ## 边界与非目标

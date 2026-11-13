@@ -48,13 +48,13 @@ last_context_reviewed: "2026-11-13"
 
 ### 完成审核证据
 
-- **清单与候选**：固定点 `c060be489c21d6646fff1b59615a8eb71d8951b2`；T0/T1 待候选形成。
-- **逐项判定**：C1 已完成用户计划对齐、固定点/脏工作区隔离、Wiki/ADR/schema 阅读；C2–C6 待实施与独立审查。
-- **验收与 TDD**：issue #68；查询次数、查询计划、迁移与行为 RED/GREEN 待记录。
-- **本地门禁**：固定点完整基线通过；候选门禁待执行。
-- **双轴 review**：待完成。
-- **修复与回归**：待完成。
-- **知识维护**：本页新建；`docs/schema.md` 待随 v5 更新；CONTEXT/ADR/README 预计 N/A（无领域词、不可逆架构或用户操作变化）。
+- **清单与候选**：固定点 `c060be489c21d6646fff1b59615a8eb71d8951b2`；实现提交 `e301d79`；T0/T1 待最终统一收口。
+- **逐项判定**：C1/C2 PASS：计划、票据、固定点与 RED/GREEN 完整；C3/C4 定向证据已取得；C5 三轴审查发现已修复并复审关闭；C6 待最终统一 attestation。
+- **验收与 TDD**：issue #68；旧实现书架 SQL 5 次（两作品）且缺索引，目标测试先 RED；实现后恒为 2 次，生产两条 Artifact 查询均使用完整 covering index，v1–v4 原始多版本行不变，孤儿与合法作品行为保持。
+- **本地门禁**：固定点完整基线通过；候选相关 10 个测试文件 208 项及 server typecheck 通过；最终全量 `pnpm test`、`pnpm typecheck`、`pnpm build`、production smoke、container smoke 与 `git diff --check <fixed-point>` 均通过；容器完成同源 Web/API、无密钥两章、配置/文件、坏例、历史/关卡和停止后的整目录备份恢复。
+- **双轴 review**：Standards/Spec/Risk 已关闭重复 head 校验丢失、孤儿范围扩大、弱查询计划与迁移历史盲区，增量复审无剩余代码发现。
+- **修复与回归**：共享 currentArtifactHead/schemaVersions，恢复 workDetailSchema，强化原始行与真实 SQL 断言。
+- **知识维护**：本页与 Wiki index 新建；`docs/schema.md` 已更新 v5、索引与批量书架语义；CONTEXT/ADR/research/README/运行 skill N/A（无对应变化）；handoff 待统一更新。
 - **发布前裁决**：pending；默认仅本地分支，不 push/远端 merge/关闭 issue。
 
 ## 边界与非目标

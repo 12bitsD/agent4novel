@@ -49,7 +49,7 @@ last_context_reviewed: "2026-11-13"
 - **清单与候选**：固定点 `c060be489c21d6646fff1b59615a8eb71d8951b2`，前序 #68–#71 已落地；T0/T1 待候选。
 - **逐项判定**：C1/C2 已完成；C3–C6 待最终门禁与独立审查收口。
 - **验收与 TDD**：issue #72；缓存头 RED 为旧实现缺失，随后通过；realpath/open 竞态、目录/成功流/取消句柄关闭、suffix/非法 range、合法 HTML symlink、EADDRINUSE、close-before-exit 均通过。
-- **本地门禁**：`static-web.test.ts`、`static-web-race.test.ts`、`server-startup.test.ts`、`shutdown.test.ts` 共 23 项及 server typecheck 通过；全量门禁待最终执行。
+- **本地门禁**：`static-web.test.ts`、`static-web-race.test.ts`、`server-startup.test.ts`、`shutdown.test.ts` 共 23 项及 server typecheck 通过；最终全量 `pnpm test`、`pnpm typecheck`、`pnpm build`、production/container smoke 与 `git diff --check <fixed-point>` 均通过。
 - **双轴 review**：已关闭路径泄露、缓存污染、fd 泄漏、suffix range、启动清理和测试时序发现；最终候选待复核。
 - **修复与回归**：校验/打开同一性、成功响应缓存、fd 生命周期和启动测试清理均已定向回归。
 - **知识维护**：本页新建；Wiki 033/043 changed_by 已链接；schema/CONTEXT/ADR/README N/A（无形状、领域词、不可逆选型或用户操作变化）。

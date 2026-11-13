@@ -188,3 +188,5 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [070 Setting extension 完整性与重放](./070-setting-extension-integrity.md) | [#70](https://github.com/12bitsD/agent4novel/issues/70) | current | candidate/base 精确对账与合法终态重放零写入 |
 | [071 独立 runner 生命周期与错误分类](./071-runner-lifecycle.md) | [#71](https://github.com/12bitsD/agent4novel/issues/71) | current | 子进程终态回收、父进程信号与安全错误分类 |
 | [072 静态资源与启动退出边界](./072-runtime-static-lifecycle.md) | [#72](https://github.com/12bitsD/agent4novel/issues/72) | current | 异步静态校验、资产缓存与真实 listen/shutdown 证据 |
+| [073 模型取消传播与 shutdown（阻塞）](./073-model-cancellation.md) | [#73](https://github.com/12bitsD/agent4novel/issues/73) | current | 等 #15/#69 基线；断连 signal、锁释放与 append 边界设计 |
+| [074 RPC 请求边界与生产构建硬化（阻塞）](./074-rpc-build-hardening.md) | [#74](https://github.com/12bitsD/agent4novel/issues/74) | current | 等 #15/#73 基线；bounded body、写限额与 staging 构建 |
