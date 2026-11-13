@@ -8,9 +8,9 @@ topics: ["model-runtime", "provider-config", "generation-parameters", "thinking"
 code_paths: ["apps/server/src/index.ts", "apps/server/src/steps/llm.ts", "apps/server/src/steps/llm-call.ts", "apps/server/src/config/local-env.ts", "apps/server/src/start.ts", "apps/server/src/step-lab-main.ts", "apps/cli/src/local-step.ts", "packages/contracts/src/step.ts", "packages/contracts/src/author-config.ts", "apps/cli/src/client.ts", ".env.example", "compose.yaml"]
 symbols: ["ModelRuntime", "SupportedModelId", "ModelConfigError", "createModelRuntime", "modelRuntime", "DEFAULT_KIMI_MODEL_ID", "DEFAULT_KIMI_BASE_URL", "generationSettings", "generationParametersSchema", "callLlm", "run-step", "DEFAULT_CLI_TIMEOUT_MS", "DEFAULT_ADVANCE_TIMEOUT_MS", "A4N_LLM_TIMEOUT_MS", "A4N_CLI_TIMEOUT_MS", "llm-timeout"]
 inherits: ["014"]
-changed_by: ["013", "005", "033", "007", "060"]
+changed_by: ["013", "005", "033", "007", "060", "071"]
 read_when: ["configure-model-provider", "configure-generation-parameters", "run-isolated-step", "add-model-provider", "debug-llm-runtime", "change-llm-timeout", "audit-credential-safety"]
-last_context_reviewed: "2026-10-10"
+last_context_reviewed: "2026-11-13"
 ---
 
 # 016 — 模型运行配置：统一多 Provider、凭据与超时

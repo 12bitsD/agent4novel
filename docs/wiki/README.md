@@ -186,3 +186,4 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [068 SQLite 索引与书架读放大](./068-sqlite-read-scaling.md) | [#68](https://github.com/12bitsD/agent4novel/issues/68) | current | SQLite v5 作品索引、书架批量读取与确定性查询验证 |
 | [069 流水线恢复、快照与配置重复工作](./069-pipeline-recovery-snapshots.md) | [#69](https://github.com/12bitsD/agent4novel/issues/69) | current | 失败恢复、有界缓存、作品快照与单配置文件复用 |
 | [070 Setting extension 完整性与重放](./070-setting-extension-integrity.md) | [#70](https://github.com/12bitsD/agent4novel/issues/70) | current | candidate/base 精确对账与合法终态重放零写入 |
+| [071 独立 runner 生命周期与错误分类](./071-runner-lifecycle.md) | [#71](https://github.com/12bitsD/agent4novel/issues/71) | current | 子进程终态回收、父进程信号与安全错误分类 |

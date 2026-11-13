@@ -8,9 +8,9 @@ topics: ["node-iteration", "agent-cli", "system-prompt", "context-control", "pri
 code_paths: ["apps/cli/src/local-step.ts", "apps/cli/src/command-line.ts", "apps/server/src/step-lab-main.ts", "apps/server/src/steps/isolated-runner.ts", "apps/server/src/steps/llm-call.ts", "packages/contracts/src/step-experiment.ts"]
 symbols: ["run-step", "runLocalStep", "runIsolatedStep", "callLlm", "--record-dir"]
 inherits: ["014", "011", "016"]
-changed_by: []
+changed_by: ["071"]
 read_when: ["develop-node-iteration", "record-isolated-step", "review-node-input-output", "compare-system-prompts"]
-last_context_reviewed: "2026-10-10"
+last_context_reviewed: "2026-11-13"
 ---
 
 # 051 — 节点实际输入输出记录与Agent迭代
