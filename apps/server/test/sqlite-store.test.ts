@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { chmodSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,7 +7,10 @@ import { SqliteStore } from '../src/store/sqlite-store.js'
 import { caption, setting } from './fixtures/artifact-content.js'
 
 const cleanups: (() => void)[] = []
-afterEach(() => { for (const clean of cleanups.splice(0).reverse()) clean() })
+afterEach(() => {
+  vi.restoreAllMocks()
+  for (const clean of cleanups.splice(0).reverse()) clean()
+})
 function databasePath(): string {
   const directory = mkdtempSync(join(tmpdir(), 'a4n-sqlite-store-'))
   cleanups.push(() => rmSync(directory, { recursive: true, force: true }))
@@ -173,5 +176,61 @@ describe('SQLite persistence', () => {
     expect(store.listWorks()).toEqual([])
     db.exec('DROP TRIGGER fail_second')
     expect(store.createWorksIfEmpty([{ seed: 'retry' }])).toBe(true)
+  })
+
+  it('lists all work summaries with a constant number of SQL statements', () => {
+    const path = databasePath()
+    const store = open(path)
+    const prepare = vi.spyOn(Database.prototype, 'prepare')
+    const first = store.createWork({ seed: 'first', title: 'First' })
+    const second = store.createWork({ seed: 'second', title: 'Second' })
+    store.appendArtifact(first.id, 'caption', caption('first'))
+    store.appendArtifact(second.id, 'caption', caption('second'))
+    prepare.mockClear()
+
+    expect(store.listWorks()).toEqual([
+      { id: first.id, title: 'First', seedPreview: 'first', chapterCount: 0 },
+      { id: second.id, title: 'Second', seedPreview: 'second', chapterCount: 0 },
+    ])
+    expect(prepare).toHaveBeenCalledTimes(2)
+  })
+
+  it('uses the full work/head index in both batched artifact read queries', () => {
+    const path = databasePath()
+    const store = open(path)
+    const work = store.createWork({ seed: 'x' })
+    store.appendArtifact(work.id, 'caption', caption('head'))
+    const prepare = vi.spyOn(Database.prototype, 'prepare')
+    expect(store.getWork(work.id)).toBeDefined()
+    expect(store.listWorks()).toHaveLength(1)
+    const queries = [...new Set(prepare.mock.calls.map(([sql]) => sql).filter(sql => sql.includes('SELECT a.* FROM artifacts a')))]
+    expect(queries).toHaveLength(2)
+    const db = raw(path)
+    for (const query of queries) {
+      const plan = db.prepare(`EXPLAIN QUERY PLAN ${query}`).all(...(query.includes('a.work_id = ?') ? [work.id] : [])) as { detail: string }[]
+      const newer = plan.find(row => row.detail.includes('newer'))
+      expect(newer?.detail).toContain('COVERING INDEX artifact_work_head')
+      for (const column of ['work_id', 'kind', 'chapter', 'version']) expect(newer?.detail).toContain(column)
+      if (query.includes('ORDER BY')) {
+        expect(plan.find(row => row.detail.includes('SEARCH a USING INDEX artifact_work_head'))).toBeDefined()
+        expect(plan.find(row => row.detail.startsWith('SEARCH first USING') && row.detail.includes('artifact_work_head'))).toBeDefined()
+      }
+    }
+    const filePlan = db.prepare('EXPLAIN QUERY PLAN SELECT * FROM agent_files WHERE work_id = ? ORDER BY rowid').all(work.id) as { detail: string }[]
+    expect(filePlan.some(row => row.detail.includes('SEARCH agent_files USING INDEX agent_file_work'))).toBe(true)
+  })
+
+  it('keeps legitimate works while ignoring a damaged orphan artifact', () => {
+    const path = databasePath()
+    const store = open(path)
+    const orphan = store.createWork({ seed: 'orphan' })
+    store.appendArtifact(orphan.id, 'caption', caption('orphan'))
+    const kept = store.createWork({ seed: 'legitimate remains', title: 'kept' })
+    store.appendArtifact(kept.id, 'caption', caption('safe'))
+    const db = raw(path)
+    db.exec('PRAGMA foreign_keys = OFF')
+    db.prepare('DELETE FROM works WHERE id = ?').run(orphan.id)
+    db.prepare("UPDATE artifacts SET content = '{\"broken\":true}' WHERE work_id = ?").run(orphan.id)
+    expect(store.listWorks()).toEqual([{ id: kept.id, title: 'kept', seedPreview: 'legitimate remains', chapterCount: 0 }])
   })
 })

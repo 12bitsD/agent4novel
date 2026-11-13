@@ -226,24 +226,31 @@ describe('append-only setting extension', () => {
     expect(f.store.getArtifactVersion(f.work.id, 'prose', 1, oldChapter.id, oldChapter.version)!.inputs).toContainEqual({ kind: 'setting', artifactId: oldSetting.id, version: oldSetting.version })
   })
 
-  it('restarts SQLite with pending proposal and migrates a v3 database to v4', () => {
+  it('restarts SQLite with pending proposal and migrates a v3 database to v5', () => {
     const dir = mkdtempSync(join(tmpdir(), 'a4n-setting-extension-'))
     const path = join(dir, 'db.sqlite')
     try {
       const store = new SqliteStore(path)
       const f = fixture(store)
+      store.appendArtifact(f.work.id, 'caption', caption)
+      store.setStatus(f.work.id, 'caption', 'approved')
       store.proposeSettingExtension(f.work.id, proposal(f.base))
       store.close()
       const reopened = new SqliteStore(path)
       expect(reopened.getSettingExtension(f.work.id, requestId).status).toBe('pending')
       reopened.close()
       const raw = new Database(path)
-      raw.exec('DROP TABLE setting_extension_proposals; PRAGMA user_version = 3')
+      const beforeRows = raw.prepare('SELECT * FROM artifacts ORDER BY id').all()
+      expect(beforeRows).toHaveLength(5)
+      raw.exec('DROP INDEX artifact_work_head; DROP INDEX agent_file_work; DROP TABLE setting_extension_proposals; PRAGMA user_version = 3')
       raw.close()
       const migrated = new SqliteStore(path)
       expect(migrated.getSettingExtension(f.work.id, requestId).status).toBe('none')
       const check = new Database(path)
-      try { expect(check.pragma('user_version', { simple: true })).toBe(4) } finally { check.close() }
+      try {
+        expect(check.pragma('user_version', { simple: true })).toBe(5)
+        expect(check.prepare('SELECT * FROM artifacts ORDER BY id').all()).toEqual(beforeRows)
+      } finally { check.close() }
       migrated.close()
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })

@@ -42,6 +42,10 @@ function artifactFromRow(row: ArtifactRow): Artifact {
 }
 
 type BadExampleRow = { id: string; work_id: string; chapter: number; record: string; request: string; cursor?: number }
+const currentArtifactHead = `NOT EXISTS (
+  SELECT 1 FROM artifacts newer WHERE newer.work_id = a.work_id AND newer.kind = a.kind
+    AND newer.chapter IS a.chapter AND newer.version > a.version
+)`
 function badExampleFromRow(row: BadExampleRow): BadExample {
   const record = validateStoreValue(badExampleSchema, parseJson(row.record), 'stored')
   const request = validateStoreValue(badExampleRequestSchema, parseJson(row.request), 'stored')
@@ -134,10 +138,8 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
     const work = this.readWork(id)
     if (!work) return undefined
     const rows = this.db.prepare(`SELECT a.* FROM artifacts a
-      WHERE a.work_id = ? AND NOT EXISTS (
-        SELECT 1 FROM artifacts newer WHERE newer.work_id = a.work_id AND newer.kind = a.kind
-          AND newer.chapter IS a.chapter AND newer.version > a.version
-      ) ORDER BY (SELECT MIN(first.rowid) FROM artifacts first WHERE first.work_id = a.work_id AND first.kind = a.kind AND first.chapter IS a.chapter)`).all(id) as ArtifactRow[]
+      WHERE a.work_id = ? AND ${currentArtifactHead}
+      ORDER BY (SELECT MIN(first.rowid) FROM artifacts first WHERE first.work_id = a.work_id AND first.kind = a.kind AND first.chapter IS a.chapter)`).all(id) as ArtifactRow[]
     return validateStoreValue(workDetailSchema, { ...work, artifacts: rows.map(artifactFromRow) }, 'stored')
   }
 
@@ -155,11 +157,20 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
 
   listWorks(): WorkSummary[] {
     return this.read(() => {
-      const rows = this.db.prepare('SELECT id FROM works ORDER BY rowid').all() as { id: string }[]
-      return validateStoreValue(workListResponseSchema, rows.map(({ id }) => {
-        const work = this.readDetail(id)!
-        return { id: work.id, title: work.title, seedPreview: work.seed.length > 40 ? `${work.seed.slice(0, 40)}…` : work.seed,
-          chapterCount: work.artifacts.filter(a => a.kind === 'prose' && a.humanStatus === 'approved').length }
+      const workRows = this.db.prepare('SELECT * FROM works ORDER BY rowid').all() as WorkRow[]
+      const artifactRows = this.db.prepare(`SELECT a.* FROM artifacts a
+        WHERE a.work_id IN (SELECT id FROM works) AND ${currentArtifactHead}`).all() as ArtifactRow[]
+      const heads = new Map<string, Artifact[]>()
+      for (const row of artifactRows) {
+        const artifact = artifactFromRow(row)
+        const bucket = heads.get(artifact.workId) ?? []
+        bucket.push(artifact)
+        heads.set(artifact.workId, bucket)
+      }
+      return validateStoreValue(workListResponseSchema, workRows.map(row => {
+        const detail = validateStoreValue(workDetailSchema, { ...workFromRow(row), artifacts: heads.get(row.id) ?? [] }, 'stored')
+        return { id: detail.id, title: detail.title, seedPreview: detail.seed.length > 40 ? `${detail.seed.slice(0, 40)}…` : detail.seed,
+          chapterCount: detail.artifacts.filter(a => a.kind === 'prose' && a.humanStatus === 'approved').length }
       }), 'stored')
     })
   }

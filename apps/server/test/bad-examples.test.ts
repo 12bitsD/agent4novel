@@ -86,12 +86,21 @@ describe('immutable bad examples', () => {
     const f = fixture()
     try {
       f.store.saveAuthorConfig(f.work.id, { requestId: randomUUID(), expectedRevision: 0, document: { preferences: { style: '合成风格' }, defaults: {}, steps: {} } })
+      f.store.saveArtifact({ workId: f.work.id, kind: 'prose', chapter: 1, expectedArtifactId: f.prose.id, expectedHeadVersion: 1, expectedHumanStatus: 'pending', content: { text: 'second historical version' } })
       const before = f.store.getWork(f.work.id), config = f.store.getAuthorConfig(f.work.id)
       f.store.close()
-      const raw = new Database(f.path); raw.exec('DROP TABLE setting_extension_proposals; DROP INDEX bad_example_work_chapter; DROP TABLE bad_examples; PRAGMA user_version = 2'); raw.close()
+      const raw = new Database(f.path)
+      const beforeRows = raw.prepare('SELECT * FROM artifacts ORDER BY id').all()
+      expect(beforeRows).toHaveLength(2)
+      raw.exec('DROP INDEX artifact_work_head; DROP INDEX agent_file_work; DROP TABLE setting_extension_proposals; DROP INDEX bad_example_work_chapter; DROP TABLE bad_examples; PRAGMA user_version = 2'); raw.close()
       const reopened = new SqliteStore(f.path)
-      try { expect(reopened.getWork(f.work.id)).toEqual(before); expect(reopened.getAuthorConfig(f.work.id)).toEqual(config); expect(reopened.markBadExample(f.work.id, f.input).text).toBe('同段') }
-      finally { reopened.close() }
+      try {
+        expect(reopened.getWork(f.work.id)).toEqual(before)
+        expect(reopened.getAuthorConfig(f.work.id)).toEqual(config)
+        expect(reopened.markBadExample(f.work.id, f.input).text).toBe('同段')
+        const check = new Database(f.path, { readonly: true })
+        try { expect(check.prepare('SELECT * FROM artifacts ORDER BY id').all()).toEqual(beforeRows) } finally { check.close() }
+      } finally { reopened.close() }
     } finally { f.close() }
   })
   it('deduplicates across connections and isolates bad-example reads by work', () => {

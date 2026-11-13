@@ -183,3 +183,4 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [046 SQLite 并发首次建库](./046-sqlite-concurrent-initialization.md) | [#46](https://github.com/12bitsD/agent4novel/issues/46) | current | 首次并发初始化的 busy 有界重试、事务恢复与安全诊断 |
 | [051 节点实际输入输出记录与 Agent 迭代](./051-node-iteration-records.md) | [#51](https://github.com/12bitsD/agent4novel/issues/51) | current | 已交付的 `run-step` 实际调用记录、A/B 对照与 comment |
 | [060 Kimi API provider 与测试模型切换](./060-kimi-provider.md) | [#60](https://github.com/12bitsD/agent4novel/issues/60) | current | Kimi OpenAI-compatible provider、凭据/Base URL、通用测试模型与回归边界 |
+| [068 SQLite 索引与书架读放大](./068-sqlite-read-scaling.md) | [#68](https://github.com/12bitsD/agent4novel/issues/68) | current | SQLite v5 作品索引、书架批量读取与确定性查询验证 |
