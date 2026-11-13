@@ -8,9 +8,9 @@ topics: ["chapter-navigation", "conditional-write", "static-files", "review-fixe
 code_paths: ["apps/web/src/pages/Workspace.tsx", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/runtime/static-web.ts"]
 symbols: ["WorkSession", "startChapter", "runEntry", "staticWeb"]
 inherits: ["001", "006", "007", "033", "041"]
-changed_by: ["035"]
+changed_by: ["035", "072"]
 read_when: ["debug-config-navigation", "review-start-baseline", "review-static-web-boundary"]
-last_context_reviewed: "2026-10-03"
+last_context_reviewed: "2026-11-13"
 ---
 
 # 043 — MVP 复审边界修复

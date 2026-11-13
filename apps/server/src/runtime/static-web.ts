@@ -1,6 +1,8 @@
-import { realpathSync, statSync } from 'node:fs'
+import { constants, createReadStream, realpathSync, statSync } from 'node:fs'
+import { open, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join, relative } from 'node:path'
-import { serveStatic } from '@hono/node-server/serve-static'
+import { Readable } from 'node:stream'
+import { getMimeType } from 'hono/utils/mime'
 import type { MiddlewareHandler } from 'hono'
 
 export class WebBuildError extends Error {
@@ -22,7 +24,6 @@ function contained(root: string, target: string): boolean {
   return path !== '..' && !path.startsWith('../') && !isAbsolute(path)
 }
 
-// Only built public files are served. Unknown API paths retain the JSON error contract.
 export function staticWeb(directory: string): MiddlewareHandler {
   const root = validateWebRoot(directory)
   return async (c, next) => {
@@ -32,12 +33,74 @@ export function staticWeb(directory: string): MiddlewareHandler {
     try { path = decodeURIComponent(c.req.path) } catch { return next() }
     if (path === '/api' || path.startsWith('/api/') || path.includes('\\') || path.includes('\0')
       || path.split('/').some(part => part.startsWith('.'))) return next()
-    let file: string
+    let handle: Awaited<ReturnType<typeof open>> | undefined
+    let stream: ReturnType<typeof createReadStream> | undefined
     try {
-      file = realpathSync(join(root, path === '/' ? 'index.html' : path))
-      if (!contained(root, file) || !statSync(file).isFile()) return next()
-    } catch { return next() }
-    // An explicit path keeps serving and validation on the same file without another URL decode.
-    return serveStatic({ path: file })(c, next)
+      const file = await realpath(join(root, path === '/' ? 'index.html' : path))
+      if (!contained(root, file)) return next()
+      const expected = await stat(file)
+      handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW)
+      const stats = await handle.stat()
+      if (!stats.isFile() || stats.dev !== expected.dev || stats.ino !== expected.ino || await realpath(file) !== file) {
+        await handle.close()
+        handle = undefined
+        return next()
+      }
+      const size = stats.size
+      let start = 0
+      let end = size - 1
+      let status: 200 | 206 = 200
+      const range = c.req.header('range')
+      if (range) {
+        const reject = async () => {
+          await handle?.close()
+          handle = undefined
+          return c.json({ code: 'invalid-range', message: 'requested range is not satisfiable', retryable: false }, 416)
+        }
+        const match = /^bytes=(\d+)?-(\d+)?$/.exec(range)
+        if (!match) return reject()
+        if (match[1] === undefined) {
+          const suffix = match[2] ? Number(match[2]) : 0
+          if (suffix <= 0) return reject()
+          start = Math.max(size - suffix, 0)
+        } else start = Number(match[1])
+        const requestedEnd = match[1] !== undefined && match[2] ? Number(match[2]) : size - 1
+        if (start < 0 || start >= size || requestedEnd < start) return reject()
+        end = Math.min(requestedEnd, size - 1)
+        status = 206
+      }
+      c.header('Content-Type', getMimeType(file) || 'application/octet-stream')
+      c.header('Content-Length', String(status === 206 ? end - start + 1 : size))
+      if (status === 206) {
+        c.header('Accept-Ranges', 'bytes')
+        c.header('Content-Range', `bytes ${start}-${end}/${size}`)
+      }
+      if (path === '/' || path === '/index.html') c.header('Cache-Control', 'no-cache')
+      else if (/\/assets\/.+-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9.]+$/.test(file)) {
+        c.header('Cache-Control', 'public, max-age=31536000, immutable')
+      }
+      if (c.req.method === 'HEAD' || size === 0) {
+        await handle.close()
+        handle = undefined
+        return c.body(null, status)
+      }
+      const opened = handle
+      stream = createReadStream('', { fd: opened.fd, autoClose: false, start, end })
+      let closed = false
+      const close = () => {
+        if (closed) return
+        closed = true
+        void opened.close().catch(() => {})
+      }
+      stream.once('end', close)
+      stream.once('close', close)
+      stream.once('error', close)
+      handle = undefined
+      return c.body(Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>, status)
+    } catch {
+      stream?.destroy()
+      if (handle) await handle.close().catch(() => {})
+      return next()
+    }
   }
 }

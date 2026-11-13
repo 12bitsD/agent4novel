@@ -8,9 +8,9 @@ topics: ["docker", "production-build", "ci", "volume-recovery"]
 code_paths: ["Dockerfile", "compose.yaml", ".github/workflows/**", "apps/server/src/runtime/**", "apps/server/scripts/**", "scripts/**", "apps/cli/test/command-entry.test.ts", "package.json"]
 symbols: ["createApp", "parseServerConfig", "A4N_DATA_DIR", "A4N_SERVE_WEB"]
 inherits: ["009", "016", "014"]
-changed_by: ["007", "008", "041", "043"]
+changed_by: ["007", "008", "041", "043", "072"]
 read_when: ["run-local-container", "debug-production-build", "verify-ci", "restore-container-volume"]
-last_context_reviewed: "2026-10-03"
+last_context_reviewed: "2026-11-13"
 ---
 
 # 033 — 本机 Docker Compose 与 GitHub CI

@@ -4,6 +4,13 @@ import { describe, expect, it } from 'vitest'
 import { createShutdown } from '../src/runtime/shutdown.js'
 
 describe('server shutdown', () => {
+  it('closes the store exactly once before exit even when listen never succeeded', async () => {
+    const server = createServer()
+    const events: string[] = []
+    createShutdown(server, () => { events.push('close') }, { graceMs: 20, exit: code => events.push(`exit:${code}`) })()
+    await new Promise(resolve => setTimeout(resolve, 40))
+    expect(events).toEqual(['close', 'exit:0'])
+  })
   it('closes the store once after accepted requests drain', async () => {
     const server = createServer()
     server.listen(0, '127.0.0.1')
