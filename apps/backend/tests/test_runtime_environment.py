@@ -14,6 +14,18 @@ from agent4novel.main import create_app
 from agent4novel.store.resources import SqliteResourceStore
 
 
+@pytest.fixture(autouse=True)
+def isolate_provider_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in (
+        "DEEPSEEK_API_KEY",
+        "LONGCAT_API_KEY",
+        "KIMI_API_KEY",
+        "MOONSHOT_API_KEY",
+        "A4N_MODEL",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
 def test_env_file_parsing_precedence_and_no_shell_execution(tmp_path: Path, monkeypatch) -> None:
     marker = tmp_path / "must-not-exist"
     (tmp_path / ".env.local").write_text(
@@ -30,6 +42,8 @@ def test_env_file_parsing_precedence_and_no_shell_execution(tmp_path: Path, monk
     assert values["A4N_MODEL"] == "kimi:kimi-k2.8-highspeed"
     assert values["UNUSED"] == f"$(touch {marker})"
     assert not marker.exists()
+    monkeypatch.setenv("KIMI_API_KEY", "")
+    assert runtime_environment(tmp_path)["KIMI_API_KEY"] == ""
 
 
 def test_explicit_environment_never_reads_local_file(tmp_path: Path, monkeypatch) -> None:
