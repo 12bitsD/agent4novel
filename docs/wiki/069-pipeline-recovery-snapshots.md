@@ -47,13 +47,13 @@ last_context_reviewed: "2026-11-13"
 
 ### 完成审核证据
 
-- **清单与候选**：固定点 `c060be489c21d6646fff1b59615a8eb71d8951b2`，M1 为先行提交；实现提交 `a9dec06`；T0/T1 待最终统一收口。
-- **逐项判定**：C1/C2 PASS；C3/C4 定向证据已取得；C5 三轴审查发现已修复并复审关闭；C6 待最终统一 attestation。
+- **清单与候选**：固定点 `c060be489c21d6646fff1b59615a8eb71d8951b2`，M1 为先行提交；实现提交 `a9dec06`；T0 `f2f40b5d95b033b03ac0d1bcf8f9cf2f75fc5708`；T1 pending。
+- **逐项判定**：C1–C5 PASS；C6.1/C6.2 PASS，C6.3 已转录，C6.4 待独立比较，C6.5–C6.7 待后续收口。
 - **验收与 TDD**：issue #69；失败不失效、缓存无上限、advance 9 次读取、详情 2 次、配置文件 6 次均先 RED；实现后 advance 4 次、详情 1 次、唯一文件每次 resolve 1 次，旧失败随步骤/配置失效且缓存有界，篡改下次仍拒绝，Beat 超预算只序列化三个 section。
 - **本地门禁**：相关 12 个测试文件 165 项及 server typecheck 通过；修复后 74 项定向复验通过；最终全量 `pnpm test`、`pnpm typecheck`、`pnpm build`、production/container smoke 与 `git diff --check <fixed-point>` 均通过。
 - **双轴 review**：已关闭 Beat 二次序列化与清理分散，Spec/Risk 复审无剩余代码发现。
 - **修复与回归**：`clearFailure` 统一入口；状态投影与配置/文件复用仅限明确快照；CAS、配置 revision 冻结和 unknown-write 语义不变。
-- **知识维护**：本页与 Wiki index 新建；schema/CONTEXT/ADR/research/README/运行 skill N/A；handoff 待统一更新。
+- **知识维护**：本页与 Wiki index 新建；schema/CONTEXT/ADR/research/README/运行 skill N/A；handoff 已更新当前治理范围与 #73/#74 阻塞。
 - **发布前裁决**：pending；默认仅本地分支。
 
 ## 边界与非目标
