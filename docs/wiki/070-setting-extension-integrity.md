@@ -46,14 +46,14 @@ Wiki 017 的正常 HTTP 路径已具备原子 CAS 与历史 readback，但人工
 
 ### 完成审核证据
 
-- **清单与候选**：固定点 `c060be489c21d6646fff1b59615a8eb71d8951b2`，依赖 #68/#69 已落地；实现提交 `a22f7c7`；T0 `f2f40b5d95b033b03ac0d1bcf8f9cf2f75fc5708`；T1 pending。
-- **逐项判定**：C1–C5 PASS；C6.1/C6.2 PASS，C6.3 已转录，C6.4 待独立比较，C6.5–C6.7 待后续收口。
+- **清单与候选**：固定点 `c060be489c21d6646fff1b59615a8eb71d8951b2`，依赖 #68/#69 已落地；实现提交 `a22f7c7`；T0 `c9c1a73aeccc1c6c692052fa4fbc40cc3a985e31`；T1 `ce154d05ca304347f11a08de9c8a7de9625ae8f0`。
+- **逐项判定**：C1–C5 PASS；C6.1/C6.2 PASS，C6.3 已转录，C6.4 PASS（独立 reviewer agent-24），C6.5 已记录，C6.6/C6.7 待最终比较与提交。
 - **验收与 TDD**：issue #70；旧 validator 接受额外扩展/inputs 和篡改 replay 先 RED；实现后 candidate=base+末尾 extension 且 inputs 唯一，GET/propose replay/approve replay 均校验，合法 replay 无任何 proposal INSERT/UPDATE/REPLACE，损坏时 head 不增长。
 - **本地门禁**：相关 4 个测试文件 128 项及 server typecheck 通过；最终全量 `pnpm test`、`pnpm typecheck`、`pnpm build`、production/container smoke 与 `git diff --check <fixed-point>` 均通过。
 - **双轴 review**：已关闭 SQLite 重复校验和普通 UPDATE 测试盲区；Spec/Risk 复审无生产缺陷。
 - **修复与回归**：SQLite validateExtensionCandidate 共用，合法/损坏 propose replay 与 approve replay 零写入断言完整；最终集成反例 `9a75922` 已复审关闭。
 - **知识维护**：本页与 Wiki index 新建；Wiki 017 changed_by、当前技术视图和变化事件已更新；schema/CONTEXT/ADR/research/README/运行 skill N/A；handoff 已更新当前治理范围与 #73/#74 阻塞。
-- **发布前裁决**：pending；默认仅本地分支。
+- **发布前裁决**：C6.4 独立 reviewer PASS；清单 blob `42116082e8ca2804d826cc00f6578270077f60eb`、固定点与 T1 已转录，C6.5 完成。C6.6/C6.7 待最终比较与提交；C7 仅本地分支，不 push/远端 merge/关闭 issue。
 
 ## 边界与非目标
 

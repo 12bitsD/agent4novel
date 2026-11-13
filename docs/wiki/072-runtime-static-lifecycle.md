@@ -46,14 +46,14 @@ last_context_reviewed: "2026-11-13"
 
 ### 完成审核证据
 
-- **清单与候选**：固定点 `c060be489c21d6646fff1b59615a8eb71d8951b2`，前序 #68–#71 已落地；实现提交 `fb2e74a`，最终集成修复 `9a75922`；T0 `f2f40b5d95b033b03ac0d1bcf8f9cf2f75fc5708`；T1 pending。
-- **逐项判定**：C1–C5 PASS；C6.1/C6.2 PASS，C6.3 已转录，C6.4 待独立比较，C6.5–C6.7 待后续收口。
+- **清单与候选**：固定点 `c060be489c21d6646fff1b59615a8eb71d8951b2`，前序 #68–#71 已落地；实现提交 `fb2e74a`，最终集成修复 `9a75922`；T0 `c9c1a73aeccc1c6c692052fa4fbc40cc3a985e31`；T1 `ce154d05ca304347f11a08de9c8a7de9625ae8f0`。
+- **逐项判定**：C1–C5 PASS；C6.1/C6.2 PASS，C6.3 已转录，C6.4 PASS（独立 reviewer agent-24），C6.5 已记录，C6.6/C6.7 待最终比较与提交。
 - **验收与 TDD**：issue #72；缓存头 RED 为旧实现缺失，随后通过；realpath/open 竞态、目录/成功流/取消句柄关闭、suffix/非法 range、合法 HTML symlink、EADDRINUSE、close-before-exit 均通过。
 - **本地门禁**：`static-web.test.ts`、`static-web-race.test.ts`、`server-startup.test.ts`、`shutdown.test.ts` 共 23 项及 server typecheck 通过；最终全量 `pnpm test`、`pnpm typecheck`、`pnpm build`、production/container smoke 与 `git diff --check <fixed-point>` 均通过。
 - **双轴 review**：已关闭路径泄露、缓存污染、fd 泄漏、suffix range、启动清理和测试时序发现；最终 Standards/Spec/Risk 集成复审无剩余发现。
 - **修复与回归**：校验/打开同一性、成功响应缓存、fd 生命周期和启动测试清理均已定向回归。
 - **知识维护**：本页新建；Wiki 033/043 changed_by 已链接；schema/CONTEXT/ADR/README N/A（无形状、领域词、不可逆选型或用户操作变化）。
-- **发布前裁决**：pending；默认仅本地分支。
+- **发布前裁决**：C6.4 独立 reviewer PASS；清单 blob `42116082e8ca2804d826cc00f6578270077f60eb`、固定点与 T1 已转录，C6.5 完成。C6.6/C6.7 待最终比较与提交；C7 仅本地分支，不 push/远端 merge/关闭 issue。
 
 ## 边界与非目标
 

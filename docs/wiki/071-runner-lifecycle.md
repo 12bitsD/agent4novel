@@ -46,14 +46,14 @@ last_context_reviewed: "2026-11-13"
 
 ### 完成审核证据
 
-- **清单与候选**：固定点 `c060be489c21d6646fff1b59615a8eb71d8951b2`，前序 #68/#69/#70 已落地；实现提交 `eabbc88`；T0 `f2f40b5d95b033b03ac0d1bcf8f9cf2f75fc5708`；T1 pending。
-- **逐项判定**：C1–C5 PASS；C6.1/C6.2 PASS，C6.3 已转录，C6.4 待独立比较，C6.5–C6.7 待后续收口。
+- **清单与候选**：固定点 `c060be489c21d6646fff1b59615a8eb71d8951b2`，前序 #68/#69/#70 已落地；实现提交 `eabbc88`；T0 `c9c1a73aeccc1c6c692052fa4fbc40cc3a985e31`；T1 `ce154d05ca304347f11a08de9c8a7de9625ae8f0`。
+- **逐项判定**：C1–C5 PASS；C6.1/C6.2 PASS，C6.3 已转录，C6.4 PASS（独立 reviewer agent-24），C6.5 已记录，C6.6/C6.7 待最终比较与提交。
 - **验收与 TDD**：issue #71；旧实现只 SIGTERM 且父进程不回收先 RED；fault-injection 证明 SIGTERM→SIGKILL→close，运行中 kill error 不伪造 close，父进程信号回收；非零 success/malformed 输出拒绝，合法 failed response 保留。
 - **本地门禁**：CLI 17 项、server 23 项及双 typecheck 通过；真实 transport timeout 的 unknown/incomplete 保持；最终全量 `pnpm test`、`pnpm typecheck`、`pnpm build`、production/container smoke 与 `git diff --check <fixed-point>` 均通过。
 - **双轴 review**：已关闭 kill error 竞态、非零 close 绕过和 runtime 顶层导入副作用，增量复现无剩余发现。
 - **修复与回归**：统一 closed/settled，spawn failure 与运行 error 分离，close 后拒绝；错误分类测试无 provider 初始化副作用。
 - **知识维护**：本页与 Wiki index 新建；Wiki 014/016/051 changed_by 已链接；schema/CONTEXT/ADR/research/README/运行 skill N/A；handoff 已更新当前治理范围与 #73/#74 阻塞。
-- **发布前裁决**：pending；默认仅本地分支。
+- **发布前裁决**：C6.4 独立 reviewer PASS；清单 blob `42116082e8ca2804d826cc00f6578270077f60eb`、固定点与 T1 已转录，C6.5 完成。C6.6/C6.7 待最终比较与提交；C7 仅本地分支，不 push/远端 merge/关闭 issue。
 
 ## 边界与非目标
 
