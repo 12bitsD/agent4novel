@@ -10,7 +10,7 @@ const button = (host: HTMLElement, text: string) => [...host.querySelectorAll('b
 
 it('approves the author visible outline identity and version without reading a newer head', async () => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
-  const calls = vi.fn(async (url: string, init?: RequestInit) => new Response(JSON.stringify(url.endsWith('/artifacts/outline/approve') ? observed : { workId: 'version-work', stage: 'ready', nextStepId: 'setting' })))
+  const calls = vi.fn(async (url: string, _init?: RequestInit) => new Response(JSON.stringify(url.endsWith('/artifacts/outline/approve') ? observed : { workId: 'version-work', stage: 'ready', nextStepId: 'setting' })))
   vi.stubGlobal('fetch', calls)
   const host = document.createElement('div'); document.body.append(host); const root = createRoot(host); const approved = vi.fn()
   try {

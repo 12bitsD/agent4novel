@@ -29,7 +29,7 @@ function parseRange(header: string | undefined, size: number): ByteRange | null 
   if (!header) return { start: 0, end: size - 1, status: 200 }
   const match = /^bytes=(\d+)?-(\d+)?$/.exec(header)
   if (!match) return null
-  let start = 0
+  let start: number
   let end = size - 1
   if (match[1] === undefined) {
     const suffix = match[2] ? Number(match[2]) : 0

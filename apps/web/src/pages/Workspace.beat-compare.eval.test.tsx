@@ -13,7 +13,7 @@ describe('E20 Web acceptance: compare/select beat variants', () => {
     vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true)
     vi.stubGlobal('crypto', { randomUUID: () => 'local-key' })
     const host = document.createElement('div'); document.body.append(host); const root = createRoot(host)
-    const choices: string[] = []; const actions: string[] = []; const state = { ...initBeatReview(original), phase: 'comparing', mode: 'preview',
+    const choices: string[] = []; const _actions: string[] = []; const state = { ...initBeatReview(original), phase: 'comparing', mode: 'preview',
       comparison: { original, candidate } } as BeatReviewState
     try {
       await act(async () => root.render(<BeatReview state={state} allowCommands onAction={() => {}} onApprove={vi.fn()} onRegenerate={vi.fn()} onConfirm={vi.fn()} onRetry={vi.fn()}
