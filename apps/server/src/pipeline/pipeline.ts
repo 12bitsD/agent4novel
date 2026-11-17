@@ -66,6 +66,13 @@ export type PipelineDeps = {
   consumeGuards?: Partial<Record<ArtifactKind, (content: JsonValue) => void>>
 }
 
+function failureCodeFor(error: unknown, cause: unknown, known: KnownError | null): string {
+  if (error instanceof BeatCommandError) return beatFailureCode(cause, error.command.failureStage ?? 'response')
+  if (error instanceof ProseCommandError) return proseFailureCode(cause, error.command.failureStage ?? 'response')
+  if (known) return known.code
+  return 'llm-unavailable'
+}
+
 export class Pipeline {
   readonly repeatChapters: boolean
   private store: WorkStore
@@ -174,56 +181,44 @@ export class Pipeline {
     return this.getStateFromWork(work)
   }
 
+  private missingOutputState(work: WorkDetail, entry: PipelineDefinitionEntry, latest: Map<string, Artifact>): PipelineState | null {
+    if (this.repeatChapters && entry.chapter && entry.chapter > 1) {
+      for (const kind of ['beat', 'prose'] as const) {
+        const previous = latest.get(`${kind}:${entry.chapter - 1}`)
+        if (!previous || previous.humanStatus !== 'approved' || !this.guardOk(kind, previous)) {
+          return { workId: work.id, stage: 'blocked', nextStepId: entry.stepId, pendingGate: { kind, chapter: entry.chapter - 1 } }
+        }
+      }
+    }
+    for (const dep of entry.consumes ?? []) {
+      const chapter = this.dependencyChapter(entry, dep)
+      const upstream = latest.get(`${dep}:${chapter ?? ''}`)
+      if (!upstream || upstream.humanStatus !== 'approved' || !this.guardOk(dep, upstream)) {
+        return { workId: work.id, stage: 'blocked', nextStepId: entry.stepId, pendingGate: { kind: dep, chapter } }
+      }
+    }
+    if (entry.gateBefore) {
+      const gate = latest.get(`${entry.gateBefore.kind}:${entry.gateBefore.chapter ?? ''}`)
+      if (!gate || gate.humanStatus !== 'approved') {
+        return { workId: work.id, stage: 'blocked', nextStepId: entry.stepId, pendingGate: entry.gateBefore }
+      }
+    }
+    return null
+  }
+
   getStateFromWork(work: WorkDetail): PipelineState {
     const latest = new Map<string, Artifact>()
-    for (const a of work.artifacts) latest.set(`${a.kind}:${a.chapter ?? ''}`, a)
+    for (const artifact of work.artifacts) latest.set(`${artifact.kind}:${artifact.chapter ?? ''}`, artifact)
 
     for (const entry of this.definitionFor(currentChapterOf(work))) {
       const out = latest.get(`${entry.outputKind}:${entry.chapter ?? ''}`)
       if (!out) {
-        if (this.repeatChapters && entry.chapter && entry.chapter > 1) {
-          for (const kind of ['beat', 'prose'] as const) {
-            const previous = latest.get(`${kind}:${entry.chapter - 1}`)
-            if (!previous || previous.humanStatus !== 'approved' || !this.guardOk(kind, previous)) {
-              return { workId: work.id, stage: 'blocked', nextStepId: entry.stepId, pendingGate: { kind, chapter: entry.chapter - 1 } }
-            }
-          }
-        }
-        // 上游最新版必须 approved 且过消费守卫,否则本步不可跑(下游不推进)
-        if (entry.consumes) {
-          for (const dep of entry.consumes) {
-            const chapter = this.dependencyChapter(entry, dep)
-            const upstream = latest.get(`${dep}:${chapter ?? ''}`)
-            if (!upstream || upstream.humanStatus !== 'approved' || !this.guardOk(dep, upstream)) {
-              return {
-                workId: work.id,
-                stage: 'blocked',
-                nextStepId: entry.stepId,
-                pendingGate: { kind: dep, chapter },
-              }
-            }
-          }
-        }
-        if (entry.gateBefore) {
-          const gate = latest.get(`${entry.gateBefore.kind}:${entry.gateBefore.chapter ?? ''}`)
-          if (!gate || gate.humanStatus !== 'approved') {
-            return {
-              workId: work.id,
-              stage: 'blocked',
-              nextStepId: entry.stepId,
-              pendingGate: entry.gateBefore,
-            }
-          }
-        }
+        const blocked = this.missingOutputState(work, entry, latest)
+        if (blocked) return blocked
         return { workId: work.id, stage: 'ready', nextStepId: entry.stepId }
       }
       if (out.humanStatus === 'pending') {
-        return {
-          workId: work.id,
-          stage: 'awaiting-approval',
-          nextStepId: null,
-          pendingGate: { kind: out.kind, chapter: out.chapter },
-        }
+        return { workId: work.id, stage: 'awaiting-approval', nextStepId: null, pendingGate: { kind: out.kind, chapter: out.chapter } }
       }
       if (!this.guardOk(entry.outputKind, out)) {
         return { workId: work.id, stage: 'blocked', nextStepId: entry.stepId, pendingGate: { kind: out.kind, chapter: out.chapter } }
@@ -256,7 +251,10 @@ export class Pipeline {
             : { kind: 'awaiting-approval', state }
         }
         const entry = this.definitionFor(currentChapterOf(work)).find((d) => d.stepId === state.nextStepId)!
-        const configs = () => snapshot ??= this.operationConfigsForWork(work)
+        const configs = () => {
+          if (!snapshot) snapshot = this.operationConfigsForWork(work)
+          return snapshot
+        }
         const outcome = await this.executeEntry(workId, entry, configs, undefined, work)
         if (outcome.kind === 'failed' || entry.gateAfter) return outcome
         lastStepId = entry.stepId
@@ -269,7 +267,10 @@ export class Pipeline {
   }
 
   private operationConfigsForWork(work: WorkDetail): Record<string, AgentConfig> {
-    return structuredClone(this.snapshotConfig?.(work) ?? Object.fromEntries(this.definition.map(entry => [entry.stepId, this.resolveConfig(work, entry.stepId)])))
+    if (this.snapshotConfig) return structuredClone(this.snapshotConfig(work))
+    const configs: Record<string, AgentConfig> = {}
+    for (const entry of this.definition) configs[entry.stepId] = this.resolveConfig(work, entry.stepId)
+    return structuredClone(configs)
   }
 
   private operationConfigs(workId: string): Record<string, AgentConfig> {
@@ -292,28 +293,27 @@ export class Pipeline {
         proseCommand = result.command
       } else await this.runEntry(workId, entry, config, undefined, requiredInput, observedWork)
     } catch (err) {
-      const cause = err instanceof BeatCommandError || err instanceof ProseCommandError ? err.cause : err
+      let cause = err
+      if (err instanceof BeatCommandError || err instanceof ProseCommandError) cause = err.cause
       const known = cause instanceof KnownError ? cause : null
-      const code = err instanceof BeatCommandError ? beatFailureCode(cause, err.command.failureStage ?? 'response')
-        : err instanceof ProseCommandError ? proseFailureCode(cause, err.command.failureStage ?? 'response') : known?.code ?? 'llm-unavailable'
+      const code = failureCodeFor(err, cause, known)
       // 丢弃旧输入上的生成结果后可手动重试；尚未通过的上游仍由 getState 阻挡。
-      const retryable = known?.code === 'upstream-changed' || (known?.retryable ?? true)
+      let retryable = true
+      if (known) retryable = known.code === 'upstream-changed' || known.retryable
       this.recordFailure(workId, {
         stepId: entry.stepId,
         code,
         retryable,
       })
-      return {
-        kind: 'failed',
-        stepId: entry.stepId,
-        code,
-        retryable,
-        attemptId: known?.attemptId,
+      const failure: AdvanceOutcome = {
+        kind: 'failed', stepId: entry.stepId, code, retryable,
         state: this.getState(workId),
-        beatCommand: err instanceof BeatCommandError ? err.command : undefined,
-        proseCommand: err instanceof ProseCommandError ? err.command : undefined,
-        ...(known?.inputBudget ? { inputBudget: known.inputBudget } : {}),
       }
+      if (known?.attemptId) failure.attemptId = known.attemptId
+      if (known?.inputBudget) failure.inputBudget = known.inputBudget
+      if (err instanceof BeatCommandError) failure.beatCommand = err.command
+      if (err instanceof ProseCommandError) failure.proseCommand = err.command
+      return failure
     }
     this.clearFailure(workId)
     try {

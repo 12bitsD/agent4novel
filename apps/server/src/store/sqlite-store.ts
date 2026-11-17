@@ -41,6 +41,16 @@ function artifactFromRow(row: ArtifactRow): Artifact {
   }, 'stored')
 }
 
+function workSummary(work: WorkDetail): WorkSummary {
+  let chapterCount = 0
+  for (const artifact of work.artifacts) {
+    if (artifact.kind === 'prose' && artifact.humanStatus === 'approved') chapterCount += 1
+  }
+  let seedPreview = work.seed
+  if (work.seed.length > 40) seedPreview = `${work.seed.slice(0, 40)}…`
+  return { id: work.id, title: work.title, seedPreview, chapterCount }
+}
+
 type BadExampleRow = { id: string; work_id: string; chapter: number; record: string; request: string; cursor?: number }
 const currentArtifactHead = `NOT EXISTS (
   SELECT 1 FROM artifacts newer WHERE newer.work_id = a.work_id AND newer.kind = a.kind
@@ -163,15 +173,20 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
       const heads = new Map<string, Artifact[]>()
       for (const row of artifactRows) {
         const artifact = artifactFromRow(row)
-        const bucket = heads.get(artifact.workId) ?? []
+        let bucket = heads.get(artifact.workId)
+        if (!bucket) {
+          bucket = []
+          heads.set(artifact.workId, bucket)
+        }
         bucket.push(artifact)
-        heads.set(artifact.workId, bucket)
       }
-      return validateStoreValue(workListResponseSchema, workRows.map(row => {
-        const detail = validateStoreValue(workDetailSchema, { ...workFromRow(row), artifacts: heads.get(row.id) ?? [] }, 'stored')
-        return { id: detail.id, title: detail.title, seedPreview: detail.seed.length > 40 ? `${detail.seed.slice(0, 40)}…` : detail.seed,
-          chapterCount: detail.artifacts.filter(a => a.kind === 'prose' && a.humanStatus === 'approved').length }
-      }), 'stored')
+      const summaries: WorkSummary[] = []
+      for (const row of workRows) {
+        const artifacts = heads.get(row.id) || []
+        const detail = validateStoreValue(workDetailSchema, Object.assign({}, workFromRow(row), { artifacts }), 'stored')
+        summaries.push(workSummary(detail))
+      }
+      return validateStoreValue(workListResponseSchema, summaries, 'stored')
     })
   }
 

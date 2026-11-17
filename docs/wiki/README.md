@@ -190,3 +190,4 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [072 静态资源与启动退出边界](./072-runtime-static-lifecycle.md) | [#72](https://github.com/12bitsD/agent4novel/issues/72) | current | 异步静态校验、资产缓存与真实 listen/shutdown 证据 |
 | [073 模型取消传播与 shutdown（阻塞）](./073-model-cancellation.md) | [#73](https://github.com/12bitsD/agent4novel/issues/73) | current | 等 #15/#69 基线；断连 signal、锁释放与 append 边界设计 |
 | [074 RPC 请求边界与生产构建硬化（阻塞）](./074-rpc-build-hardening.md) | [#74](https://github.com/12bitsD/agent4novel/issues/74) | current | 等 #15/#73 基线；bounded body、写限额与 staging 构建 |
+| [075 后端逻辑简化](./075-logic-simplification.md) | [#75](https://github.com/12bitsD/agent4novel/issues/75) | current | 分支与链式简写治理，保持 feature 与性能验收 |

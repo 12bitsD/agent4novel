@@ -24,6 +24,26 @@ function contained(root: string, target: string): boolean {
   return path !== '..' && !path.startsWith('../') && !isAbsolute(path)
 }
 
+type ByteRange = { start: number; end: number; status: 200 | 206 }
+function parseRange(header: string | undefined, size: number): ByteRange | null {
+  if (!header) return { start: 0, end: size - 1, status: 200 }
+  const match = /^bytes=(\d+)?-(\d+)?$/.exec(header)
+  if (!match) return null
+  let start = 0
+  let end = size - 1
+  if (match[1] === undefined) {
+    const suffix = match[2] ? Number(match[2]) : 0
+    if (suffix <= 0) return null
+    start = Math.max(size - suffix, 0)
+  } else {
+    start = Number(match[1])
+    if (match[2]) end = Number(match[2])
+  }
+  end = Math.min(end, size - 1)
+  if (start < 0 || start >= size || end < start) return null
+  return { start, end, status: 206 }
+}
+
 export function staticWeb(directory: string): MiddlewareHandler {
   const root = validateWebRoot(directory)
   return async (c, next) => {
@@ -48,28 +68,15 @@ export function staticWeb(directory: string): MiddlewareHandler {
         return next()
       }
       const size = stats.size
-      let start = 0
-      let end = size - 1
-      let status: 200 | 206 = 200
-      const range = c.req.header('range')
-      if (range) {
-        const reject = async () => {
-          await handle?.close()
-          handle = undefined
-          return c.json({ code: 'invalid-range', message: 'requested range is not satisfiable', retryable: false }, 416)
-        }
-        const match = /^bytes=(\d+)?-(\d+)?$/.exec(range)
-        if (!match) return reject()
-        if (match[1] === undefined) {
-          const suffix = match[2] ? Number(match[2]) : 0
-          if (suffix <= 0) return reject()
-          start = Math.max(size - suffix, 0)
-        } else start = Number(match[1])
-        const requestedEnd = match[1] !== undefined && match[2] ? Number(match[2]) : size - 1
-        if (start < 0 || start >= size || requestedEnd < start) return reject()
-        end = Math.min(requestedEnd, size - 1)
-        status = 206
+      const range = parseRange(c.req.header('range'), size)
+      if (!range) {
+        await handle.close()
+        handle = undefined
+        return c.json({ code: 'invalid-range', message: 'requested range is not satisfiable', retryable: false }, 416)
       }
+      const start = range.start
+      const end = range.end
+      const status = range.status
       c.header('Content-Type', getMimeType(file) || 'application/octet-stream')
       c.header('Content-Length', String(status === 206 ? end - start + 1 : size))
       if (status === 206) {

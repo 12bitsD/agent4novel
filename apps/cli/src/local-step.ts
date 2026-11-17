@@ -9,6 +9,24 @@ const FILE_BYTES = 1024 * 1024
 const RESULT_BYTES = 8 * FILE_BYTES
 const DEFAULT_STEP_TIMEOUT_MS = 920_000
 
+function closeError(code: number | null, stdout: string, stderr: string): CliError | undefined {
+  if (code === 0) return undefined
+  if (stdout.trim()) {
+    try {
+      const response = stepExperimentResponseSchema.safeParse(JSON.parse(stdout))
+      if (response.success && response.data.kind === 'failed') return undefined
+    } catch { /* malformed worker output is not a valid failure response */ }
+    return new CliError('Local step worker failed without a valid failure response', 'step-worker-failed')
+  }
+  let errorCode = 'step-worker-failed'
+  try {
+    const last: unknown = JSON.parse(stderr.trim().split('\n').at(-1) ?? '')
+    if (typeof last === 'object' && last !== null && 'code' in last && typeof last.code === 'string'
+      && ['invalid-input', 'payload-too-large', 'llm-config-invalid'].includes(last.code)) errorCode = last.code
+  } catch { /* never echo worker stderr or provider text */ }
+  return new CliError('Local step worker failed; check input and model configuration', errorCode)
+}
+
 function readBounded(path: string): string {
   let descriptor: number | undefined
   try {
@@ -128,25 +146,7 @@ export async function runLocalStep(stepId: string | undefined, flags: Record<str
     child.stderr.on('data', (chunk: string) => { stderr = (stderr + chunk).slice(-65536) })
     child.on('error', () => { finish(new CliError('Unable to start the local server worker', 'step-worker-failed')) })
     child.stdin.on('error', () => { /* close/error handlers report worker failures */ })
-    child.on('close', code => {
-      if (code === 0) { finish(); return }
-      if (stdout.trim() !== '') {
-        let failed = false
-        try {
-          const response = stepExperimentResponseSchema.safeParse(JSON.parse(stdout))
-          failed = response.success && response.data.kind === 'failed'
-        } catch { /* malformed worker output is not a valid failure response */ }
-        finish(failed ? undefined : new CliError('Local step worker failed without a valid failure response', 'step-worker-failed'))
-        return
-      }
-      let errorCode = 'step-worker-failed'
-      try {
-        const last: unknown = JSON.parse(stderr.trim().split('\n').at(-1) ?? '')
-        if (typeof last === 'object' && last !== null && 'code' in last && typeof last.code === 'string'
-          && ['invalid-input', 'payload-too-large', 'llm-config-invalid'].includes(last.code)) errorCode = last.code
-      } catch { /* never echo worker stderr or provider text */ }
-      finish(new CliError('Local step worker failed; check input and model configuration', errorCode))
-    })
+    child.on('close', code => { finish(closeError(code, stdout, stderr)) })
     child.stdin.end(payload)
   })
   let raw: unknown
