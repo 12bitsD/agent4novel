@@ -5,12 +5,20 @@ import { Pipeline, type ArtifactStep, type PipelineInput } from '../src/pipeline
 import { InMemoryStore } from '../src/store/in-memory-store.js'
 import { consumeGuards } from '../src/pipeline/consume-guards.js'
 import { approveSetting } from '../src/setting-review.js'
-import { approveBeat } from '../src/beat-review.js'
-import { approveProse, saveProse } from '../src/prose-review.js'
+import { approveBeat, prepareBeatReview } from '../src/beat-review.js'
+import { approveProse, prepareProseReview, saveProse } from '../src/prose-review.js'
+import { chapterSummaries } from '../src/chapter-view.js'
 import { createApp } from '../src/app.js'
 import { createFakeCaptionStep, createFakeCreativeStep, createFakeOutlineStep, createFakeSettingStep } from '../src/steps/fake-step.js'
 
 const post = (body: unknown) => ({ method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+function corruptedStore(store: InMemoryStore, workId: string): InMemoryStore {
+  const work = store.getWork(workId)!
+  return { getWork: () => ({
+    ...work,
+    artifacts: work.artifacts.map(artifact => ({ ...artifact, content: { invalid: true } })),
+  }) } as unknown as InMemoryStore
+}
 async function ready(onRun?: (input: PipelineInput, kind: string) => Promise<void>, store = new InMemoryStore()) {
   const seen: Array<{ kind: string; input: PipelineInput }> = []
   const step = (id: string): ArtifactStep => ({ id, inputSchema: z.any(), outputSchema: z.object({ content: jsonValueSchema }),
@@ -339,6 +347,41 @@ describe('explicit chapter continuation', () => {
     expect(await started.json()).toMatchObject({ kind: 'advanced', state: { pendingGate: { kind: 'beat', chapter: 2 } } })
     expect(seen.filter(item => item.kind === 'beat' && item.input.chapter === 2)).toHaveLength(1)
     expect(head('beat', 2).inputs).toContainEqual({ kind: 'prose', chapter: 1, artifactId: newProse.id, version: newProse.version })
+  })
+  it('keeps the upstream Beat gate error ahead of an invalid stored baseline', () => {
+    const store = new InMemoryStore()
+    const work = store.createWork({ seed: '错误优先级' })
+    const beat = store.appendArtifact(work.id, 'beat', {
+      title: '章', goal: '推进', ending: '结束',
+      writingPlan: [{ itemId: 'plan-1', title: '相遇', content: '人物相遇' }],
+    }, { chapter: 1 })
+    expect(() => prepareBeatReview(corruptedStore(store, work.id), work.id, {
+      chapter: 1,
+      expectedArtifactId: beat.id,
+      expectedHeadVersion: beat.version,
+    })).toThrow('approve the earlier valid gate first')
+  })
+  it('keeps the upstream Prose gate error ahead of an invalid stored baseline', () => {
+    const store = new InMemoryStore()
+    const work = store.createWork({ seed: '错误优先级' })
+    const prose = store.appendArtifact(work.id, 'prose', { text: '正文' }, { chapter: 1 })
+    expect(() => prepareProseReview(corruptedStore(store, work.id), work.id, {
+      chapter: 1,
+      expectedArtifactId: prose.id,
+      expectedHeadVersion: prose.version,
+    })).toThrow('approve the earlier valid gate first')
+  })
+  it('keeps whole-chapter regeneration when approved prose has no beat input', async () => {
+    const { work, store } = await ready()
+    const detail = store.getWork(work.id)!
+    const prose = detail.artifacts.find(artifact => artifact.kind === 'prose')!
+    const withoutInput = {
+      ...detail,
+      artifacts: detail.artifacts.map(artifact => artifact.id === prose.id ? { ...artifact, inputs: undefined } : artifact),
+    }
+    const chapter = chapterSummaries(withoutInput, null).find(item => item.chapter === 1)
+    expect(chapter?.allowedActions).toContain('regenerate-chapter')
+    expect(chapter?.allowedActions).not.toContain('regenerate-chapter-prose')
   })
   it('does not infer a completed beat gate when the old prose source reference is absent', async () => {
     const { work, pipeline, store, app, head, seen } = await ready()

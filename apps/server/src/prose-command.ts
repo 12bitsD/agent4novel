@@ -1,60 +1,80 @@
-import { randomUUID } from 'node:crypto'
-import { proseCommandObservationSchema } from '@agent4novel/contracts'
-import type { Artifact, ProseExecutionObservation, ProseOperation, ChapterRegenerationBinding } from '@agent4novel/contracts'
-import { KnownError } from './errors.js'
-import { z } from 'zod'
-import { commandFailureObservation } from './command-observation.js'
-import { currentRequest, recordCommand } from './steps/telemetry.js'
+import { proseCommandObservationSchema } from "@agent4novel/contracts";
+import type {
+  Artifact,
+  ProseExecutionObservation,
+  ProseOperation,
+  ChapterRegenerationBinding,
+} from "@agent4novel/contracts";
+import {
+  commandFailureCode,
+  observeCommand,
+  responseErrorObservation,
+} from "./command-observation.js";
 
-type Stage = NonNullable<ProseExecutionObservation['failureStage']>
-export type ProseExecution = { stage: Stage }
+type Stage = NonNullable<ProseExecutionObservation["failureStage"]>;
+export type ProseExecution = {
+  stage: Stage;
+  enter: (stage: Stage) => void;
+};
+export type ProseTarget = {
+  workId: string;
+  chapter?: number;
+  regeneration?: ChapterRegenerationBinding;
+};
+
 export function proseFailureCode(cause: unknown, stage: Stage): string {
-  if (stage === 'response') return 'internal-error'
-  return cause instanceof KnownError ? cause.code : cause instanceof z.ZodError
-    ? (stage === 'output' || stage === 'model' ? 'llm-invalid-output' : 'invalid-content') : 'internal-error'
+  // 使用统一的阶段错误分类。
+  // commandFailureCode：处理当前步骤。
+  return commandFailureCode(cause, stage);
 }
+
 export class ProseCommandError extends Error {
-  constructor(readonly cause: unknown, readonly command: ProseExecutionObservation) { super('prose command failed') }
-}
-export function proseResponseError(workId: string, committed: ProseExecutionObservation, cause: unknown): ProseCommandError {
-  const { resultHead: _resultHead, ...executed } = committed
-  const request = currentRequest()
-  const command: ProseExecutionObservation = { ...executed, ...commandFailureObservation(cause, 'response'),
-    latencyMs: request ? Date.now() - request.startedAt : executed.latencyMs }
-  recordCommand(workId, command, proseFailureCode(cause, 'response'))
-  return new ProseCommandError(cause, command)
-}
-export async function observeProse<T extends Artifact>(
-  workId: string, operation: ProseOperation, expectedHead: ProseExecutionObservation['expectedHead'],
-  run: (execution: ProseExecution) => T | Promise<T>,
-  chapter = 1, regeneration?: ChapterRegenerationBinding,
-): Promise<{ artifact: T; command: ProseExecutionObservation }> {
-  const request = currentRequest()
-  const started = Date.now()
-  const cursor = request?.telemetry.length ?? 0
-  const execution: ProseExecution = { stage: 'precondition' }
-  const base = () => ({
-    kind: 'execution-result' as const, requestId: request?.requestId ?? randomUUID(), operation,
-    target: { workId, kind: 'prose' as const, chapter }, expectedHead, ...(regeneration ? { regeneration } : {}),
-    executionMode: request?.executionMode ?? 'demo' as const, latencyMs: Date.now() - started,
-    attemptIds: request?.telemetry.slice(cursor).filter(t => t.stepId === 'prose').map(t => t.attemptId) ?? [],
-  })
-  try {
-    const artifact = await run(execution)
-    execution.stage = 'response'
-    const command = proseCommandObservationSchema.parse({
-      ...base(), writeOutcome: 'committed',
-      resultHead: { artifactId: artifact.id, version: artifact.version, humanStatus: artifact.humanStatus },
-    }) as ProseExecutionObservation
-    recordCommand(workId, command, 'ok')
-    return { artifact, command }
-  } catch (cause) {
-    if (cause instanceof KnownError && cause.code === 'input-budget-exceeded') execution.stage = 'input'
-    if (proseFailureCode(cause, execution.stage) === 'llm-invalid-output') execution.stage = 'output'
-    const command: ProseExecutionObservation = {
-      ...base(), ...commandFailureObservation(cause, execution.stage),
-    }
-    recordCommand(workId, command, proseFailureCode(cause, execution.stage))
-    throw new ProseCommandError(cause, command)
+  constructor(
+    readonly cause: unknown,
+    readonly command: ProseExecutionObservation,
+  ) {
+    // super：初始化父类。
+    super("prose command failed");
   }
+}
+
+export function proseResponseError(
+  workId: string,
+  committed: ProseExecutionObservation,
+  cause: unknown,
+): ProseCommandError {
+  // 已执行但未返回时，标记 Prose 响应结果未知。
+  // responseErrorObservation：处理当前步骤。
+  // proseFailureCode：处理当前步骤。
+  const command = responseErrorObservation({
+    workId,
+    committed,
+    cause,
+    code: proseFailureCode(cause, "response"),
+  });
+  return new ProseCommandError(cause, command);
+}
+
+export async function observeProse<T extends Artifact>(
+  target: ProseTarget,
+  operation: ProseOperation,
+  expectedHead: ProseExecutionObservation["expectedHead"],
+  run: (execution: ProseExecution) => T | Promise<T>,
+): Promise<{ artifact: T; command: ProseExecutionObservation }> {
+  // 共享观测流程；这里只注入 Prose 的 schema 和错误类型。
+  // observeCommand：记录当前观测。
+  // parse：解析输入。
+  return observeCommand({
+    kind: "prose",
+    target,
+    operation,
+    expectedHead,
+    run,
+    schema: {
+      parse: (data: unknown) =>
+        proseCommandObservationSchema.parse(data) as ProseExecutionObservation,
+    },
+    failureCode: proseFailureCode,
+    error: (cause, command) => new ProseCommandError(cause, command),
+  });
 }

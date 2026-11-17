@@ -42,7 +42,7 @@ describe('caption RealStep', () => {
       name: 'AI_NoObjectGeneratedError', text: marker, cause: new Error(marker), finishReason: 'stop', usage: { outputTokens: 20 },
     }))
     try {
-      await expect(withRequest('11111111-1111-4111-8111-111111111111', false, () => runStep(step, baseInput, {}))).rejects.toMatchObject({ code: 'llm-invalid-output' })
+      await expect(withRequest('11111111-1111-4111-8111-111111111111', 'live', () => runStep(step, baseInput, {}))).rejects.toMatchObject({ code: 'llm-invalid-output' })
       expect(JSON.stringify(log.mock.calls)).not.toContain(marker)
       expect(JSON.stringify(telemetryFor('w1'))).not.toContain(marker)
       expect(telemetryFor('w1')).toMatchObject([{ error: 'output-schema', requestId: '11111111-1111-4111-8111-111111111111' }])

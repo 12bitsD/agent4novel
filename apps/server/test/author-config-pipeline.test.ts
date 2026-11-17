@@ -92,7 +92,7 @@ describe('operation configuration snapshot', () => {
       const caption = createFakeCaptionStep()
       caption.run = async () => { throw new KnownError('llm-unavailable', 'invalid model configuration', { retryable: false }) }
       const pipeline = new Pipeline({ store, steps: new Map([['caption', caption]]), definition: [{ stepId: 'caption', outputKind: 'caption' }], resolveConfig: () => ({}) })
-      const service = new AuthorConfigService(store, store, dir, modelRuntime, workId => pipeline.clearFailure(workId))
+      const service = new AuthorConfigService(store, store, dir, { runtime: modelRuntime, onSaved: workId => pipeline.clearFailure(workId) })
       expect(await pipeline.advance(work.id)).toMatchObject({ kind: 'failed', stepId: 'caption', retryable: false })
       expect(pipeline.failureOf(work.id, 'caption')).not.toBeNull()
       service.save(work.id, { requestId: randomUUID(), expectedRevision: 0, document: { preferences: {}, defaults: {}, steps: {} } })

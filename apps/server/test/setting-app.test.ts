@@ -5,6 +5,7 @@ import type { FinalizeArtifactInput } from '../src/store/work-store.js'
 import { createApp } from '../src/app.js'
 import { Pipeline, type ArtifactStep, type PipelineDefinitionEntry } from '../src/pipeline/pipeline.js'
 import { consumeGuards } from '../src/pipeline/consume-guards.js'
+import { approveSetting } from '../src/setting-review.js'
 import { InMemoryStore } from '../src/store/in-memory-store.js'
 import { fakeArtifactStep } from './fakes.js'
 
@@ -139,6 +140,15 @@ describe('Setting approval HTTP boundary', () => {
     expect(await (await app.request(`/api/works/${work.id}`)).json()).toMatchObject({ workflowState: 'awaiting-setting-review' })
     expect(store.getWork(work.id)!.artifacts.find((a) => a.kind === 'setting')).toEqual(pending)
     expect((await approve({ content: setting, expectedHeadVersion: 1 })).status).toBe(200)
+  })
+
+  it('keeps the earlier gate error ahead of invalid Setting content', () => {
+    const { store, work } = setup()
+    store.appendArtifact(work.id, 'outline', outline)
+    expect(() => approveSetting(store, work.id, {
+      content: { ...setting, world: [] },
+      expectedHeadVersion: 1,
+    })).toThrow(expect.objectContaining({ code: 'setting-gate-not-ready' }))
   })
 
   it('rejects direct Pipeline approval without changing the Setting', () => {

@@ -12,7 +12,7 @@ describe('bounded command diagnostics', () => {
     let release!: () => void
     const began = new Promise<void>(resolve => { entered = resolve })
     const wait = new Promise<void>(resolve => { release = resolve })
-    const own = withRequest(id, false, async scope => {
+    const own = withRequest(id, 'live', async scope => {
       recordTelemetry('work-own', telemetry)
       entered()
       await wait

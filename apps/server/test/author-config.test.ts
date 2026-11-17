@@ -43,7 +43,7 @@ describe('author configuration at the production boundary', () => {
   it('reports Kimi as Kimi in the effective author configuration', () => {
     const f = fixture()
     try {
-      const service = new AuthorConfigService(f.store, f.store, f.dir, createModelRuntime({ KIMI_API_KEY: 'synthetic-kimi-key' }))
+      const service = new AuthorConfigService(f.store, f.store, f.dir, { runtime: createModelRuntime({ KIMI_API_KEY: 'synthetic-kimi-key' }) })
       service.save(f.work.id, { requestId: randomUUID(), expectedRevision: 0, document: { preferences: {}, defaults: { model: DEFAULT_KIMI_MODEL_ID }, steps: {} } })
       expect(service.get(f.work.id).effective[0]).toMatchObject({ model: DEFAULT_KIMI_MODEL_ID, provider: 'kimi', configured: true, executionMode: 'live' })
     } finally { f.store.close() }

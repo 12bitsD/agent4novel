@@ -1,25 +1,56 @@
-import { z } from 'zod'
-import { captionContentSchema, creativeContentSchema, creativeLimits, creativePackSchema, jsonValueSchema } from '@agent4novel/contracts'
+import { z } from "zod";
+import {
+  captionContentSchema,
+  creativeContentSchema,
+  creativeLimits,
+  creativePackSchema,
+  jsonValueSchema,
+} from "@agent4novel/contracts";
 
 // creative 步骤 io(#3c):输入 = seed + upstream.caption(提炼稿);输出 = N 个创意稿。
 // directionCount 不进 inputSchema(属 config);生成后由 step 校验数量并注入 directionId。
+// object：处理当前步骤。
+// string：处理当前步骤。
+// string：处理当前步骤。
+// catchall：处理当前步骤。
+// object：处理当前步骤。
+// optional：处理当前步骤。
+// strict：处理当前步骤。
+// object：处理当前步骤。
+// nullable：处理当前步骤。
+// max：处理当前步骤。
+// string：处理当前步骤。
 export const creativeStepInputSchema = z.object({
   workId: z.string(),
   seed: z.string(),
-  upstream: z.object({ caption: captionContentSchema }).catchall(jsonValueSchema),
-  regeneration: z.object({
-    content: creativeContentSchema.nullable(),
-    instructions: z.string().max(creativeLimits.instructions),
-  }).strict().optional(),
-})
-export type CreativeStepInput = z.infer<typeof creativeStepInputSchema>
+  upstream: z
+    .object({ caption: captionContentSchema })
+    .catchall(jsonValueSchema),
+  regeneration: z
+    .object({
+      content: creativeContentSchema.nullable(),
+      instructions: z.string().max(creativeLimits.instructions),
+    })
+    .strict()
+    .optional(),
+});
+export type CreativeStepInput = z.infer<typeof creativeStepInputSchema>;
 
 // LLM 面向的输出:directionId 由 server 注入,模型不产
+// object：处理当前步骤。
+// max：处理当前步骤。
+// min：处理当前步骤。
+// array：处理当前步骤。
+// omit：处理当前步骤。
 export const creativeLlmOutputSchema = z.object({
-  directions: z.array(creativePackSchema.omit({ directionId: true })).min(1).max(3),
-})
+  directions: z
+    .array(creativePackSchema.omit({ directionId: true }))
+    .min(1)
+    .max(3),
+});
 
+// object：处理当前步骤。
 export const creativeStepOutputSchema = z.object({
   content: creativeContentSchema,
-})
-export type CreativeStepOutput = z.infer<typeof creativeStepOutputSchema>
+});
+export type CreativeStepOutput = z.infer<typeof creativeStepOutputSchema>;

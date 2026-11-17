@@ -1,60 +1,79 @@
-import { randomUUID } from 'node:crypto'
-import { beatCommandObservationSchema } from '@agent4novel/contracts'
-import type { Artifact, BeatExecutionObservation, BeatOperation, ChapterRegenerationBinding } from '@agent4novel/contracts'
-import { KnownError } from './errors.js'
-import { z } from 'zod'
-import { commandFailureObservation } from './command-observation.js'
-import { currentRequest, recordCommand } from './steps/telemetry.js'
+import { beatCommandObservationSchema } from "@agent4novel/contracts";
+import type {
+  Artifact,
+  BeatExecutionObservation,
+  BeatOperation,
+  ChapterRegenerationBinding,
+} from "@agent4novel/contracts";
+import {
+  commandFailureCode,
+  observeCommand,
+  responseErrorObservation,
+} from "./command-observation.js";
 
-type Stage = NonNullable<BeatExecutionObservation['failureStage']>
-export type BeatExecution = { stage: Stage }
+type Stage = NonNullable<BeatExecutionObservation["failureStage"]>;
+export type BeatExecution = {
+  stage: Stage;
+  enter: (stage: Stage) => void;
+};
+export type BeatTarget = {
+  workId: string;
+  chapter?: number;
+  regeneration?: ChapterRegenerationBinding;
+};
+
 export function beatFailureCode(cause: unknown, stage: Stage): string {
-  if (stage === 'response') return 'internal-error'
-  return cause instanceof KnownError ? cause.code : cause instanceof z.ZodError
-    ? (stage === 'output' || stage === 'model' ? 'llm-invalid-output' : 'invalid-content') : 'internal-error'
+  // 使用统一的阶段错误分类。
+  // commandFailureCode：处理当前步骤。
+  return commandFailureCode(cause, stage);
 }
+
 export class BeatCommandError extends Error {
-  constructor(readonly cause: unknown, readonly command: BeatExecutionObservation) { super('beat command failed') }
-}
-export function beatResponseError(workId: string, committed: BeatExecutionObservation, cause: unknown): BeatCommandError {
-  const { resultHead: _resultHead, ...executed } = committed
-  const request = currentRequest()
-  const command: BeatExecutionObservation = { ...executed, ...commandFailureObservation(cause, 'response'),
-    latencyMs: request ? Date.now() - request.startedAt : executed.latencyMs }
-  recordCommand(workId, command, 'internal-error')
-  return new BeatCommandError(cause, command)
-}
-export async function observeBeat<T extends Artifact>(
-  workId: string, operation: BeatOperation, expectedHead: BeatExecutionObservation['expectedHead'],
-  run: (execution: BeatExecution) => T | Promise<T>,
-  chapter = 1, regeneration?: ChapterRegenerationBinding,
-): Promise<{ artifact: T; command: BeatExecutionObservation }> {
-  const request = currentRequest()
-  const started = Date.now()
-  const cursor = request?.telemetry.length ?? 0
-  const execution: BeatExecution = { stage: 'precondition' }
-  const base = () => ({
-    kind: 'execution-result' as const, requestId: request?.requestId ?? randomUUID(), operation,
-    target: { workId, kind: 'beat' as const, chapter }, expectedHead, ...(regeneration ? { regeneration } : {}),
-    executionMode: request?.executionMode ?? 'demo' as const, latencyMs: Date.now() - started,
-    attemptIds: request?.telemetry.slice(cursor).filter(t => t.stepId === 'beat').map(t => t.attemptId) ?? [],
-  })
-  try {
-    const artifact = await run(execution)
-    execution.stage = 'response'
-    const command = beatCommandObservationSchema.parse({
-      ...base(), writeOutcome: 'committed',
-      resultHead: { artifactId: artifact.id, version: artifact.version, humanStatus: artifact.humanStatus },
-    }) as BeatExecutionObservation
-    recordCommand(workId, command, 'ok')
-    return { artifact, command }
-  } catch (cause) {
-    if (cause instanceof KnownError && cause.code === 'input-budget-exceeded') execution.stage = 'input'
-    if (beatFailureCode(cause, execution.stage) === 'llm-invalid-output') execution.stage = 'output'
-    const command: BeatExecutionObservation = {
-      ...base(), ...commandFailureObservation(cause, execution.stage),
-    }
-    recordCommand(workId, command, beatFailureCode(cause, execution.stage))
-    throw new BeatCommandError(cause, command)
+  constructor(
+    readonly cause: unknown,
+    readonly command: BeatExecutionObservation,
+  ) {
+    // super：初始化父类。
+    super("beat command failed");
   }
+}
+
+export function beatResponseError(
+  workId: string,
+  committed: BeatExecutionObservation,
+  cause: unknown,
+): BeatCommandError {
+  // 已执行但未返回时，标记 Beat 响应结果未知。
+  // responseErrorObservation：处理当前步骤。
+  const command = responseErrorObservation({
+    workId,
+    committed,
+    cause,
+    code: "internal-error",
+  });
+  return new BeatCommandError(cause, command);
+}
+
+export async function observeBeat<T extends Artifact>(
+  target: BeatTarget,
+  operation: BeatOperation,
+  expectedHead: BeatExecutionObservation["expectedHead"],
+  run: (execution: BeatExecution) => T | Promise<T>,
+): Promise<{ artifact: T; command: BeatExecutionObservation }> {
+  // 共享观测流程；这里只注入 Beat 的 schema 和错误类型。
+  // observeCommand：记录当前观测。
+  // parse：解析输入。
+  return observeCommand({
+    kind: "beat",
+    target,
+    operation,
+    expectedHead,
+    run,
+    schema: {
+      parse: (data: unknown) =>
+        beatCommandObservationSchema.parse(data) as BeatExecutionObservation,
+    },
+    failureCode: beatFailureCode,
+    error: (cause, command) => new BeatCommandError(cause, command),
+  });
 }

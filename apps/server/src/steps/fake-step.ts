@@ -1,79 +1,109 @@
-import { proseStepInputSchema, proseStepOutputSchema } from './prose-io.js'
-import type { ArtifactStep } from '../pipeline/pipeline.js'
-import { captionStepInputSchema, captionStepOutputSchema } from './caption-io.js'
-import { creativeStepInputSchema, creativeStepOutputSchema } from './creative-io.js'
-import { outlineStepInputSchema, outlineStepOutputSchema } from './outline-io.js'
-import { DEFAULT_DIRECTION_COUNT } from './creative-step.js'
-import { settingStepInputSchema, settingStepOutputSchema } from './setting-io.js'
-import { assignSettingIds } from '../setting-content.js'
-import { assignBeatIds } from '../beat-content.js'
-import { beatStepInputSchema, beatStepOutputSchema } from './beat-io.js'
+import { proseStepInputSchema, proseStepOutputSchema } from "./prose-io.js";
+import type { ArtifactStep } from "../pipeline/pipeline.js";
+import {
+  captionStepInputSchema,
+  captionStepOutputSchema,
+} from "./caption-io.js";
+import {
+  creativeStepInputSchema,
+  creativeStepOutputSchema,
+} from "./creative-io.js";
+import {
+  outlineStepInputSchema,
+  outlineStepOutputSchema,
+} from "./outline-io.js";
+import { DEFAULT_DIRECTION_COUNT } from "./creative-step.js";
+import {
+  settingStepInputSchema,
+  settingStepOutputSchema,
+} from "./setting-io.js";
+import { assignSettingIds } from "../setting-content.js";
+import { assignBeatIds } from "../beat-content.js";
+import { beatStepInputSchema, beatStepOutputSchema } from "./beat-io.js";
 
 // 显式可替换的 Step seam：固定输出仍走完整 schema 校验，是否采用由装配层决定，不绑定 provider。
 
 export function createFakeCaptionStep(): ArtifactStep {
   return {
-    id: 'caption',
+    id: "caption",
     inputSchema: captionStepInputSchema,
     outputSchema: captionStepOutputSchema,
     async run(input) {
+      // slice：截取片段。
+      // slice：截取片段。
       return {
         content: {
-          inputStage: '脑洞' as const,
+          inputStage: "脑洞" as const,
           summary: `(演示)一份关于「${input.seed.slice(0, 40)}」的素材,核心是一个差异化点子。`,
           elements: [
-            { kind: '设定', content: `基于输入:${input.seed.slice(0, 50)}` },
-            { kind: '冲突', content: '(演示)主角处境与目标之间的核心矛盾' },
+            { kind: "设定", content: `基于输入:${input.seed.slice(0, 50)}` },
+            { kind: "冲突", content: "(演示)主角处境与目标之间的核心矛盾" },
           ],
-          gaps: ['(演示)主角动机未明确'],
+          gaps: ["(演示)主角动机未明确"],
         },
-      }
+      };
     },
-  }
+  };
 }
 
 export function createFakeCreativeStep(): ArtifactStep {
   return {
-    id: 'creative',
+    id: "creative",
     inputSchema: creativeStepInputSchema,
     outputSchema: creativeStepOutputSchema,
     async run(input, config) {
-      const count = config.directionCount ?? DEFAULT_DIRECTION_COUNT
+      const count = config.directionCount ?? DEFAULT_DIRECTION_COUNT;
+      // from：构造数组。
       return {
         content: {
           directions: Array.from({ length: count }, (_, i) => {
             // 第 i 个方向的演示基调(directionCount ≤ 3,schema 保证不越界)
-            const flavor = ['稳健王道', '黑深残', '轻松日常'][i]!
+            const flavor = ["稳健王道", "黑深残", "轻松日常"][i]!;
+            // slice：截取片段。
+            // slice：截取片段。
+            // slice：截取片段。
             return {
               directionId: `${input.workId}-dir-${i + 1}`,
-              title: `(演示)方向${'ABC'[i]}:${flavor}`,
+              title: `(演示)方向${"ABC"[i]}:${flavor}`,
               hook: `(演示)主角在「${input.seed.slice(0, 30)}」中以${flavor}方式逆势崛起`,
-              tags: ['演示', flavor],
+              tags: ["演示", flavor],
               synopsis: `(演示)${input.seed.slice(0, 60)}……故事以${flavor}基调展开,经转折抵达结局。`,
-              characters: [{ title: '主角', content: `(演示)${flavor}路线的主人公` }],
-              setting: [{ title: '(演示)世界观', content: `基于输入:${input.seed.slice(0, 50)}` }],
+              characters: [
+                { title: "主角", content: `(演示)${flavor}路线的主人公` },
+              ],
+              setting: [
+                {
+                  title: "(演示)世界观",
+                  content: `基于输入:${input.seed.slice(0, 50)}`,
+                },
+              ],
               payoffs: [`(演示)${flavor}爽点:以小博大`],
-              outline: [{ title: '(演示)主线', content: '开端 → 发展 → 高潮 → 结局' }],
-            }
+              outline: [
+                { title: "(演示)主线", content: "开端 → 发展 → 高潮 → 结局" },
+              ],
+            };
           }),
         },
-      }
+      };
     },
-  }
+  };
 }
 
 // 演示大纲:3 弧 × 3 剧情点,确定性产出(数量边界内:弧线 3~8、每弧剧情点 2~8)
 export function createFakeOutlineStep(): ArtifactStep {
-  const arcTitles = ['开局立足', '冲突升级', '高潮收束']
+  const arcTitles = ["开局立足", "冲突升级", "高潮收束"];
   return {
-    id: 'outline',
+    id: "outline",
     inputSchema: outlineStepInputSchema,
     outputSchema: outlineStepOutputSchema,
     async run(input) {
+      // map：转换数组元素。
       return {
         content: {
           arcs: arcTitles.map((title, i) => {
-            const arcId = `${input.workId}-arc-${i + 1}`
+            const arcId = `${input.workId}-arc-${i + 1}`;
+            // slice：截取片段。
+            // map：转换数组元素。
             return {
               arcId,
               title: `(演示)${title}`,
@@ -86,66 +116,125 @@ export function createFakeOutlineStep(): ArtifactStep {
                 summary: `(演示)本段发生的关键事件 ${j}`,
                 outcome: `(演示)本段结束后的局势 ${j}`,
               })),
-            }
+            };
           }),
         },
-      }
+      };
     },
-  }
+  };
 }
 
 export function createFakeSettingStep(): ArtifactStep {
   return {
-    id: 'setting', inputSchema: settingStepInputSchema, outputSchema: settingStepOutputSchema,
+    id: "setting",
+    inputSchema: settingStepInputSchema,
+    outputSchema: settingStepOutputSchema,
     async run(input) {
-      const { upstream } = settingStepInputSchema.parse(input)
-      const direction = upstream.creative.directions[0]!
-      return { content: assignSettingIds({
-        overview: `(演示)${direction.synopsis}`,
-        world: [{ title: '故事世界', content: `(演示)基于「${input.seed.slice(0, 80)}」展开，世界规则在整部作品中保持一致。` }],
-        characters: [{ title: '主角', content: `(演示)围绕「${direction.hook}」行动，在关键选择中成长。` }],
-        factions: [], relationships: [], extensions: [],
-      }) }
+      // parse：解析输入。
+      const { upstream } = settingStepInputSchema.parse(input);
+      const direction = upstream.creative.directions[0]!;
+      // assignSettingIds：处理当前步骤。
+      // slice：截取片段。
+      return {
+        content: assignSettingIds({
+          overview: `(演示)${direction.synopsis}`,
+          world: [
+            {
+              title: "故事世界",
+              content: `(演示)基于「${input.seed.slice(0, 80)}」展开，世界规则在整部作品中保持一致。`,
+            },
+          ],
+          characters: [
+            {
+              title: "主角",
+              content: `(演示)围绕「${direction.hook}」行动，在关键选择中成长。`,
+            },
+          ],
+          factions: [],
+          relationships: [],
+          extensions: [],
+        }),
+      };
     },
-  }
+  };
 }
 
 export function createFakeBeatStep(): ArtifactStep {
   return {
-    id: 'beat', inputSchema: beatStepInputSchema, outputSchema: beatStepOutputSchema,
+    id: "beat",
+    inputSchema: beatStepInputSchema,
+    outputSchema: beatStepOutputSchema,
     async run(input) {
-      const { chapter, upstream, regeneration } = beatStepInputSchema.parse(input)
-      const segment = upstream.outline.arcs[0]!.segments[0]!
-      return { content: assignBeatIds({
-        title: chapter === 1 ? '(演示)第一章：初遇变局' : `(演示)第 ${chapter} 章：继续追寻`,
-        goal: regeneration
-          ? `(演示再生)${regeneration.content.goal}\n修改意见：${regeneration.instructions || '重新安排本章'}`
-          : upstream.previousChapter ? `(演示)承接第 ${upstream.previousChapter.chapter} 章已通过正文（${upstream.previousChapter.prose.text.length} 字），继续当前情境。`
-            : `(演示)围绕「${segment.title}」展开：${segment.summary}`,
-        writingPlan: [
-          { title: upstream.previousChapter ? '延续处境' : '建立处境', content: `${upstream.previousChapter ? '- 延续上一章留下的行动，不重复故事开篇。' : '- 展示故事世界中的日常。\n- 让主要人物在行动中出现。'}\n\n${upstream.setting.world[0]!.content}` },
-          { title: '遇到变化并选择', content: '引入打破日常的线索，让主角作出一个有代价的选择；留下后续追问。' },
-        ],
-        ending: chapter === 1 ? `(演示)朝「${segment.outcome}」迈出第一步，停在主角将要行动的位置，不提前完成整条弧线。`
-          : `(演示)完成本章行动后出现新的线索，保持故事继续推进。`,
-      }) }
+      // parse：解析输入。
+      const { chapter, upstream, regeneration } =
+        beatStepInputSchema.parse(input);
+      const segment = upstream.outline.arcs[0]!.segments[0]!;
+      let goal = `(演示)围绕「${segment.title}」展开：${segment.summary}`;
+      if (regeneration) {
+        goal = `(演示再生)${regeneration.content.goal}\n修改意见：${regeneration.instructions || "重新安排本章"}`;
+      } else if (upstream.previousChapter) {
+        goal = `(演示)承接第 ${upstream.previousChapter.chapter} 章已通过正文（${upstream.previousChapter.prose.text.length} 字），继续当前情境。`;
+      }
+      // assignBeatIds：处理当前步骤。
+      return {
+        content: assignBeatIds({
+          title:
+            chapter === 1
+              ? "(演示)第一章：初遇变局"
+              : `(演示)第 ${chapter} 章：继续追寻`,
+          goal,
+          writingPlan: [
+            {
+              title: upstream.previousChapter ? "延续处境" : "建立处境",
+              content: `${upstream.previousChapter ? "- 延续上一章留下的行动，不重复故事开篇。" : "- 展示故事世界中的日常。\n- 让主要人物在行动中出现。"}\n\n${upstream.setting.world[0]!.content}`,
+            },
+            {
+              title: "遇到变化并选择",
+              content:
+                "引入打破日常的线索，让主角作出一个有代价的选择；留下后续追问。",
+            },
+          ],
+          ending:
+            chapter === 1
+              ? `(演示)朝「${segment.outcome}」迈出第一步，停在主角将要行动的位置，不提前完成整条弧线。`
+              : `(演示)完成本章行动后出现新的线索，保持故事继续推进。`,
+        }),
+      };
     },
-  }
+  };
 }
 
 export function createFakeProseStep(): ArtifactStep {
   return {
-    id: 'prose', inputSchema: proseStepInputSchema, outputSchema: proseStepOutputSchema,
+    id: "prose",
+    inputSchema: proseStepInputSchema,
+    outputSchema: proseStepOutputSchema,
     async run(input) {
-      const { upstream, regeneration } = proseStepInputSchema.parse(input)
-      return { content: { text: [
-        `(演示)${upstream.beat.title}。${upstream.beat.goal}`,
-        upstream.setting.world[0]!.content,
-        ...(upstream.previousChapter ? [`(演示)承接第 ${upstream.previousChapter.chapter} 章最终正文（${upstream.previousChapter.prose.text.length} 字），继续人物的行动。`] : []),
-        ...upstream.beat.writingPlan.map(item => item.content),
-        ...(regeneration ? [regeneration.content.text, `本次意见：${regeneration.instructions || '基于当前正文重新尝试。'}`] : []),
-        upstream.beat.ending,
-      ].join('\n\n') } }
+      // parse：解析输入。
+      const { upstream, regeneration } = proseStepInputSchema.parse(input);
+      // join：拼接文本。
+      // map：转换数组元素。
+      return {
+        content: {
+          text: [
+            `(演示)${upstream.beat.title}。${upstream.beat.goal}`,
+            upstream.setting.world[0]!.content,
+            ...(upstream.previousChapter
+              ? [
+                  `(演示)承接第 ${upstream.previousChapter.chapter} 章最终正文（${upstream.previousChapter.prose.text.length} 字），继续人物的行动。`,
+                ]
+              : []),
+            ...upstream.beat.writingPlan.map((item) => item.content),
+            ...(regeneration
+              ? [
+                  regeneration.content.text,
+                  `本次意见：${regeneration.instructions || "基于当前正文重新尝试。"}`,
+                ]
+              : []),
+            upstream.beat.ending,
+          ].join("\n\n"),
+        },
+      };
     },
-  }
+  };
 }

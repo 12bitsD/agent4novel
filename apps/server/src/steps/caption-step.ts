@@ -1,29 +1,39 @@
-import type { AgentConfig } from '@agent4novel/contracts'
-import type { ArtifactStep } from '../pipeline/pipeline.js'
-import { captionStepInputSchema, captionStepOutputSchema } from './caption-io.js'
-import { callLlm, systemFor, truncateSeed } from './llm-call.js'
+import type { AgentConfig } from "@agent4novel/contracts";
+import type { ArtifactStep } from "../pipeline/pipeline.js";
+import {
+  captionStepInputSchema,
+  captionStepOutputSchema,
+} from "./caption-io.js";
+import { callLlm, systemFor, truncateSeed } from "./llm-call.js";
 
 // 文案协议以 skills/caption/SKILL.md「输入(user prompt)格式」节为准(ADR-0002),此处只做数据插值
 function buildPrompt(input: { seed: string }): string {
-  return `作者原始素材:\n${truncateSeed(input.seed)}\n\n请输出提炼稿。`
+  // truncateSeed：处理当前步骤。
+  return `作者原始素材:\n${truncateSeed(input.seed)}\n\n请输出提炼稿。`;
 }
 
-export function createCaptionStep(options: { systemPrompt?: string } = {}): ArtifactStep {
+export function createCaptionStep(
+  options: { systemPrompt?: string } = {},
+): ArtifactStep {
   return {
-    id: 'caption',
+    id: "caption",
     inputSchema: captionStepInputSchema,
     outputSchema: captionStepOutputSchema,
     async run(input, config: AgentConfig) {
+      // callLlm：处理当前步骤。
+      // systemFor：处理当前步骤。
+      // buildPrompt：构造当前数据。
+      // now：读取当前时间。
       const content = await callLlm({
         schema: captionStepOutputSchema.shape.content,
-        system: systemFor('caption', config, options.systemPrompt),
+        system: systemFor("caption", config, options.systemPrompt),
         prompt: buildPrompt(input),
         config,
         workId: input.workId,
-        stepId: 'caption',
+        stepId: "caption",
         attemptId: `${input.workId}-caption-${Date.now()}`,
-      })
-      return { content }
+      });
+      return { content };
     },
-  }
+  };
 }

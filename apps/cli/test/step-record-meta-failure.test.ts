@@ -64,7 +64,7 @@ it('preserves a published result through final meta failure and real unknown fin
       finishedAt: null,
     })
 
-    markStepRecordUnknown(record, 'caption', input, 'synthetic-model', 'worker-failed')
+    markStepRecordUnknown({ record, stepId: 'caption', input, model: 'synthetic-model', code: 'worker-failed' })
 
     expect(readFileSync(resultPath, 'utf8')).toBe(publishedResult)
     expect(stepExperimentRecordInputSchema.parse(JSON.parse(readFileSync(join(recordDir, 'input.json'), 'utf8'))).input).toEqual(input)
