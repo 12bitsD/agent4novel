@@ -25,8 +25,11 @@ export const proseRegenerateRequestSchema = proseRequestHeadSchema.extend({ cont
     ctx.addIssue({ code: 'custom', path: ['regeneration'], message: '正文重生绑定必须匹配请求基线' })
   }
 })
-export const proseSaveRequestSchema = proseRequestHeadSchema.extend({
-  expectedHumanStatus: z.enum(['pending', 'approved']), content: proseEditDraftSchema,
+export const proseSaveRequestHeadSchema = proseRequestHeadSchema.extend({
+  expectedHumanStatus: z.enum(['pending', 'approved']),
+}).strict()
+export const proseSaveRequestSchema = proseSaveRequestHeadSchema.extend({
+  content: proseEditDraftSchema,
 }).strict().superRefine((request, ctx) => {
   if (request.expectedHumanStatus === 'approved' && !request.content.text.trim()) {
     ctx.addIssue({ code: 'custom', path: ['content', 'text'], message: '已通过正文不能为空' })

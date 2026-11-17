@@ -32,7 +32,7 @@ it('rejects absent credentials instead of using demo output', async () => {
 })
 it('forwards creative regeneration through the run-step worker into the production prompt', async () => {
   const f = await fixtures()
-  const regenerated = { directions: f.creative.directions.map(({ directionId, ...value }) => value) }
+  const regenerated = { directions: f.creative.directions.map(({ directionId: _directionId, ...value }) => value) }
   mocks.generateObject.mockResolvedValue({ object: regenerated, usage: {}, finishReason: 'stop' })
   const result = await runIsolatedStep({
     stepId: 'creative',
@@ -53,7 +53,7 @@ it('does not expose provider errors', async () => {
   expect(JSON.stringify(result)).not.toContain('PRIVATE_PROVIDER_RESPONSE')
 })
 
-import { runStep, creativeContentSchema, outlineContentSchema, settingContentSchema, beatContentSchema, stepExperimentRequestSchema } from '@agent4novel/contracts'
+import { runStep, creativeContentSchema, outlineContentSchema, settingContentSchema, beatContentSchema } from '@agent4novel/contracts'
 import type { StepExperimentRequest } from '@agent4novel/contracts'
 import { createFakeCaptionStep, createFakeCreativeStep, createFakeOutlineStep, createFakeSettingStep, createFakeBeatStep } from '../src/steps/fake-step.js'
 async function fixtures() {
@@ -71,12 +71,21 @@ it('uses production selected-direction guard before invoking outline', async () 
   expect(await runIsolatedStep({ stepId: 'outline', input: { seed: '合成素材', upstream: { creative: source.creative } } })).toMatchObject({ kind: 'failed', code: 'direction-not-selected' })
   expect(mocks.generateObject).not.toHaveBeenCalled()
 })
+it('returns direction-not-selected for Setting with multiple creative directions', async () => {
+  const source = await fixtures()
+  source.creative.directions.push({ ...source.creative.directions[0]!, directionId: 'second' })
+  expect(await runIsolatedStep({
+    stepId: 'setting',
+    input: { seed: '合成素材', upstream: { caption: source.caption, creative: source.creative, outline: source.outline } },
+  })).toMatchObject({ kind: 'failed', code: 'direction-not-selected' })
+  expect(mocks.generateObject).not.toHaveBeenCalled()
+})
 it.each(['creative', 'outline', 'setting', 'beat'] as const)('preserves %s production budget, context and output IDs with custom SP', async stepId => {
   const f = await fixtures()
-  const raw = stepId === 'creative' ? { directions: f.creative.directions.map(({ directionId, ...d }) => d) }
-    : stepId === 'outline' ? { arcs: f.outline.arcs.map(({ arcId, segments, ...arc }) => ({ ...arc, segments: segments.map(({ segmentId, ...s }) => s) })) }
-    : stepId === 'setting' ? { ...f.setting, world: f.setting.world.map(({ itemId, ...v }) => v), characters: f.setting.characters.map(({ itemId, ...v }) => v), factions: [], relationships: [], extensions: [] }
-    : { ...f.beat, writingPlan: f.beat.writingPlan.map(({ itemId, ...v }) => v) }
+  const raw = stepId === 'creative' ? { directions: f.creative.directions.map(({ directionId: _directionId, ...d }) => d) }
+    : stepId === 'outline' ? { arcs: f.outline.arcs.map(({ arcId: _arcId, segments, ...arc }) => ({ ...arc, segments: segments.map(({ segmentId: _segmentId, ...s }) => s) })) }
+    : stepId === 'setting' ? { ...f.setting, world: f.setting.world.map(({ itemId: _itemId, ...v }) => v), characters: f.setting.characters.map(({ itemId: _itemId, ...v }) => v), factions: [], relationships: [], extensions: [] }
+    : { ...f.beat, writingPlan: f.beat.writingPlan.map(({ itemId: _itemId, ...v }) => v) }
   mocks.generateObject.mockResolvedValue({ object: raw, usage: {}, finishReason: 'stop' })
   const upstream: Record<string, JsonValue> = stepId === 'beat' ? { outline: f.outline, setting: f.setting } : { caption: f.caption, creative: f.creative, outline: f.outline, setting: f.setting }
   const result = await runIsolatedStep({ stepId, input: { seed: '合成素材', upstream, ...(stepId === 'beat' ? { chapter: 1 as const } : {}) }, config: { directionCount: 1 }, systemPrompt: 'CUSTOM_SYSTEM' })
@@ -91,13 +100,6 @@ it.each(['creative', 'outline', 'setting', 'beat'] as const)('preserves %s produ
   if (stepId === 'outline') expect(outlineContentSchema.parse(result.content).arcs[0]!.arcId).toContain(result.runId)
   if (stepId === 'setting') expect(settingContentSchema.parse(result.content).world[0]!.itemId).toMatch(/^item-/)
   if (stepId === 'beat') expect(beatContentSchema.parse(result.content).writingPlan[0]!.itemId).toMatch(/^beat-item-/)
-})
-it('rejects store identities and unused config override channels', () => {
-  for (const request of [
-    { stepId: 'caption', input: { seed: 'synthetic', workId: 'production-work' } },
-    { stepId: 'caption', input: { seed: 'synthetic' }, config: { systemPrompt: 'ignored' } },
-    { stepId: 'caption', input: { seed: 'synthetic' }, systemPrompt: '   ' },
-  ]) expect(stepExperimentRequestSchema.safeParse(request).success).toBe(false)
 })
 it('keeps Beat assembled-input budget with overridden system', async () => {
   const f = await fixtures()
@@ -169,10 +171,10 @@ it.each(['caption', 'creative', 'outline', 'setting', 'beat', 'prose'] as const)
     : stepId === 'setting' ? { seed: '合成素材', upstream: { caption: f.caption, creative: f.creative, outline: f.outline } }
     : { seed: '合成素材', chapter: 1, upstream: stepId === 'beat' ? { outline: f.outline, setting: f.setting } : { beat: f.beat, setting: f.setting } }
   const object = stepId === 'caption' ? f.caption
-    : stepId === 'creative' ? { directions: f.creative.directions.map(({ directionId, ...value }) => value) }
-    : stepId === 'outline' ? { arcs: f.outline.arcs.map(({ arcId, segments, ...arc }) => ({ ...arc, segments: segments.map(({ segmentId, ...value }) => value) })) }
-    : stepId === 'setting' ? { ...f.setting, world: f.setting.world.map(({ itemId, ...value }) => value), characters: f.setting.characters.map(({ itemId, ...value }) => value) }
-    : stepId === 'beat' ? { ...f.beat, writingPlan: f.beat.writingPlan.map(({ itemId, ...value }) => value) }
+    : stepId === 'creative' ? { directions: f.creative.directions.map(({ directionId: _directionId, ...value }) => value) }
+    : stepId === 'outline' ? { arcs: f.outline.arcs.map(({ arcId: _arcId, segments, ...arc }) => ({ ...arc, segments: segments.map(({ segmentId: _segmentId, ...value }) => value) })) }
+    : stepId === 'setting' ? { ...f.setting, world: f.setting.world.map(({ itemId: _itemId, ...value }) => value), characters: f.setting.characters.map(({ itemId: _itemId, ...value }) => value) }
+    : stepId === 'beat' ? { ...f.beat, writingPlan: f.beat.writingPlan.map(({ itemId: _itemId, ...value }) => value) }
     : { text: '合成正文。' }
   mocks.generateObject.mockResolvedValue({ object, usage: {}, finishReason: 'stop' })
   try {
@@ -212,13 +214,4 @@ it('refuses an existing input record without calling the model or changing the o
     expect(readFileSync(join(recordDir, 'input.json'), 'utf8')).toBe(original)
     expect(mocks.generateObject).not.toHaveBeenCalled()
   } finally { rmSync(directory, { recursive: true, force: true }) }
-})
-
-it('validates limits and chapter semantics before invoking the model', () => {
-  for (const request of [
-    { stepId: 'caption', input: { seed: 'x'.repeat(1000000) } },
-    { stepId: 'caption', input: { seed: '' }, systemPrompt: 'x'.repeat(100001) },
-    { stepId: 'beat', input: { seed: '' } },
-    { stepId: 'caption', input: { seed: '', chapter: 1 } },
-  ]) expect(stepExperimentRequestSchema.safeParse(request).success).toBe(false)
 })

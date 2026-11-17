@@ -5,7 +5,7 @@ import { isAlias, parseDocument, visit } from 'yaml'
 import {
   agentFileSchema, agentFileUploadSchema, authorConfigDocumentSchema, authorConfigLimits, authorConfigSaveSchema,
   authorConfigViewSchema, authorStepIds, emptyAuthorConfig,
-  managedAgentFileText,
+  managedAgentFileText, providerForModel,
   type AgentConfig, type AgentFile, type AgentFileUpload, type AuthorConfigDocument, type AuthorConfigReceipt, type AuthorConfigSave, type WorkDetail,
 } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
@@ -198,10 +198,9 @@ export class AuthorConfigService {
         generation = this.runtime.generationSettings(config).parameters
         if (this.runtime.mode === 'live') this.runtime.languageModel(model)
       } catch { throw invalid() }
+      const provider = providerForModel(model)
+      if (!provider) throw invalid()
       configs[id] = config
-      let provider: 'deepseek' | 'longcat' | 'kimi' = 'deepseek'
-      if (model.startsWith('longcat:')) provider = 'longcat'
-      else if (model.startsWith('kimi:')) provider = 'kimi'
       effective.push({ id, model, provider,
         configured: this.runtime.mode === 'live', executionMode: this.runtime.mode, generation, appliedPreferences,
         systemPrompt: prompt, skills, tools: [], directionCount: config.directionCount ?? 2 })

@@ -6,18 +6,16 @@ import { describe, expect, it } from 'vitest'
 import { createServer } from 'node:http'
 import { outlineContent } from './public-fixtures.js'
 import { cliBin as bin, cliTestEnv } from './cli-process.js'
+import { helpFor, parseCommandLine } from '../src/command-line.js'
 
 describe('approve-outline command entry', () => {
-  it('advertises a side-effect-free dedicated file command and requires that file', () => {
-    const help = spawnSync(bin, ['approve-outline', '--help'], { encoding: 'utf8', env: cliTestEnv() })
-    expect(help.status).toBe(0)
-    expect(help.stdout).toBe('')
-    expect(help.stderr).toContain('approve-outline <workId> --file <f>')
-    expect(help.stderr).toContain('expectedArtifactId')
-    const missing = spawnSync(bin, ['approve-outline', 'work-id'], { encoding: 'utf8', env: cliTestEnv() })
-    expect(missing.status).toBe(1)
-    expect(missing.stdout).toBe('')
-    expect(JSON.parse(missing.stderr)).toMatchObject({ code: 'usage', retryable: false })
+  it('advertises a dedicated file command and requires that file at the parser', () => {
+    const help = helpFor(['approve-outline', '--help'])
+    expect(help).toContain('approve-outline <workId> --file <f>')
+    expect(help).toContain('expectedArtifactId')
+    expect(() => parseCommandLine(['approve-outline', 'work-id'])).toThrow(
+      expect.objectContaining({ code: 'usage', retryable: false }),
+    )
   })
   it('rejects a request missing its visible identity before network access and preserves the file', () => {
     const directory = mkdtempSync(join(tmpdir(), 'a4n-outline-cli-'))

@@ -43,6 +43,18 @@ export const outlineContentSchema = z
     arcs: z.array(outlineArcSchema).min(outlineArcCount.min).max(outlineArcCount.max),
   })
   .strict()
+  .superRefine((content, ctx) => {
+    const arcIds = new Set<string>()
+    const segmentIds = new Set<string>()
+    content.arcs.forEach((arc, arcIndex) => {
+      if (arcIds.has(arc.arcId)) ctx.addIssue({ code: 'custom', path: ['arcs', arcIndex, 'arcId'], message: 'arcId must be unique' })
+      arcIds.add(arc.arcId)
+      arc.segments.forEach((segment, segmentIndex) => {
+        if (segmentIds.has(segment.segmentId)) ctx.addIssue({ code: 'custom', path: ['arcs', arcIndex, 'segments', segmentIndex, 'segmentId'], message: 'segmentId must be unique' })
+        segmentIds.add(segment.segmentId)
+      })
+    })
+  })
 export type OutlineContent = z.infer<typeof outlineContentSchema>
 
 // 保存输入形态(#4 决策 6):作者增删改回传时,新增项没有 id(由 server 规整时补注入),已有项 id 保留。

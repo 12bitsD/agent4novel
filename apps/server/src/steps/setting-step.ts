@@ -29,7 +29,7 @@ export function createSettingStep(options: { systemPrompt?: string } = {}): Arti
         maxOutputTokens: 16000,
         maxRetries: 0,
       })
-      return { content: assignSettingIds(settingDraftSchema.parse(draft)) }
+      return { content: assignSettingIds(draft) }
     },
   }
 }

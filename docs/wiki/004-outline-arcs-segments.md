@@ -10,7 +10,7 @@ symbols: ["outlineContentSchema", "outlineDraftSchema", "createOutlineStep", "Pi
 inherits: ["011"]
 changed_by: ["016","013","005","041","049"]
 read_when: ["change-outline-schema", "change-outline-generation", "debug-outline-gate", "change-outline-editor"]
-last_context_reviewed: "2026-10-06"
+last_context_reviewed: "2026-10-20"
 ---
 
 # 004 — 大纲生成：弧线 + 剧情点两层结构
@@ -20,7 +20,7 @@ last_context_reviewed: "2026-10-06"
 - **读取时机**：修改大纲 schema、生成步骤、保存/通过语义、工作流关卡或大纲编辑器时读取。
 - **原始目的**：用可审阅的全书结构替代“每章一句话”的分章大纲，并为后续章纲切片提供稳定输入。
 - **实际落地**：outline 成为 caption → creative → outline 链路的第三步，生成后停在人工关卡；作者可编辑草稿并单独通过。
-- **当前价值**：本文是弧线、剧情点、outline 关卡与编辑行为的当前 HOW；已有 ID 稳定，但批量新增存在重复 ID 的已知限制。
+- **当前价值**：本文是弧线、剧情点、outline 关卡与编辑行为的当前 HOW；已有 ID 保持稳定，批量新增依次避让已有及本次已分配 ID，存储内容要求 arcId／segmentId 唯一。
 - **后续变化**：模型配置由 [Wiki 016](./016-model-runtime-provider-config.md) 接管；[Wiki 013](./013-setting-generation-review.md) 在大纲后追加 Setting，Web 大纲通过动作成功后再执行一次 advance，生产链不再以 outline-approved 结束。大纲保存／通过本身的两步语义不变。
   [Wiki 005](./005-beat-generation-review.md) 已接入下游第一章章纲，消费完整已通过的大纲和设定；不改变本页的大纲契约。
 - **代码入口**：[outline contract](../../packages/contracts/src/outline.ts)、[pipeline](../../apps/server/src/pipeline/pipeline.ts)、[server assembly](../../apps/server/src/start.ts)、[works routes](../../apps/server/src/routes/works.ts)、[review state](../../apps/web/src/outline-review.ts)。
@@ -77,7 +77,7 @@ workflowOf 必须按 pendingGate.kind 显式分派：
 - LLM 输出不含 ID；server 落库前注入稳定 arcId 与 segmentId，Web 永不生成或改写已有 ID。
 - 生成时 ID 使用 workId-arc-N 与 workId-arc-N-seg-N 形式。
 - 保存草稿调用 PUT /api/works/:id/artifacts/outline，携带 expectedHeadVersion，结果始终 pending。
-- normalizeOutlineIds 保留已有 ID，并为缺 ID 项取请求中现存同前缀最大序号加一。当前实现对每项都读取同一份未规整数组：一次保存多个新弧线，或同一弧线内多个新剧情点，会生成重复 ID；schema 也未校验 ID 唯一性。这是已知限制，不能把 max+1 描述为批量防碰撞保证。
+- normalizeOutlineIds 保留已有 ID，并为缺 ID 项按已有及本次已分配 ID 的最大序号依次加一。一次保存多个新弧线或同一弧线多个新剧情点不会复用 ID；outlineContentSchema 校验 arcId 与全篇 segmentId 唯一，重复已有 ID 在 PUT 边界返回 422 且不写入。
 - 通过大纲复用 POST /api/works/:id/approve，kind 为 outline；保存与通过是两个独立动作。
 
 ### Web 编辑模型
@@ -101,7 +101,7 @@ OutlineReview 采用纯状态映射加 React 视图：
 
 ## 测试与验证
 
-自动化覆盖 strict/数量边界、三步推进与两个人工关卡、消费守卫、生成 ID、完整 HTTP 链路、Web 编辑以及 stale 409 保留 dirty。现有测试只覆盖单个缺 ID 项，没有覆盖批量新增的 ID 唯一性。
+自动化覆盖 strict/数量边界、三步推进与两个人工关卡、消费守卫、生成 ID、完整 HTTP 链路、Web 编辑以及 stale 409 保留 dirty。除单个缺 ID 项外，contracts 与 HTTP 测试还覆盖批量新增的唯一连续 ID、重复已有 arcId／segmentId 的 422 与不写入；2026-10-20 的定向测试和 contracts/server typecheck 已通过。
 
 演示模式已跑通完整 HTTP 链路。真实模型排查还确认：AI SDK v7 的错误名可能是 AI_NoObjectGeneratedError，而不是无前缀名称；错误映射必须按包含 NoObjectGeneratedError 处理。LongCat 2.0 也已生成 schema-valid 大纲，当前运行时证据见 [wiki 016](./016-model-runtime-provider-config.md)。
 
@@ -125,6 +125,14 @@ OutlineReview 采用纯状态映射加 React 视图：
 - outline fan-out 或多方案生成。
 
 ## 上下文演进
+
+### 2026-10-20 — 批量新增 ID 防碰撞与唯一性收口
+
+- **触发证据**：Slice 1 的 contracts 与 HTTP 定向测试先复现同批新增弧线／剧情点重复使用 max+1，以及重复已有 ID 仍可保存；修复后相关定向测试与 contracts/server typecheck 均通过。
+- **原假设**：每个缺 ID 项可以独立读取原请求的最大序号，存储内容 schema 不必另行校验 ID 唯一性。
+- **决定**：规整时把本次已分配 ID 纳入后续 max+1 的避让范围；`outlineContentSchema` 增加 arcId 与全篇 segmentId 唯一性校验，PUT 遇到重复 ID 返回 422 且不写入。
+- **影响**：同批新增多个弧线或同一弧线多个剧情点都会得到唯一 ID；已有 ID、数量边界、保存与通过协议不变。Human 于 2026-10-20 接受本轮全部历史不兼容：旧库既有重复 `directionId`／`arcId`／`segmentId` 会在实际读取时按 `invalid-stored-data` 拒绝，不做自动迁移，本轮不实际修改任何数据库。
+- **上下文处理**：preserve 2026-08-28 的设计原因与历史缺口；replace 本页当前实现和验证陈述，不重写既有审核记录。
 
 ### 2026-10-06 — 作者编稿台接续
 

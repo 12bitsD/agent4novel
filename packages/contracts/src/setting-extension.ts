@@ -50,7 +50,9 @@ export const settingExtensionImpactSchema = z.object({
 })
 export type SettingExtensionImpact = z.infer<typeof settingExtensionImpactSchema>
 
-export const settingExtensionProposalRefSchema = z.object({ workId: z.string().min(1), requestId: uuid }).strict()
+export const settingExtensionPathSchema = z.object({ workId: z.string().min(1), requestId: uuid }).strict()
+export const settingExtensionActionPathSchema = settingExtensionPathSchema
+export const settingExtensionProposalRefSchema = settingExtensionPathSchema
 export type SettingExtensionProposalRef = z.infer<typeof settingExtensionProposalRefSchema>
 
 const commonResource = {

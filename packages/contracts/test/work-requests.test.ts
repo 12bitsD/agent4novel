@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { approveRequestSchema, creativeDraftRequestSchema, outlineDraftRequestSchema, selectCreativeRequestSchema,
-  workCreateRequestSchema, workListResponseSchema } from '../src/index.js'
+  historicalArtifactRequestSchema, workCreateRequestSchema, workListResponseSchema } from '../src/index.js'
 
 describe('public work requests and summaries', () => {
   it('keeps creation as input-only data and refuses caller supplied identity/configuration', () => {
@@ -28,5 +28,17 @@ describe('public work requests and summaries', () => {
     const summary = { id: 'w1', title: '作品', seedPreview: '脑洞', chapterCount: 0 }
     expect(workListResponseSchema.parse([summary])).toEqual([summary])
     expect(workListResponseSchema.safeParse([{ ...summary, chapterCount: -1 }]).success).toBe(false)
+  })
+  it('validates the historical artifact path and query without changing coercion or bounds', () => {
+    const path = { kind: 'beat', chapter: '2', version: '3', artifactId: 'beat-1' } as const
+    expect(historicalArtifactRequestSchema.parse(path)).toEqual({ kind: 'beat', chapter: 2, version: 3, artifactId: 'beat-1' })
+    expect(historicalArtifactRequestSchema.safeParse({ ...path, kind: 'prose' }).success).toBe(true)
+    for (const request of [
+      { ...path, kind: 'caption' }, { ...path, chapter: '0' }, { ...path, version: '1.5' },
+      { ...path, version: String(Number.MAX_SAFE_INTEGER + 1) }, { ...path, artifactId: '' },
+      { ...path, artifactId: 'x'.repeat(129) }, { ...path, extra: true },
+    ]) {
+      expect(historicalArtifactRequestSchema.safeParse(request).success).toBe(false)
+    }
   })
 })

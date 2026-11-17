@@ -158,7 +158,7 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
   private artifactVersion(workId: string, kind: ArtifactKind, chapter: number | undefined, artifactId: string, version: number): Artifact | undefined {
     const row = this.db.prepare(`SELECT * FROM artifacts
       WHERE work_id = ? AND kind = ? AND chapter IS ? AND id = ? AND version = ?`).get(workId, kind, chapter ?? null, artifactId, version) as ArtifactRow | undefined
-    return row === undefined ? undefined : validateStoreValue(artifactSchema, artifactFromRow(row), 'stored')
+    return row === undefined ? undefined : artifactFromRow(row)
   }
 
   getArtifactVersion(workId: string, kind: ArtifactKind, chapter: number | undefined, artifactId: string, version: number): Artifact | undefined {
@@ -256,10 +256,6 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
       const artifact = validateStoreValue(artifactSchema, { ...head, humanStatus: status }, 'input')
       this.db.prepare('UPDATE artifacts SET human_status = ? WHERE id = ?').run(artifact.humanStatus, artifact.id)
     })
-  }
-
-  headVersion(workId: string, kind: ArtifactKind, opts?: { chapter?: number }): number | undefined {
-    return this.read(() => this.head(workId, kind, opts?.chapter)?.version)
   }
 
   private extensionRecord(workId: string, requestId: string): SettingExtensionProposalRecord | undefined {

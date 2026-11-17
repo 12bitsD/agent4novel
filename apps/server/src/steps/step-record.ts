@@ -3,14 +3,11 @@ import { chmod, link, lstat, rename, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import {
-  stepExperimentRecordInputSchema,
-  stepExperimentRecordInvocationSchema,
-  stepExperimentRecordMetaSchema,
-  stepExperimentRecordResultSchema,
+  stepExperimentRecordFiles as FILES, stepExperimentRecordInvocationSchema,
+  makeStepExperimentRecordInput, makeEmptyStepExperimentRecordInvocation,
+  makeStepExperimentRecordResult, makeStepExperimentRecordMeta,
 } from '@agent4novel/contracts'
 import type { StepExperimentRecordRequest, StepExperimentRecording, StepExperimentRequest } from '@agent4novel/contracts'
-
-const FILES = { input: 'input.json', invocation: 'invocation.json', result: 'result.json', meta: 'meta.json' } as const
 
 export class StepRecordError extends Error {
   readonly code = 'recording-failed'
@@ -77,22 +74,6 @@ async function replaceJson(dir: string, name: string, value: unknown): Promise<v
   }
 }
 
-const emptyInvocation = {
-  formatVersion: 1 as const,
-  captured: false,
-  capturedAt: null,
-  system: null,
-  prompt: null,
-  model: null,
-  attemptId: null,
-  effectiveConfig: null,
-  generation: null,
-  sdkOptions: null,
-  maxOutputTokens: null,
-  maxRetries: null,
-  requestTimeoutMs: null,
-}
-
 export class StepRecorder {
   private constructor(
     private readonly request: StepExperimentRecordRequest,
@@ -104,16 +85,16 @@ export class StepRecorder {
 
   static async start(args: {
     request: StepExperimentRecordRequest
-    input: unknown
+    input: StepExperimentRequest['input']
     runId: string
     stepId: StepExperimentRequest['stepId']
     model: string
   }): Promise<StepRecorder> {
     await ensurePrivateDirectory(args.request.dir)
     const recorder = new StepRecorder(args.request, args.runId, args.stepId, args.model, new Date().toISOString())
-    const input = stepExperimentRecordInputSchema.parse({ formatVersion: 1, input: args.input, sources: args.request.sources })
+    const input = makeStepExperimentRecordInput(args.input, args.request.sources)
     await writeJsonExclusive(args.request.dir, FILES.input, input)
-    await writeJsonExclusive(args.request.dir, FILES.invocation, emptyInvocation)
+    await writeJsonExclusive(args.request.dir, FILES.invocation, makeEmptyStepExperimentRecordInvocation())
     await writeJsonExclusive(args.request.dir, FILES.meta, recorder.meta(false, 'in-progress', null))
     return recorder
   }
@@ -142,12 +123,7 @@ export class StepRecorder {
     telemetry: unknown[]
   }): Promise<StepExperimentRecording> {
     try {
-      const result = stepExperimentRecordResultSchema.parse({
-        formatVersion: 1,
-        status: args.status,
-        content: args.content,
-        diagnostic: { code: args.code, retryable: args.retryable, error: null, telemetry: args.telemetry },
-      })
+      const result = makeStepExperimentRecordResult(args)
       await writeJsonExclusive(this.request.dir, FILES.result, result)
       await replaceJson(this.request.dir, FILES.meta, this.meta(true, 'complete', new Date().toISOString()))
       return { status: 'complete', dir: this.request.dir, error: null }
@@ -157,20 +133,17 @@ export class StepRecorder {
   }
 
   private meta(complete: boolean, status: 'in-progress' | 'complete' | 'incomplete', finishedAt: string | null) {
-    return stepExperimentRecordMetaSchema.parse({
-      formatVersion: 1,
+    return makeStepExperimentRecordMeta({
       complete,
       status,
       runId: this.runId,
       stepId: this.stepId,
-      executionMode: 'live',
       model: this.model,
       startedAt: this.startedAt,
       finishedAt,
       gitCommit: this.request.version.gitCommit,
       gitDirty: this.request.version.gitDirty,
       sources: this.request.sources,
-      files: FILES,
     })
   }
 }

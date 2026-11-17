@@ -75,7 +75,7 @@ export class Pipeline {
   private resolveConfig: (work: WorkDetail, stepId: string) => AgentConfig
   private snapshotConfig?: PipelineDeps['snapshotConfig']
   private consumeGuards: Partial<Record<ArtifactKind, (content: JsonValue) => void>>
-  // per-work 内存互斥锁(#3c):并发 advance → 409 advance-in-progress;真正事务/lease 归 #9
+  // per-work 内存互斥只覆盖当前进程；SQLite 的写入前置条件在事务内复核，不能靠这把锁做跨进程 lease。
   private advancing = new Set<string>()
   // 最近一次 advance 失败(供读模型 'failed' 态);成功推进或到达关卡即清除
   private lastFailure = new Map<string, { stepId: string; code: string; retryable: boolean }>()
@@ -339,7 +339,12 @@ export class Pipeline {
         return { kind: state.stage === 'complete' ? 'complete' : 'awaiting-approval', state }
       }
       if (parsed.chapter !== currentChapterOf(work) + 1 || state.stage !== 'complete') throw new KnownError('chapter-not-ready', 'finish the current chapter before starting the next')
-      const previous = this.previousChapter(work, parsed.chapter)[1]!
+      const previousPair = this.previousChapter(work, parsed.chapter)
+      const previousBeat = previousPair[0]!
+      const previous = previousPair[1]!
+      const consumesCurrentBeat = previous.inputs?.some(input => input.kind === 'beat' && input.chapter === parsed.chapter - 1
+        && input.artifactId === previousBeat.id && input.version === previousBeat.version)
+      if (!consumesCurrentBeat) throw new KnownError('chapter-not-ready', 'previous chapter prose must consume the current approved beat')
       if (previous.id !== parsed.expectedPreviousProseId || previous.version !== parsed.expectedPreviousProseVersion) throw new KnownError('version-conflict', 'previous chapter has changed')
       const entry = this.definitionFor(parsed.chapter).find(d => d.outputKind === 'beat')!
       const requiredInput: ArtifactInput = { kind: 'prose', chapter: parsed.chapter - 1,
@@ -348,7 +353,6 @@ export class Pipeline {
     } finally { this.advancing.delete(workId) }
   }
 
-  // 读模型按定义末端区分三步兼容链与四步设定链。
   async regenerateBeat(workId: string, request: BeatRegenerateRequest) {
     let comparison: BeatVariantComparison | undefined
     const observed = await observeBeat(workId, 'regenerate-beat', { artifactId: request.expectedArtifactId, version: request.expectedHeadVersion }, async execution => {
@@ -385,11 +389,9 @@ export class Pipeline {
           }, config)
           execution.stage = 'output'
           const generated = beatContentSchema.parse(output.content)
-          const candidate = assignBeatIds({ ...generated, writingPlan: generated.writingPlan.map(item => {
-            const prior = beat.content.writingPlan.find(existing => existing.itemId === item.itemId)
-            return prior && (prior.title !== item.title || prior.content !== item.content)
-              ? item : { title: item.title, content: item.content }
-          }) }, beat.content)
+          const candidate = assignBeatIds({ ...generated,
+            writingPlan: generated.writingPlan.map(({ title, content }) => ({ title, content })),
+          }, beat.content)
           execution.stage = 'commit'
           return beatArtifactSchema.parse(this.store.appendArtifact(workId, 'beat', candidate, { chapter: request.chapter,
             inputs: input.inputs,
@@ -418,13 +420,9 @@ export class Pipeline {
         }, this.operationConfigs(workId)[entry.stepId]!)
         execution.stage = 'output'
         const generated = beatContentSchema.parse(output.content)
-        const candidate = assignBeatIds({ ...generated, writingPlan: generated.writingPlan.map(item => {
-          const prior = baseline.content.writingPlan.find(existing => existing.itemId === item.itemId)
-          // Preserve a model-provided identity when it clearly describes a
-          // changed card; unchanged cards receive a fresh identity as before.
-          return prior && (prior.title !== item.title || prior.content !== item.content)
-            ? item : { title: item.title, content: item.content }
-        }) }, baseline.content)
+        const candidate = assignBeatIds({ ...generated,
+          writingPlan: generated.writingPlan.map(({ title, content }) => ({ title, content })),
+        }, baseline.content)
         execution.stage = 'commit'
         const artifact = beatArtifactSchema.parse(this.store.appendArtifact(workId, 'beat', candidate, { chapter: request.chapter, inputs, preconditions: [
           ...preconditions, ...input.preconditions, { kind: 'beat', chapter: request.chapter, head: { artifactId: baseline.id, version: baseline.version, humanStatus: 'pending' } },
@@ -455,6 +453,9 @@ export class Pipeline {
       const original = beatArtifactSchema.safeParse(this.store.getArtifactVersion(workId, 'beat', parsed.chapter, parsed.originalArtifactId, parsed.originalVersion)).data
       if (!original || original.chapter !== parsed.chapter || JSON.stringify(original.content) !== JSON.stringify(parsed.originalContent)) {
         throw new KnownError('version-conflict', 'original beat version is not the requested history')
+      }
+      if (original.version !== current.version - 1 || original.id === current.id || original.humanStatus !== 'pending') {
+        throw new KnownError('version-conflict', 'original beat must be the pending immediate predecessor')
       }
       const comparison = { original, candidate: current }
       if (parsed.choice === 'new') {
@@ -670,8 +671,8 @@ export class Pipeline {
     }
     if (execution) execution.stage = 'commit'
     const artifact = this.store.appendArtifact(workId, entry.outputKind, output.content, { preconditions, chapter: entry.chapter,
-      humanStatus: entry.gateAfter ? 'pending' : 'approved', ...(entry.chapter ? { inputs } : {}) })
-    // Chapter input references persist for continuity warnings; safe logs retain the same bounded identities.
+      humanStatus: entry.gateAfter ? 'pending' : 'approved', inputs })
+    // Actual generation inputs persist for provenance and continuity warnings; safe logs retain the same bounded identities.
     const consumed = Object.fromEntries(
       (entry.consumes ?? [])
         .map((dep) => [dep, preconditions.find(condition => condition.kind === dep)?.head?.version])

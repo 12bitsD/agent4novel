@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { generationParametersSchema } from './step.js'
+import { modelIdSchema, providerForModel } from './model.js'
 
 export const authorStepIds = ['caption', 'creative', 'outline', 'setting', 'beat', 'prose'] as const
 export const authorConfigLimits = { fileBytes: 32_768, metadataBytes: 4096, filesPerWork: 64, skillsPerStep: 4, systemChars: 48_000 } as const
@@ -9,7 +10,7 @@ export const authorPreferencesSchema = z.object({
 }).strict()
 export const authorStepConfigSchema = z.object({
   ...generationParametersSchema.shape,
-  model: z.string().regex(/^(deepseek:[a-zA-Z0-9_.-]{1,96}|kimi:[a-zA-Z0-9_.-]{1,96}|longcat:LongCat-2\.0)$/).optional(),
+  model: modelIdSchema.optional(),
   systemPromptRef: z.string().uuid().nullable().optional(),
   skills: z.array(z.string().uuid()).max(authorConfigLimits.skillsPerStep).refine(ids => new Set(ids).size === ids.length).optional(),
   tools: z.array(z.never()).max(0).optional(),
@@ -51,7 +52,7 @@ export const authorConfigViewSchema = z.object({
     && view.files.some(stored => stored.id === file.id && JSON.stringify(stored) === JSON.stringify(file))
   if (new Set(view.effective.map(s => s.id)).size !== 6 || view.files.some(f => f.workId !== view.workId)
     || new Set(view.files.map(f => f.id)).size !== view.files.length
-    || view.effective.some(s => s.provider !== (s.model.startsWith('longcat:') ? 'longcat' : s.model.startsWith('kimi:') ? 'kimi' : 'deepseek')
+    || view.effective.some(s => s.provider !== providerForModel(s.model)
       || (s.systemPrompt && !matchesLibrary(s.systemPrompt, 'prompt')) || s.skills.some(f => !matchesLibrary(f, 'skill'))
       || new Set(s.skills.map(f => f.id)).size !== s.skills.length)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['effective'], message: 'configuration identity mismatch' })

@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { cliBin as bin, cliTestEnv } from './cli-process.js'
+import { helpFor, parseCommandLine } from '../src/command-line.js'
 import { describe, expect, it } from 'vitest'
 
 describe('approve-setting command entry', () => {
@@ -40,11 +41,10 @@ describe('approve-setting command entry', () => {
   })
 
   it('requires --file and advertises the dedicated command', () => {
-    const missing = spawnSync(bin, ['approve-setting', 'w1'], { encoding: 'utf8', env: cliTestEnv() })
-    expect(missing.status).toBe(1)
-    expect(JSON.parse(missing.stderr)).toMatchObject({ code: 'usage' })
-    const help = spawnSync(bin, [], { encoding: 'utf8', env: cliTestEnv() })
-    expect(help.status).toBe(0)
-    expect(help.stderr).toContain('approve-setting <workId> --file <f>')
+    expect(() => parseCommandLine(['approve-setting', 'w1'])).toThrow(
+      expect.objectContaining({ code: 'usage' }),
+    )
+    const help = helpFor([])
+    expect(help).toContain('approve-setting <workId> --file <f>')
   })
 })

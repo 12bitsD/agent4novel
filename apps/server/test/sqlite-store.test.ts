@@ -38,7 +38,7 @@ describe('SQLite persistence', () => {
     const saved = store.saveArtifact({ workId: work.id, kind: 'prose', chapter: 1, expectedArtifactId: first.id, expectedHeadVersion: 1, expectedHumanStatus: 'pending', content: { text: ' revised\n ' } })
     const approved = store.finalizeArtifact({ workId: work.id, kind: 'prose', chapter: 1, expectedArtifactId: saved.id, expectedHeadVersion: 2, content: saved.content })
     store.appendArtifact(work.id, 'setting', setting('pending'))
-    const config = { model: 'test-model', temperature: 0.4, topP: 0.9, thinking: 'disabled', directionCount: 2, skills: ['skills/test.md'], systemPrompt: 'test prompt' }
+    const config = { model: 'longcat:LongCat-2.0', temperature: 0.4, topP: 0.9, thinking: 'disabled', directionCount: 2, skills: ['skills/test.md'], systemPrompt: 'test prompt' }
     raw(path).prepare('UPDATE works SET config = ? WHERE id = ?').run(JSON.stringify(config), work.id)
     const before = store.getWork(work.id)
     expect(before!.config).toEqual(config)
@@ -96,7 +96,7 @@ describe('SQLite persistence', () => {
     db.prepare('UPDATE artifacts SET content = ?').run(JSON.stringify({ secret: 'PRIVATE_CONTENT_MARKER' }))
     expect(() => store.getWork(work.id)).toThrow('stored data violates its contract')
     expect(() => store.listWorks()).toThrow('stored data violates its contract')
-    expect(() => store.headVersion(work.id, 'caption')).toThrow('stored data violates its contract')
+    expect(() => store.getWork(work.id)).toThrow('stored data violates its contract')
     db.prepare('UPDATE artifacts SET content = ?').run(JSON.stringify(caption('ok')))
     db.prepare('UPDATE works SET config = ?').run(JSON.stringify({ secret: 'PRIVATE_CONFIG_MARKER' }))
     expect(() => store.getWork(work.id)).toThrow('stored data violates its contract')

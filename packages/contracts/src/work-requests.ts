@@ -14,6 +14,12 @@ export const workSummarySchema = z.object({
 }).strict()
 export const workListResponseSchema = z.array(workSummarySchema)
 
+export const historicalArtifactRequestSchema = z.object({
+  kind: z.enum(['beat', 'prose']), chapter: z.coerce.number().int().positive().safe(),
+  version: z.coerce.number().int().positive().safe(), artifactId: z.string().min(1).max(128),
+}).strict()
+export type HistoricalArtifactRequest = z.infer<typeof historicalArtifactRequestSchema>
+
 export const creativeDraftRequestSchema = z.object({
   content: creativeContentSchema, expectedHeadVersion: z.number().int().positive().safe(),
 }).strict()

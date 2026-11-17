@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   settingExtensionDraftSchema,
+  settingExtensionPathSchema,
+  settingExtensionActionPathSchema,
   settingExtensionProposalRecordSchema,
   settingExtensionProposeRequestSchema,
   settingExtensionResourceSchema,
@@ -24,6 +26,17 @@ describe('setting extension contracts', () => {
   it('accepts a strict draft without client identities', () => {
     expect(settingExtensionDraftSchema.parse(request.extension)).toEqual(request.extension)
     expect(settingExtensionProposeRequestSchema.parse(request)).toEqual(request)
+  })
+
+  it('shares strict public path schemas for reads and actions', () => {
+    const path = { workId: 'w1', requestId: request.requestId }
+    expect(settingExtensionPathSchema.parse(path)).toEqual(path)
+    expect(settingExtensionActionPathSchema.parse(path)).toEqual(path)
+    for (const schema of [settingExtensionPathSchema, settingExtensionActionPathSchema]) {
+      expect(schema.safeParse({ ...path, workId: '' }).success).toBe(false)
+      expect(schema.safeParse({ ...path, requestId: 'not-a-uuid' }).success).toBe(false)
+      expect(schema.safeParse({ ...path, extra: true }).success).toBe(false)
+    }
   })
 
   it('trims extension input at the contract boundary without widening limits', () => {

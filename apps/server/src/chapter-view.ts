@@ -30,7 +30,7 @@ export function chapterSummaries(work: WorkDetail, allowStart: boolean): Chapter
             : prose?.humanStatus === 'approved' ? ['save-draft']
               : chapter !== current ? []
                 : beat?.humanStatus === 'approved' ? ['generate'] : []
-    if (allowStart && chapter === current && prose?.humanStatus === 'approved') allowedActions.push('start-next-chapter')
+    if (allowStart && chapter === current && approvedPair && proseFollowsBeat) allowedActions.push('start-next-chapter')
     return { chapter, title: beatContentSchema.safeParse(beat?.content).data?.title ?? `第${chapter}章`,
       beatStatus: beat?.humanStatus ?? null, proseStatus: prose?.humanStatus ?? null, allowedActions, needsContinuityReview }
   })

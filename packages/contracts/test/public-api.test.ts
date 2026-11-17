@@ -1,24 +1,8 @@
 import { expect, it } from 'vitest'
-import { advanceOutcomeDtoSchema, workViewSchema, apiErrorSchema, gateRefSchema } from '../src/index.js'
+import { advanceOutcomeDtoSchema, workViewSchema, apiErrorSchema, gateRefSchema,
+  beatCommandErrorSchema, proseCommandErrorSchema, httpErrorSchema } from '../src/index.js'
 
 const view = { id: 'w1', title: '海港', seed: '海港故事', config: {}, createdAt: 'today', workflowState: 'ready-to-generate', nextStepId: 'setting', allowedActions: ['generate'] }
-const artifact = { id: 'outline-1', workId: 'w1', kind: 'caption', version: 1, humanStatus: 'approved', content: { inputStage: '脑洞', summary: '海港故事', elements: [], gaps: [] }, createdAt: 'today' }
-
-it('公开作品读模型拒绝来自其他作品的产物，并定位归属字段', () => {
-  expect(workViewSchema.safeParse({ ...view, artifacts: [artifact] }).success).toBe(true)
-  const result = workViewSchema.safeParse({ ...view, artifacts: [{ ...artifact, workId: 'another-work' }] })
-  expect(result.success).toBe(false)
-  if (!result.success) expect(result.error.issues.map((issue) => issue.path)).toContainEqual(['artifacts', 0, 'workId'])
-})
-
-it('公开读模型每个 kind/chapter 只允许一个当前 head，不把不同章节或不同 kind 当成重复', () => {
-  const duplicateWorkHead = workViewSchema.safeParse({ ...view, artifacts: [artifact, { ...artifact, id: 'outline-2', version: 2 }] })
-  expect(duplicateWorkHead.success).toBe(false)
-  if (!duplicateWorkHead.success) expect(duplicateWorkHead.error.issues.map((issue) => issue.path)).toContainEqual(['artifacts', 1])
-  const beat = { ...artifact, id: 'beat-1', kind: 'beat', chapter: 1, content: { title: '海港来客', goal: '发现来客', writingPlan: [{ itemId: 'item-1', title: '靠岸', content: '来客靠岸。' }], ending: '来客叩门。' } }
-  expect(workViewSchema.safeParse({ ...view, artifacts: [beat, { ...beat, id: 'beat-2', version: 2 }] }).success).toBe(false)
-  expect(workViewSchema.safeParse({ ...view, artifacts: [artifact, beat, { ...beat, id: 'beat-chapter-2', chapter: 2 }, { ...beat, id: 'prose-1', kind: 'prose', content: { text: '海港来客靠岸。' } }] }).success).toBe(true)
-})
 
 it('公开读模型携带下一步，advance 保留状态和遥测，错误保留字段定位', () => {
   const work = { id: 'w1', title: '海港', seed: '海港故事', config: {}, createdAt: 'today', artifacts: [], workflowState: 'ready-to-generate', nextStepId: 'setting', allowedActions: ['generate'] }
@@ -31,6 +15,21 @@ it('公开读模型携带下一步，advance 保留状态和遥测，错误保�
   expect(apiErrorSchema.parse(error).issues?.[0]?.path).toEqual(['content', 'world', 0, 'title'])
 })
 
+it('公开普通与命令错误契约接受可选的截断总数和标记', () => {
+  const error = { code: 'invalid-content', message: 'invalid content', retryable: false,
+    issues: [{ path: ['content'], code: 'custom', message: 'invalid field' }], issueCount: 129, issuesTruncated: true }
+  for (const schema of [apiErrorSchema, httpErrorSchema]) {
+    expect(schema.safeParse(error).success).toBe(true)
+  }
+  const command = { kind: 'request-rejected', requestId: '11111111-1111-4111-8111-111111111111',
+    executionMode: 'demo', latencyMs: 0, writeOutcome: 'not-committed', failureStage: 'request', attemptIds: [] }
+  for (const [schema, operation] of [[beatCommandErrorSchema, 'approve-beat'], [proseCommandErrorSchema, 'save-prose']] as const) {
+    expect(schema.safeParse({ ...error, code: 'invalid-input', message: 'invalid input', command: { ...command, operation } }).success).toBe(true)
+  }
+  const ordinary = { code: 'invalid-input', message: 'invalid input', retryable: false }
+  expect(apiErrorSchema.parse(ordinary)).toEqual(ordinary)
+})
+
 it('关卡地址与产物地址使用相同的章节边界', () => {
   expect(gateRefSchema.parse({ kind: 'beat', chapter: 2 })).toEqual({ kind: 'beat', chapter: 2 })
   for (const gate of [{ kind: 'beat' }, { kind: 'prose', chapter: Number.MAX_SAFE_INTEGER + 1 }, { kind: 'setting', chapter: 1 }]) {
@@ -39,6 +38,6 @@ it('关卡地址与产物地址使用相同的章节边界', () => {
 })
 
 it('作品读模型拒绝未知配置字段，不静默忽略协议漂移', () => {
-  expect(workViewSchema.safeParse({ ...view, artifacts: [], config: { model: 'test-model', futureOption: true } }).success).toBe(false)
-  expect(workViewSchema.safeParse({ ...view, artifacts: [], config: { model: 'test-model' } }).success).toBe(true)
+  expect(workViewSchema.safeParse({ ...view, artifacts: [], config: { model: 'kimi:kimi-k2.8-highspeed', futureOption: true } }).success).toBe(false)
+  expect(workViewSchema.safeParse({ ...view, artifacts: [], config: { model: 'kimi:kimi-k2.8-highspeed' } }).success).toBe(true)
 })

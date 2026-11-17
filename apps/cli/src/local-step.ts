@@ -1,8 +1,8 @@
-import { openSync, readSync, closeSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { stepExperimentRequestSchema, stepExperimentResponseSchema } from '@agent4novel/contracts'
 import { CliError } from './client.js'
+import { readBoundedText, readRequestJson } from './request-file.js'
 import { makeStepRecordRequest, markStepRecordUnknown, reserveStepRecordDir } from './step-record.js'
 
 const FILE_BYTES = 1024 * 1024
@@ -27,45 +27,16 @@ function closeError(code: number | null, stdout: string, stderr: string): CliErr
   return new CliError('Local step worker failed; check input and model configuration', errorCode)
 }
 
-function readBounded(path: string): string {
-  let descriptor: number | undefined
-  try {
-    descriptor = openSync(path, 'r')
-    const buffer = Buffer.alloc(FILE_BYTES + 1)
-    let length = 0
-    while (length < buffer.length) {
-      const count = readSync(descriptor, buffer, length, buffer.length - length, null)
-      if (!count) break
-      length += count
-    }
-    if (length > FILE_BYTES) throw new CliError('Step experiment file exceeds 1 MiB', 'payload-too-large')
-    return buffer.subarray(0, length).toString('utf8')
-  } catch (error) {
-    if (error instanceof CliError) throw error
-    throw new CliError('Unable to read step experiment file', 'usage')
-  } finally { if (descriptor !== undefined) closeSync(descriptor) }
-}
-
-function readJson(path: string): unknown {
-  const text = readBounded(path)
-  try { return JSON.parse(text) } catch { throw new CliError('Step input must be valid JSON', 'invalid-input') }
-}
-
 // 文件只在 CLI 读取。provider 配置与推理只在 server 包的独立 worker 中运行。
 export async function runLocalStep(stepId: string | undefined, flags: Record<string, string>, timeoutMs?: number) {
-  if ('top-k' in flags) throw new CliError('--top-k is not supported by the configured model API; use --top-p instead', 'usage')
-  if (!stepId || Object.values(flags).some(value => value.trim() === '') || Object.keys(flags).some(key => !['input-file', 'seed-file', 'system-prompt-file', 'config-file', 'record-dir', 'timeout-ms', 'thinking', 'temperature', 'top-p'].includes(key))
-    || Boolean(flags['input-file']) === Boolean(flags['seed-file'])) {
-    throw new CliError('run-step requires a node and exactly one of --input-file or --seed-file; --url is not supported', 'usage')
-  }
   if (flags.thinking !== undefined && !['on', 'off'].includes(flags.thinking)) {
     throw new CliError('--thinking must be on or off', 'invalid-input')
   }
   // Validate the file before applying flags: an override must not hide invalid or unknown config.
   const fromFile = stepExperimentRequestSchema.safeParse({ stepId,
-    input: flags['input-file'] ? readJson(flags['input-file']) : { seed: readBounded(flags['seed-file']!), upstream: {} },
-    ...(flags['system-prompt-file'] ? { systemPrompt: readBounded(flags['system-prompt-file']) } : {}),
-    ...(flags['config-file'] ? { config: readJson(flags['config-file']) } : {}),
+    input: flags['input-file'] ? readRequestJson(flags['input-file'], FILE_BYTES, 'Step input') : { seed: readBoundedText(flags['seed-file']!, FILE_BYTES, 'Step seed'), upstream: {} },
+    ...(flags['system-prompt-file'] ? { systemPrompt: readBoundedText(flags['system-prompt-file'], FILE_BYTES, 'Step system prompt') } : {}),
+    ...(flags['config-file'] ? { config: readRequestJson(flags['config-file'], FILE_BYTES, 'Step config') } : {}),
   })
   if (!fromFile.success) throw new CliError('Invalid step experiment input or options', 'invalid-input')
   const overrides = {
@@ -124,7 +95,7 @@ export async function runLocalStep(stepId: string | undefined, flags: Record<str
       settled = true
       cleanup()
       if (!error) { resolve(stdout); return }
-      if (recordRequest) markStepRecordUnknown(recordRequest, stepId, request.input, request.config?.model ?? 'unknown', error.code === 'network-error' ? 'cli-timeout' : 'worker-failed')
+      if (recordRequest) markStepRecordUnknown(recordRequest, request.stepId, request.input, request.config?.model ?? 'unknown', error.code === 'network-error' ? 'cli-timeout' : 'worker-failed')
       void terminate().finally(() => {
         if (signal) process.kill(process.pid, signal)
         reject(error)

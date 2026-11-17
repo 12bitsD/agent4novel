@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { parseServerConfig } from '../src/config/server-config.js'
 
@@ -28,5 +29,35 @@ describe('persistent server configuration', () => {
     expect(failure).toBeInstanceOf(Error)
     expect((failure as Error).message).toContain(name)
     expect((failure as Error).message).not.toContain(value)
+  })
+  it('accepts loopback listeners and rejects non-loopback addresses or other hostnames outside a container', () => {
+    for (const host of ['localhost', '127.0.0.0', '127.0.0.1', '127.255.255.254', '::1']) {
+      expect(parseServerConfig({ A4N_HOST: host }, '/repo').host).toBe(host)
+    }
+    for (const host of ['0.0.0.0', '::', '192.168.1.20', '10.0.0.2', 'example.com', 'localhost.localdomain', '::ffff:127.0.0.1']) {
+      expect(() => parseServerConfig({ A4N_HOST: host }, '/repo')).toThrow('A4N_HOST')
+    }
+  })
+  it('does not infer container mode from production, Web serving or the data directory', () => {
+    for (const env of [{ NODE_ENV: 'production' }, { A4N_SERVE_WEB: '1' }, { A4N_DATA_DIR: '/data' }]) {
+      expect(() => parseServerConfig({ ...env, A4N_HOST: '0.0.0.0' }, '/repo')).toThrow('A4N_HOST')
+    }
+  })
+  it('parses the container flag strictly and permits the Docker listener only in container mode', () => {
+    expect(parseServerConfig({ A4N_CONTAINER: '1', A4N_HOST: '0.0.0.0' }, '/repo')).toEqual({
+      dataDir: '/repo/.data', databasePath: '/repo/.data/agent4novel.sqlite',
+      host: '0.0.0.0', port: 8787, seedDemo: false, serveWeb: false,
+    })
+    for (const value of ['true', '01', '1.0', '2', '-1']) {
+      expect(() => parseServerConfig({ A4N_CONTAINER: value }, '/repo')).toThrow('A4N_CONTAINER')
+    }
+    expect(() => parseServerConfig({ A4N_CONTAINER: '0', A4N_HOST: '0.0.0.0' }, '/repo')).toThrow('A4N_HOST')
+    expect(() => parseServerConfig({ A4N_CONTAINER: '1', A4N_HOST: '::' }, '/repo')).toThrow('A4N_HOST')
+  })
+  it('sets the container marker in the image and keeps Compose publishing on host loopback', () => {
+    const dockerfile = readFileSync(new URL('../../../Dockerfile', import.meta.url), 'utf8')
+    const compose = readFileSync(new URL('../../../compose.yaml', import.meta.url), 'utf8')
+    expect(dockerfile).toMatch(/^ENV .*A4N_CONTAINER=1(?:\s|$)/m)
+    expect(compose).toContain('- "127.0.0.1:${A4N_HTTP_PORT:-8787}:8787"')
   })
 })

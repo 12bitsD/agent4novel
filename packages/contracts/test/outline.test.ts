@@ -88,6 +88,21 @@ describe('outlineContentSchema(大纲)', () => {
     ).toThrow()
   })
 
+  it('rejects a duplicate arcId with its field path', () => {
+    const duplicate = { ...arc('a-2'), segments: arc('a-3').segments }
+    const result = outlineContentSchema.safeParse({ arcs: [arc('a-1'), arc('a-2'), duplicate] })
+    expect(result.success).toBe(false)
+    if (!result.success) expect(result.error.issues).toContainEqual(expect.objectContaining({ path: ['arcs', 2, 'arcId'] }))
+  })
+
+  it('rejects a duplicate segmentId across arcs with its field path', () => {
+    const duplicate = arc('a-2')
+    duplicate.segments[0]!.segmentId = 'a-1-seg-1'
+    const result = outlineContentSchema.safeParse({ arcs: [arc('a-1'), duplicate, arc('a-3')] })
+    expect(result.success).toBe(false)
+    if (!result.success) expect(result.error.issues).toContainEqual(expect.objectContaining({ path: ['arcs', 1, 'segments', 0, 'segmentId'] }))
+  })
+
   it('rejects unknown keys(strict)', () => {
     expect(() => outlineContentSchema.parse({ ...validContent, note: 'x' })).toThrow()
   })

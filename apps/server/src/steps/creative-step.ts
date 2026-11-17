@@ -1,4 +1,3 @@
-import { captionContentSchema } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
 import type { AgentConfig, CaptionContent, CreativeContent } from '@agent4novel/contracts'
 import type { ArtifactStep } from '../pipeline/pipeline.js'
@@ -32,14 +31,10 @@ export function createCreativeStep(options: { systemPrompt?: string } = {}): Art
       const parsedInput = creativeStepInputSchema.parse(input)
       const count = config.directionCount ?? DEFAULT_DIRECTION_COUNT
       const attemptId = `${parsedInput.workId}-creative-${Date.now()}`
-      // runStep 已过 inputSchema;这里把 upstream.caption 从 JsonValue 恢复到具体类型
-      const caption = captionContentSchema.parse(
-        parsedInput.upstream.caption,
-      )
       const raw = await callLlm({
         schema: creativeLlmOutputSchema,
         system: systemFor('creative', config, options.systemPrompt),
-        prompt: buildPrompt({ seed: parsedInput.seed, caption, regeneration: parsedInput.regeneration }, count),
+        prompt: buildPrompt({ seed: parsedInput.seed, caption: parsedInput.upstream.caption, regeneration: parsedInput.regeneration }, count),
         config,
         effectiveConfig: { directionCount: count },
         workId: parsedInput.workId,

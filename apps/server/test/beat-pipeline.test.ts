@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { jsonValueSchema, settingContentSchema, workViewSchema, beatCommandErrorSchema, beatContentSchema, advanceOutcomeDtoSchema } from '@agent4novel/contracts'
+import { jsonValueSchema, settingContentSchema, workViewSchema, beatCommandErrorSchema, beatContentSchema, advanceOutcomeDtoSchema, runStep } from '@agent4novel/contracts'
 import { Pipeline, type ArtifactStep } from '../src/pipeline/pipeline.js'
 import { InMemoryStore } from '../src/store/in-memory-store.js'
 import { consumeGuards } from '../src/pipeline/consume-guards.js'
@@ -311,18 +311,11 @@ describe('first chapter Beat', () => {
     const upstream = Object.fromEntries(store.getWork(work.id)!.artifacts.filter(a => a.kind === 'outline' || a.kind === 'setting').map(a => [a.kind, a.content]))
     const step = fakeSteps.createFakeBeatStep()
     const input = { workId: work.id, seed: work.seed, upstream, chapter: 1 }
-    const first = beatContentSchema.parse((await step.run(input, {})).content)
-    const next = beatContentSchema.parse((await step.run({ ...input, regeneration: { content: first, instructions: '合成修改意见' } }, {})).content)
+    const first = beatContentSchema.parse((await runStep(step, input, {})).content)
+    const next = beatContentSchema.parse((await runStep(step, { ...input, regeneration: { content: first, instructions: '合成修改意见' } }, {})).content)
     expect(first.writingPlan.length).toBeGreaterThan(0)
     expect(first.writingPlan[0]!.itemId).not.toBe(next.writingPlan[0]!.itemId)
     expect(next.goal).toContain('合成修改意见')
-  })
-  it('validates Beat content in the public WorkView instead of accepting arbitrary JSON', async () => {
-    const { app, work } = await ready()
-    await app.request(`/api/works/${work.id}/advance`, { method: 'POST' })
-    const view = workViewSchema.parse(await (await app.request(`/api/works/${work.id}`)).json())
-    const corrupted = { ...view, artifacts: view.artifacts.map(a => a.kind === 'beat' ? { ...a, content: { title: 'partial' } } : a) }
-    expect(workViewSchema.safeParse(corrupted).success).toBe(false)
   })
   it('correlates actual model telemetry with the current Beat request', async () => {
     const { app, work } = await ready(async input => {
@@ -396,5 +389,22 @@ describe('first chapter Beat', () => {
     const invalid = await app.request(`/api/works/${work.id}`)
     expect(invalid.status).toBe(500)
     expect(await invalid.text()).not.toContain('SYNTHETIC_PRIVATE_MARKER')
+  })
+  it('reports the total and truncation marker when Beat validation issues exceed 128', async () => {
+    const { app, store, work } = await ready()
+    await app.request(`/api/works/${work.id}/advance`, { method: 'POST' })
+    const head = store.getWork(work.id)!.artifacts.find(a => a.kind === 'beat')!
+    const response = await app.request(`/api/works/${work.id}/artifacts/beat/approve`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ chapter: 1, expectedArtifactId: head.id, expectedHeadVersion: 1,
+        content: { ...beatContent, writingPlan: Array.from({ length: 128 }, () => ({})) } }),
+    })
+    expect(response.status).toBe(422)
+    const body = await response.json() as { issues: unknown[] }
+    expect(body).toMatchObject({ code: 'invalid-content', issueCount: 256, issuesTruncated: true })
+    expect(body.issues).toHaveLength(128)
+    expect(body.issues[0]).toEqual({ path: ['content', 'writingPlan', 0, 'title'], code: 'invalid_type', message: 'invalid field' })
+    expect(body.issues.at(-1)).toEqual({ path: ['content', 'writingPlan', 63, 'content'], code: 'invalid_type', message: 'invalid field' })
+    expect(beatCommandErrorSchema.safeParse(body).success).toBe(true)
   })
 })

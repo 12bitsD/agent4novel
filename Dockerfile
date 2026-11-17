@@ -15,7 +15,7 @@ RUN pnpm --filter @agent4novel/server build && pnpm --filter @agent4novel/web bu
 RUN pnpm --filter @agent4novel/server deploy --prod /production/server
 
 FROM node:24.19.0-bookworm-slim AS runtime
-ENV NODE_ENV=production A4N_HOST=0.0.0.0 A4N_PORT=8787 A4N_DATA_DIR=/data A4N_SERVE_WEB=1 A4N_SEED_DEMO=0
+ENV NODE_ENV=production A4N_HOST=0.0.0.0 A4N_PORT=8787 A4N_DATA_DIR=/data A4N_SERVE_WEB=1 A4N_SEED_DEMO=0 A4N_CONTAINER=1
 WORKDIR /app/apps/server
 COPY --from=build --chown=node:node /production/server ./
 COPY --from=build --chown=node:node /build/apps/web/dist /app/apps/web/dist

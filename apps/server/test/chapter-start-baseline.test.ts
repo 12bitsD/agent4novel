@@ -29,7 +29,11 @@ function ready() {
     ['setting', setting('approved setting'), undefined], ['beat', beat('chapter one'), 1],
     ['prose', { text: 'Approved first chapter.' }, 1],
   ] as const) {
-    const pending = store.appendArtifact(work.id, kind, content, { chapter })
+    const sourceBeat = kind === 'prose'
+      ? store.getWork(work.id)!.artifacts.find(a => a.kind === 'beat' && a.chapter === 1)!
+      : undefined
+    const pending = store.appendArtifact(work.id, kind, content, { chapter,
+      ...(sourceBeat ? { inputs: [{ kind: 'beat' as const, chapter: 1, artifactId: sourceBeat.id, version: sourceBeat.version }] } : {}) })
     store.finalizeArtifact({ workId: work.id, kind, chapter, expectedArtifactId: pending.id, expectedHeadVersion: pending.version, content: pending.content })
   }
   const previous = store.getWork(work.id)!.artifacts.find(a => a.kind === 'prose' && a.chapter === 1)!

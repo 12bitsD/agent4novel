@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { generateObject } from 'ai'
-import { seedCharBudget, authorConfigLimits, agentConfigSchema } from '@agent4novel/contracts'
+import { seedCharBudget, authorConfigLimits, agentConfigSchema, parseModelId } from '@agent4novel/contracts'
 import type { AgentConfig, GenerationParameters } from '@agent4novel/contracts'
 import type { z } from 'zod'
 import { KnownError } from '../errors.js'
@@ -67,7 +67,7 @@ export async function callLlm<T>(args: {
   attemptId: string
   /** 默认 8000;长产物步骤(如 outline)实测会撞顶截断(#14 排查),可上调 */
   maxOutputTokens?: number
-  /** 仅整份设定明确关闭 SDK 重试；其他步骤保留现有 SDK 默认行为。 */
+  /** Setting/Beat/Prose 显式传 0 关闭 SDK 重试；其余步骤省略此参数并沿用 SDK 默认。 */
   maxRetries?: number
   /** Node assembly settings already resolved by the production step. */
   effectiveConfig?: { directionCount?: number }
@@ -79,7 +79,7 @@ export async function callLlm<T>(args: {
     stepId: args.stepId,
     ...(args.chapter !== undefined ? { chapter: args.chapter } : {}),
     attemptId: args.attemptId,
-    model: /^(deepseek:[a-zA-Z0-9_.-]{1,96}|kimi:[a-zA-Z0-9_.-]{1,96}|longcat:LongCat-2\.0)$/.test(model) ? model : 'unrecognized-model',
+    model: parseModelId(model) ?? 'unrecognized-model',
     ...(currentRequest() ? { requestId: currentRequest()!.requestId } : {}),
     promptChars: args.prompt.length,
     promptHash: hash12(args.prompt),

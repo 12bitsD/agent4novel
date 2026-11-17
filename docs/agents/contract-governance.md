@@ -106,7 +106,7 @@
 - [`store/validation.ts`](../../apps/server/src/store/validation.ts) 以共享 schema 检查输入与存储快照，抛出固定消息的 `StoreContractError`，区分 `invalid-store-input` / `invalid-stored-data`，不携带原始内容。
 - `createWork` 校验公开创建输入与候选 Work；`appendArtifact`、`saveArtifact`、`finalizeArtifact`、`setStatus` 在修改内部状态前校验完整候选 Artifact。现有版本／上游条件比较保留；内容校验失败不追加版本、不通过、不部分写入。
 - SQLite 与内存适配器复用上述内容校验；SQL 额外保证物理身份、版本唯一、kind/chapter、JSON 与外键约束。写入的目标和上游条件在同一短事务内比较，不能用路由中的预检替代。
-- `getWork` 验证当前 WorkDetail 和所有 head；`listWorks` 从已验证的 getWork 派生摘要；`headVersion` 验证所读的单个 head。当前读取不扫描全部历史版本，不能据此声称全库历史已检查。
+- `getWork` 验证当前 WorkDetail 和所有 head；`listWorks` 从已验证的 getWork 派生摘要；`getArtifactVersion` 验证按精确 ID/version 读取的单个历史版本。当前读取不扫描全部历史版本，不能据此声称全库历史已检查。
 - [`contract-response.ts`](../../apps/server/src/contract-response.ts) 是 HTTP 输出验证与安全失败接缝。输出验证失败不能证明此前写入未发生；返回通用安全失败，不泄漏非法内容。写请求的消费者遇到无效成功包仍须保留回读语义，不自动重放。
 - Web/CLI 的成功包解析不能只检 shape：涉及既有作品／产物时还需核对目标关联；Setting/Beat/Prose 的提交结果继续使用共享匹配／恢复逻辑。读取非法数据不应作为正常工作区展示。
 - 畸形 4xx 不能仅凭 HTTP 状态被认定为确定拒绝；错误包无法解析时，写请求仍标为 unknown。合法命令错误中的 `writeOutcome: unknown` 也优先于 4xx 状态；保留冻结请求与既有回读路径，不换基线、不自动重试。
