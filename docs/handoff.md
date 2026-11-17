@@ -1,6 +1,6 @@
 # Handoff — agent4novel 会话接力快照
 
-> 用途：context compaction / 新会话接力。最后更新：2026-11-13。本机 MVP 已发布；#35/PR45、#47/PR48 与 #49/PR50 已关闭/合并（本轮 GitHub 回读）。当前进入 MVP 后第二期；#12、#20、#51、#46 已合并关闭。#60 Kimi provider 已合并关闭。#21 章节重生已完成：允许历史章重生，后续章保留并只提示连续性；#21/PR62 已合并关闭。#18 冲突设计已完成：Setting 前非阻断旁路、作者 disposition 和显式上下文。#17 设定扩展已按 Loop 完成并合入 main（PR65、CI 与 issue close 已回读）；原两个恶意持久 JSON 篡改硬化风险已由 #70 关闭，见 Wiki017/Wiki070。下一步是先对齐 #15 Hono RPC 技术整理；实现尚未获 Human 确认。#28/#29 与长篇质量评估保持后置。2026-11-13 起启动 #67 后端性能与稳定性治理：#68-#72 已在独立分支完成实现、定向回归、三轴审查和全量门禁；#73/#74 等 #15 基线固定。默认仅本地交付，不 push、不远端 merge、不关闭票据。
+> 用途：context compaction / 新会话接力。最后更新：2026-11-13。本机 MVP 已发布；#35/PR45、#47/PR48 与 #49/PR50 已关闭/合并（本轮 GitHub 回读）。当前进入 MVP 后第二期；#12、#20、#51、#46 已合并关闭。#60 Kimi provider 已合并关闭。#21 章节重生已完成：允许历史章重生，后续章保留并只提示连续性；#21/PR62 已合并关闭。#18 冲突设计已完成：Setting 前非阻断旁路、作者 disposition 和显式上下文。#17 设定扩展已按 Loop 完成并合入 main（PR65、CI 与 issue close 已回读）；原两个恶意持久 JSON 篡改硬化风险已由 #70 关闭，见 Wiki017/Wiki070。下一步是先对齐 #15 Hono RPC 技术整理；实现尚未获 Human 确认。#28/#29 与长篇质量评估保持后置。2026-11-13 起启动 #67 后端性能与稳定性治理：#68-#72 已在独立分支完成实现、定向回归、三轴审查和全量门禁；#75 后端逻辑简化已完成同标准验收；#73/#74 等 #15 基线固定。默认仅本地交付，不 push、不远端 merge、不关闭票据。
 > 分工：词汇表看 CONTEXT.md；数据模型看 docs/schema.md；每票工程上下文看 docs/wiki/NNN-*.md；完成闸门看 docs/agents/ticket-completion-checklist.md；本文件只管「项目现在到哪了、下一步是什么、哪些决策不能丢」。消费或更新 Wiki 时使用 `.claude/skills/agent4novel-wiki/SKILL.md`。
 
 ## Primary Request and Intent
@@ -136,6 +136,7 @@ CLI #25 已交付，无本票阻塞遗留；后续 CLI 结果/运行记录优化
 | #18 冲突检测与作者澄清（设计已交付） | Setting 前非阻断 review note、作者 disposition、stale 和显式上下文 | 设计契约已固定；后续实现另行立票；不阻断 Setting、不增加 canonical Setting 字段 |
 | #17 设定演进（已交付） | append-only 扩展提案、原子审批、影响提示、版本输入引用与 SQLite v4 | PR65 已合并关闭；三轮 Loop、双轴 review、quality/container CI、远端 main 回读和完成评论见 [Wiki017](./wiki/017-setting-evolution.md)；不支持既有事实编辑/撤销/回退 |
 | #67 后端治理（本地实现完成） | #68 SQLite 读放大、#69 流水线恢复/快照、#70 扩展完整性、#71 runner 回收、#72 静态/生命周期 | 全量 test/typecheck/build 与 production/container smoke 通过；仅本地分支，未 push/远端 merge/关闭 |
+| #75 后端逻辑简化（本地实现完成） | 表驱动、普通循环与纯函数替代嵌套分支/链式简写；失败对象形状兼容 | 性能对照无退化，全量 test/typecheck/build 与 production/container smoke 通过；仅本地分支 |
 | #73 模型取消（阻塞） | 断连 signal 贯通并释放生成锁，shutdown 复用取消入口 | 等 #15 和 #69 基线；未实施 |
 | #74 RPC/构建硬化（阻塞） | bounded body 单次读取、写路由限额、declaration Docker 输入与 staging 构建 | 等 #15 和 #73 基线；未实施，当前 RPC 候选问题已交接 #15 |
 | #15 Hono RPC 技术整理（待 Human 确认） | Web 通过 `hc<AppType>` 消除手写 DTO 漂移，REST 语义不变 | 受保护 Eval r0.2 已独立校准 PASS；实现前需 Human 确认，避免把技术整理扩成行为变化 |

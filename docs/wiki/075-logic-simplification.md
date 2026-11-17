@@ -54,14 +54,14 @@ last_context_reviewed: "2026-11-17"
 
 ### 完成审核证据
 
-- **清单与候选**：固定点 `e6889027aead377956e84f8f23a8c96b6d68e34f`；候选提交待形成。
-- **逐项判定**：C1/C2 已完成范围与行为保持对齐；C3–C6 待最终门禁和独立审查。
-- **验收与 TDD**：本票为行为保持重构，沿用现有 RED/GREEN 作为防护；存储 46 项、流水线/配置/Step 103 项、runner/静态 40 项定向回归通过。
-- **本地门禁**：定向测试和双 typecheck 通过；全量门禁待最终执行。
-- **双轴 review**：待完成。
-- **修复与回归**：仅修正 parse 层级和偏好映射类型，无 feature 改动。
-- **知识维护**：本页新建；schema/CONTEXT/ADR/README 预计 N/A；handoff 待更新。
-- **发布前裁决**：pending；默认仅本地分支。
+- **清单与候选**：固定点 `e6889027aead377956e84f8f23a8c96b6d68e34f`；实现提交 `c436725`、`1d99cc0`；候选 tree `32a5e924f0e71e9ccbf7dca4983ac401de09902a`。
+- **逐项判定**：C1–C5 PASS：范围、TDD 防护、定向/全量门禁、知识与 Standards/Spec/Risk 审查均完成；C6.1/C6.2 PASS，C6.3 已转录，C6.4 由独立 reviewer 核验候选，C6.5 已记录，C6.6 PASS，C6.7 已完成逻辑提交。
+- **验收与 TDD**：本票为行为保持重构，沿用现有 RED/GREEN 作为防护；存储 46 项、流水线/配置/Step 103 项、runner/静态 40 项定向回归通过，并新增失败可选键形状回归。
+- **本地门禁**：`pnpm test`、`pnpm typecheck`、`pnpm build`、production/container smoke 与 `git diff --check <fixed-point>` 全部通过。
+- **双轴 review**：Standards/Spec/Risk 已关闭可选键形状、配置回退、复杂度转移和偏好类型问题，增量复审无剩余发现。
+- **修复与回归**：恢复 `attemptId`、`beatCommand`、`proseCommand` 的键存在性（含 undefined/空字符串）；`savedVersion()`、`chars()` 等收敛不引入新抽象层。
+- **知识维护**：本页与 Wiki index 新建；schema/CONTEXT/ADR/README/运行 skill N/A；handoff 已更新。
+- **发布前裁决**：C6.4/C6.6 独立 reviewer PASS，剩余风险仅为墙钟本机波动和 #15 后续合并冲突；C7 仅本地分支，不 push/远端 merge/关闭 issue。
 
 ## 边界与非目标
 
