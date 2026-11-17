@@ -66,12 +66,6 @@ export type PipelineDeps = {
   consumeGuards?: Partial<Record<ArtifactKind, (content: JsonValue) => void>>
 }
 
-function failureCodeFor(error: unknown, cause: unknown, known: KnownError | null): string {
-  if (error instanceof BeatCommandError) return beatFailureCode(cause, error.command.failureStage ?? 'response')
-  if (error instanceof ProseCommandError) return proseFailureCode(cause, error.command.failureStage ?? 'response')
-  if (known) return known.code
-  return 'llm-unavailable'
-}
 
 export class Pipeline {
   readonly repeatChapters: boolean
@@ -296,7 +290,10 @@ export class Pipeline {
       let cause = err
       if (err instanceof BeatCommandError || err instanceof ProseCommandError) cause = err.cause
       const known = cause instanceof KnownError ? cause : null
-      const code = failureCodeFor(err, cause, known)
+      let code = 'llm-unavailable'
+      if (err instanceof BeatCommandError) code = beatFailureCode(cause, err.command.failureStage ?? 'response')
+      else if (err instanceof ProseCommandError) code = proseFailureCode(cause, err.command.failureStage ?? 'response')
+      else if (known) code = known.code
       // 丢弃旧输入上的生成结果后可手动重试；尚未通过的上游仍由 getState 阻挡。
       let retryable = true
       if (known) retryable = known.code === 'upstream-changed' || known.retryable
@@ -307,9 +304,11 @@ export class Pipeline {
       })
       const failure: AdvanceOutcome = {
         kind: 'failed', stepId: entry.stepId, code, retryable,
+        attemptId: known?.attemptId,
         state: this.getState(workId),
+        beatCommand: undefined,
+        proseCommand: undefined,
       }
-      if (known?.attemptId) failure.attemptId = known.attemptId
       if (known?.inputBudget) failure.inputBudget = known.inputBudget
       if (err instanceof BeatCommandError) failure.beatCommand = err.command
       if (err instanceof ProseCommandError) failure.proseCommand = err.command

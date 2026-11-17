@@ -398,6 +398,24 @@ describe('Pipeline(#3c 链式 advance)', () => {
     expect(pipeline.failureOf(work.id, 'creative')).toBeNull()
   })
 
+  it('preserves optional failure keys even when their values are undefined or empty', async () => {
+    for (const attemptId of [undefined, '']) {
+      const store = new InMemoryStore()
+      const failing: ArtifactStep = {
+        ...fakeStep('caption', captionContent()),
+        run: async () => { throw new KnownError('llm-timeout', 'timeout', { retryable: true, ...(attemptId === undefined ? {} : { attemptId }) }) },
+      }
+      const pipeline = new Pipeline({ store, steps: new Map([['caption', failing]]), definition: definition.slice(0, 1), resolveConfig: () => ({}) })
+      const work = store.createWork({ seed: 'optional failure keys' })
+      const outcome = await pipeline.advance(work.id)
+      if (outcome.kind !== 'failed') throw new Error('expected failed outcome')
+      expect(Object.keys(outcome)).toEqual(expect.arrayContaining(['attemptId', 'beatCommand', 'proseCommand']))
+      expect(outcome.attemptId).toBe(attemptId)
+      expect(outcome.beatCommand).toBeUndefined()
+      expect(outcome.proseCommand).toBeUndefined()
+    }
+  })
+
   it('bounds retained failures by evicting the oldest work entry', async () => {
     const store = new InMemoryStore()
     const failing: ArtifactStep = {

@@ -5,6 +5,7 @@ import { KnownError } from '../errors.js'
 import { assignBeatIds } from '../beat-content.js'
 import { callLlm, systemFor } from './llm-call.js'
 import { beatStepInputSchema, beatStepOutputSchema } from './beat-io.js'
+import { chars } from './prompt-section.js'
 
 export function createBeatStep(options: { systemPrompt?: string } = {}): ArtifactStep {
   return {
@@ -29,10 +30,8 @@ export function createBeatStep(options: { systemPrompt?: string } = {}): Artifac
       }
       sections.push(`请生成第 ${chapter} 章的完整章纲，供作者审阅；只规划当前章，不生成其他章节。`)
       const prompt = sections.join('\n\n')
-      let previousChapterChars = 0
-      if (previousChapterText) previousChapterChars = previousChapterText.length
-      let draftChars = 0
-      if (draftText) draftChars = draftText.length
+      const previousChapterChars = chars(previousChapterText)
+      const draftChars = chars(draftText)
       const instructionsChars = regeneration ? regeneration.instructions.length : 0
       if (system.length + prompt.length > beatLimits.maxPromptChars) throw new KnownError('input-budget-exceeded', 'assembled beat context exceeds budget', {
         inputBudget: { limit: beatLimits.maxPromptChars, actualLength: system.length + prompt.length, systemChars: system.length,

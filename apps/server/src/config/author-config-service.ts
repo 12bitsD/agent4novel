@@ -6,7 +6,7 @@ import {
   agentFileSchema, agentFileUploadSchema, authorConfigDocumentSchema, authorConfigLimits, authorConfigSaveSchema,
   authorConfigViewSchema, authorStepIds, emptyAuthorConfig,
   managedAgentFileText,
-  type AgentConfig, type AgentFile, type AgentFileUpload, type AuthorConfigDocument, type AuthorConfigSave, type WorkDetail,
+  type AgentConfig, type AgentFile, type AgentFileUpload, type AuthorConfigDocument, type AuthorConfigReceipt, type AuthorConfigSave, type WorkDetail,
 } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
 import { modelRuntime, type ModelRuntime } from '../steps/llm.js'
@@ -23,10 +23,8 @@ const preferenceSteps: Record<string, readonly string[]> = {
   payoff: ['creative', 'outline', 'beat', 'prose'],
 }
 
-function providerFor(model: string): 'deepseek' | 'longcat' | 'kimi' {
-  if (model.startsWith('longcat:')) return 'longcat'
-  if (model.startsWith('kimi:')) return 'kimi'
-  return 'deepseek'
+function savedVersion(saved: AuthorConfigReceipt | undefined) {
+  return { document: saved ? saved.document : emptyAuthorConfig(), revision: saved ? saved.revision : 0 }
 }
 
 function parseSkill(text: string): { name: string; description: string; body: string } {
@@ -201,7 +199,10 @@ export class AuthorConfigService {
         if (this.runtime.mode === 'live') this.runtime.languageModel(model)
       } catch { throw invalid() }
       configs[id] = config
-      effective.push({ id, model, provider: providerFor(model),
+      let provider: 'deepseek' | 'longcat' | 'kimi' = 'deepseek'
+      if (model.startsWith('longcat:')) provider = 'longcat'
+      else if (model.startsWith('kimi:')) provider = 'kimi'
+      effective.push({ id, model, provider,
         configured: this.runtime.mode === 'live', executionMode: this.runtime.mode, generation, appliedPreferences,
         systemPrompt: prompt, skills, tools: [], directionCount: config.directionCount ?? 2 })
     }
@@ -214,9 +215,8 @@ export class AuthorConfigService {
   }
   get(workId: string) {
     const saved = this.repository.getAuthorConfig(workId)
-    const document = saved ? saved.document : emptyAuthorConfig()
-    const revision = saved ? saved.revision : 0
-    return this.resolve(this.work(workId), document, revision).view
+    const version = savedVersion(saved)
+    return this.resolve(this.work(workId), version.document, version.revision).view
   }
   save(workId: string, input: AuthorConfigSave) {
     const parsed = authorConfigSaveSchema.safeParse(input)
@@ -237,8 +237,7 @@ export class AuthorConfigService {
   }
   snapshot(work: WorkDetail): Record<string, AgentConfig> {
     const saved = this.repository.getAuthorConfig(work.id)
-    const document = saved ? saved.document : emptyAuthorConfig()
-    const revision = saved ? saved.revision : 0
-    return this.resolve(work, document, revision).configs
+    const version = savedVersion(saved)
+    return this.resolve(work, version.document, version.revision).configs
   }
 }

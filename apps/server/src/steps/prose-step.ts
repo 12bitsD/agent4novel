@@ -4,6 +4,7 @@ import { KnownError } from '../errors.js'
 import type { ArtifactStep } from '../pipeline/pipeline.js'
 import { callLlm, systemFor } from './llm-call.js'
 import { proseStepInputSchema, proseStepOutputSchema } from './prose-io.js'
+import { chars } from './prompt-section.js'
 
 export function createProseStep(options: { systemPrompt?: string } = {}): ArtifactStep {
   return {
@@ -27,10 +28,8 @@ export function createProseStep(options: { systemPrompt?: string } = {}): Artifa
       }
       sections.push(`请返回第 ${chapter} 章完整正文，供作者独立把关。保持章纲方向及章末落点，不提前续写第 ${chapter + 1} 章。`)
       const prompt = sections.join('\n\n')
-      let previousChapterChars = 0
-      if (previousChapterText) previousChapterChars = previousChapterText.length
-      let draftChars = 0
-      if (draftText) draftChars = draftText.length
+      const previousChapterChars = chars(previousChapterText)
+      const draftChars = chars(draftText)
       const instructionsChars = regeneration ? regeneration.instructions.length : 0
       if (system.length + prompt.length > proseLimits.maxPromptChars) throw new KnownError('input-budget-exceeded', 'assembled prose context exceeds budget', {
         inputBudget: { limit: proseLimits.maxPromptChars, actualLength: system.length + prompt.length, systemChars: system.length,
