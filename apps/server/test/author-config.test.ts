@@ -67,18 +67,24 @@ describe('author configuration at the production boundary', () => {
   it('migrates the exact v1 schema without altering old works or artifacts', () => {
     const f = fixture()
     try {
-      f.store.appendArtifact(f.work.id, 'prose', { text: 'saved old prose' }, { chapter: 1 })
+      const original = f.store.appendArtifact(f.work.id, 'prose', { text: 'saved old prose' }, { chapter: 1 })
+      f.store.saveArtifact({ workId: f.work.id, kind: 'prose', chapter: 1, expectedArtifactId: original.id, expectedHeadVersion: 1, expectedHumanStatus: 'pending', content: { text: 'second historical version' } })
       const before = f.store.getWork(f.work.id)
       f.store.close()
       const raw = new Database(join(f.dir, 'agent4novel.sqlite'))
-      raw.exec('DROP TABLE setting_extension_proposals; DROP INDEX bad_example_work_chapter; DROP TABLE bad_examples; DROP TABLE author_configs; DROP TABLE agent_files; PRAGMA user_version = 1'); raw.close()
+      const beforeRows = raw.prepare('SELECT * FROM artifacts ORDER BY id').all()
+      expect(beforeRows).toHaveLength(2)
+      raw.exec('DROP INDEX artifact_work_head; DROP INDEX agent_file_work; DROP TABLE setting_extension_proposals; DROP INDEX bad_example_work_chapter; DROP TABLE bad_examples; DROP TABLE author_configs; DROP TABLE agent_files; PRAGMA user_version = 1'); raw.close()
       const reopened = new SqliteStore(join(f.dir, 'agent4novel.sqlite'))
       try {
         expect(reopened.getWork(f.work.id)).toEqual(before)
         expect(reopened.getAuthorConfig(f.work.id)).toBeUndefined()
         reopened.saveAuthorConfig(f.work.id, { requestId: randomUUID(), expectedRevision: 0, document })
         const db = new Database(join(f.dir, 'agent4novel.sqlite'), { readonly: true })
-        try { expect(db.pragma('user_version', { simple: true })).toBe(4) } finally { db.close() }
+        try {
+          expect(db.pragma('user_version', { simple: true })).toBe(5)
+          expect(db.prepare('SELECT * FROM artifacts ORDER BY id').all()).toEqual(beforeRows)
+        } finally { db.close() }
       } finally { reopened.close() }
     } finally { f.store.close() }
   })

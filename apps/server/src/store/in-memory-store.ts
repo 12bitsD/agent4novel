@@ -188,7 +188,8 @@ export class InMemoryStore implements WorkStore {
   private validateExtensionCandidate(record: SettingExtensionProposalRecord | undefined): void {
     if (!record || record.status !== 'approved') return
     const candidate = record.candidate === null ? undefined : this.getArtifactVersion(record.workId, 'setting', undefined, record.candidate.artifactId, record.candidate.version)
-    if (!isValidApprovedExtensionCandidate(record, candidate)) throw new StoreContractError('invalid-stored-data')
+    const base = this.getArtifactVersion(record.workId, 'setting', undefined, record.expectedBase.artifactId, record.expectedBase.version)
+    if (!isValidApprovedExtensionCandidate(record, candidate, base)) throw new StoreContractError('invalid-stored-data')
   }
 
   private requireExtensionWork(workId: string): WorkDetail {
@@ -200,15 +201,22 @@ export class InMemoryStore implements WorkStore {
   proposeSettingExtension(workId: string, request: SettingExtensionProposeRequest): SettingExtensionReceipt {
     const work = this.requireExtensionWork(workId)
     const key = this.extensionKey(workId, request.requestId)
-    const record = proposeExtension(work, request, this.extensionRecord(workId, request.requestId))
-    this.extensionProposals.set(key, structuredClone(record))
+    const prior = this.extensionRecord(workId, request.requestId)
+    const record = proposeExtension(work, request, prior)
+    if (record !== prior) this.extensionProposals.set(key, structuredClone(record))
+    else this.validateExtensionCandidate(prior)
     return extensionReceipt(record, 'propose')
   }
 
   private actSettingExtension(workId: string, request: SettingExtensionActionRequest, operation: 'approve' | 'cancel'): SettingExtensionReceipt {
     const work = this.requireExtensionWork(workId)
     const key = this.extensionKey(workId, request.requestId)
-    const plan = actOnExtension(work, request, this.extensionRecord(workId, request.requestId), operation)
+    const prior = this.extensionRecord(workId, request.requestId)
+    const plan = actOnExtension(work, request, prior, operation)
+    if (plan.replay) {
+      if (operation === 'approve') this.validateExtensionCandidate(prior)
+      return extensionReceipt(plan.record, operation)
+    }
     // Prepare both replacement values before the commit. This synchronous section
     // has no callback/yield where another in-memory writer could interleave.
     if (plan.artifact) {

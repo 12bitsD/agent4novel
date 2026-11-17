@@ -19,10 +19,11 @@ export function createProductionApp(store: WorkStore, webRoot?: string, dataDir?
   // 无可用模型凭据 → fake 演示模式（不报错、不触网）。
   const demo = modelRuntime.mode === 'demo'
   const repository = store as WorkStore & Partial<AuthorConfigRepository>
+  let pipeline: Pipeline | undefined
   const authorConfig = dataDir && typeof repository.getAuthorConfig === 'function' && typeof repository.saveAuthorConfig === 'function'
     && typeof repository.getAuthorConfigReceipt === 'function'
     && typeof repository.listAgentFiles === 'function' && typeof repository.putAgentFile === 'function'
-    ? new AuthorConfigService(store, repository as WorkStore & AuthorConfigRepository, dataDir) : undefined
+    ? new AuthorConfigService(store, repository as WorkStore & AuthorConfigRepository, dataDir, modelRuntime, workId => pipeline?.clearFailure(workId)) : undefined
 
   const steps = new Map<string, ArtifactStep>([
     ['caption', demo ? createFakeCaptionStep() : createCaptionStep()],
@@ -43,7 +44,7 @@ export function createProductionApp(store: WorkStore, webRoot?: string, dataDir?
     { stepId: 'beat', outputKind: 'beat', chapter: 1, consumes: ['outline', 'setting'], gateAfter: { kind: 'beat', chapter: 1 } },
     { stepId: 'prose', outputKind: 'prose', chapter: 1, consumes: ['beat', 'setting'], gateAfter: { kind: 'prose', chapter: 1 } },
   ]
-  const pipeline = new Pipeline({
+  pipeline = new Pipeline({
     store,
     steps,
     definition,

@@ -183,3 +183,11 @@ Agent 默认自主判断保留、压缩或替换；可能损失原始目的、�
 | [046 SQLite 并发首次建库](./046-sqlite-concurrent-initialization.md) | [#46](https://github.com/12bitsD/agent4novel/issues/46) | current | 首次并发初始化的 busy 有界重试、事务恢复与安全诊断 |
 | [051 节点实际输入输出记录与 Agent 迭代](./051-node-iteration-records.md) | [#51](https://github.com/12bitsD/agent4novel/issues/51) | current | 已交付的 `run-step` 实际调用记录、A/B 对照与 comment |
 | [060 Kimi API provider 与测试模型切换](./060-kimi-provider.md) | [#60](https://github.com/12bitsD/agent4novel/issues/60) | current | Kimi OpenAI-compatible provider、凭据/Base URL、通用测试模型与回归边界 |
+| [068 SQLite 索引与书架读放大](./068-sqlite-read-scaling.md) | [#68](https://github.com/12bitsD/agent4novel/issues/68) | current | SQLite v5 作品索引、书架批量读取与确定性查询验证 |
+| [069 流水线恢复、快照与配置重复工作](./069-pipeline-recovery-snapshots.md) | [#69](https://github.com/12bitsD/agent4novel/issues/69) | current | 失败恢复、有界缓存、作品快照与单配置文件复用 |
+| [070 Setting extension 完整性与重放](./070-setting-extension-integrity.md) | [#70](https://github.com/12bitsD/agent4novel/issues/70) | current | candidate/base 精确对账与合法终态重放零写入 |
+| [071 独立 runner 生命周期与错误分类](./071-runner-lifecycle.md) | [#71](https://github.com/12bitsD/agent4novel/issues/71) | current | 子进程终态回收、父进程信号与安全错误分类 |
+| [072 静态资源与启动退出边界](./072-runtime-static-lifecycle.md) | [#72](https://github.com/12bitsD/agent4novel/issues/72) | current | 异步静态校验、资产缓存与真实 listen/shutdown 证据 |
+| [073 模型取消传播与 shutdown（阻塞）](./073-model-cancellation.md) | [#73](https://github.com/12bitsD/agent4novel/issues/73) | current | 等 #15/#69 基线；断连 signal、锁释放与 append 边界设计 |
+| [074 RPC 请求边界与生产构建硬化（阻塞）](./074-rpc-build-hardening.md) | [#74](https://github.com/12bitsD/agent4novel/issues/74) | current | 等 #15/#73 基线；bounded body、写限额与 staging 构建 |
+| [075 后端逻辑简化](./075-logic-simplification.md) | [#75](https://github.com/12bitsD/agent4novel/issues/75) | current | 分支与链式简写治理，保持 feature 与性能验收 |

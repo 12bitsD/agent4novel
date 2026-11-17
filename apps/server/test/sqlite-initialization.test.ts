@@ -105,7 +105,7 @@ it('does not retry a migration SQL error and leaves the transaction recoverable'
   expect(migrationAttempts).toBe(1)
   failure.mockRestore()
   initializeSqliteDatabase(db, { busyTimeoutMs: 1, maxAttempts: 2, retryDelayMs: 1 })
-  expect(db.pragma('user_version', { simple: true })).toBe(4)
+  expect(db.pragma('user_version', { simple: true })).toBe(5)
 })
 
 it('retries a controlled busy lock and completes the full initialization', () => {
@@ -116,7 +116,7 @@ it('retries a controlled busy lock and completes the full initialization', () =>
   initializeSqliteDatabase(contender, { busyTimeoutMs: 1, maxAttempts: 20, retryDelayMs: 5 })
 
   expect(observed).toEqual(['SQLITE_BUSY'])
-  expect(contender.pragma('user_version', { simple: true })).toBe(4)
+  expect(contender.pragma('user_version', { simple: true })).toBe(5)
   expect(contender.pragma('journal_mode', { simple: true })).toBe('wal')
   expect(contender.pragma('synchronous', { simple: true })).toBe(2)
   expect(contender.pragma('busy_timeout', { simple: true })).toBe(1)
@@ -151,4 +151,33 @@ it('keeps unsupported schema failures structured and safe', () => {
   }
   expect(() => initializeSqliteDatabase(db, { busyTimeoutMs: 1, maxAttempts: 5, retryDelayMs: 1 })).toThrow(UnsupportedDatabaseError)
   expect(db.prepare('SELECT * FROM sentinel').all()).toEqual([{ value: 'preserved' }])
+})
+
+it('migrates an exact v4 database to v5 without changing stored work data', () => {
+  const path = databasePath()
+  const initial = new SqliteStore(path)
+  const work = initial.createWork({ seed: 'preserved seed', title: 'Preserved' })
+  initial.appendArtifact(work.id, 'caption', {
+    inputStage: '脑洞', summary: 'preserved', elements: [{ kind: '人物', content: 'data' }], gaps: [],
+  }, { humanStatus: 'approved' })
+  initial.appendArtifact(work.id, 'caption', {
+    inputStage: '脑洞', summary: 'second historical version', elements: [{ kind: '人物', content: 'data' }], gaps: [],
+  }, { humanStatus: 'approved' })
+  const before = initial.getWork(work.id)
+  initial.close()
+  const db = open(path)
+  const beforeRows = db.prepare('SELECT * FROM artifacts ORDER BY id').all()
+  expect(beforeRows).toHaveLength(2)
+  db.exec('DROP INDEX artifact_work_head; DROP INDEX agent_file_work; PRAGMA user_version = 4')
+  db.close()
+
+  const migrated = new SqliteStore(path)
+  resources.push(migrated)
+  expect(migrated.getWork(work.id)).toEqual(before)
+  expect(migrated.listWorks()).toEqual([{ id: work.id, title: 'Preserved', seedPreview: 'preserved seed', chapterCount: 0 }])
+  const check = open(path)
+  expect(check.pragma('user_version', { simple: true })).toBe(5)
+  expect(check.prepare('SELECT * FROM artifacts ORDER BY id').all()).toEqual(beforeRows)
+  const indexes = check.prepare("SELECT name FROM sqlite_schema WHERE type = 'index' AND name IN ('artifact_work_head', 'agent_file_work') ORDER BY name").all()
+  expect(indexes).toEqual([{ name: 'agent_file_work' }, { name: 'artifact_work_head' }])
 })

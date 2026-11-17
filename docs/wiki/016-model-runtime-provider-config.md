@@ -8,9 +8,9 @@ topics: ["model-runtime", "provider-config", "generation-parameters", "thinking"
 code_paths: ["apps/server/src/index.ts", "apps/server/src/steps/llm.ts", "apps/server/src/steps/llm-call.ts", "apps/server/src/config/local-env.ts", "apps/server/src/start.ts", "apps/server/src/step-lab-main.ts", "apps/cli/src/local-step.ts", "packages/contracts/src/step.ts", "packages/contracts/src/author-config.ts", "apps/cli/src/client.ts", ".env.example", "compose.yaml"]
 symbols: ["ModelRuntime", "SupportedModelId", "ModelConfigError", "createModelRuntime", "modelRuntime", "DEFAULT_KIMI_MODEL_ID", "DEFAULT_KIMI_BASE_URL", "generationSettings", "generationParametersSchema", "callLlm", "run-step", "DEFAULT_CLI_TIMEOUT_MS", "DEFAULT_ADVANCE_TIMEOUT_MS", "A4N_LLM_TIMEOUT_MS", "A4N_CLI_TIMEOUT_MS", "llm-timeout"]
 inherits: ["014"]
-changed_by: ["013", "005", "033", "007", "060"]
+changed_by: ["013", "005", "033", "007", "060", "071"]
 read_when: ["configure-model-provider", "configure-generation-parameters", "run-isolated-step", "add-model-provider", "debug-llm-runtime", "change-llm-timeout", "audit-credential-safety"]
-last_context_reviewed: "2026-10-10"
+last_context_reviewed: "2026-11-13"
 ---
 
 # 016 — 模型运行配置：统一多 Provider、凭据与超时
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-10-10"
 - **原始目的**：把散落且 DeepSeek-only 的运行时选择收敛到 ModelRuntime，使 Pipeline 与 RealStep 无需感知 provider。
 - **实际落地**：DeepSeek、LongCat 2.0 与 Kimi 共用 registry；源码server入口安全加载`.env.local`，编译/容器入口只接收运行期环境；共同校验 URL、模型、credential、单次 LLM timeout 和本地 Zod。generationSettings 统一生产与独立节点的生成参数；LongCat 默认 disabled/0.9/0.95，Kimi 使用 `kimi:kimi-k2.8-highspeed` 测试模型，既有接回验证状态见“测试与验证”。
 - **当前价值**：本文是 provider 配置、运行时行为、错误语义与验证状态的当前唯一 HOW。
-- **后续变化**：CLI／telemetry／smoke 仍由 [Wiki 014](./014-agent-cli-telemetry.md) 拥有；[Wiki 013](./013-setting-generation-review.md) 新增 Setting，显式禁用该步骤的 SDK 重试并记录新实测。[Wiki 005](./005-beat-generation-review.md) 增加 Beat 独立预算、零 SDK 重试和共享安全错误分类。[Wiki 033](./033-local-docker-ci.md)持有本机容器启动与卷操作，模型HOW仍由本文维护。[Wiki007](./007-author-agent-config.md)持有作品可编辑配置、文件与操作快照，旧Work.config仅兼容来源；#60 增加 Kimi OpenAI-compatible provider，测试默认模型为 `kimi:kimi-k2.8-highspeed`；本文work ID均为历史进程快照，不代表当前仍存活。
+- **后续变化**：CLI／telemetry／smoke 仍由 [Wiki 014](./014-agent-cli-telemetry.md) 拥有；[Wiki 013](./013-setting-generation-review.md) 新增 Setting，显式禁用该步骤的 SDK 重试并记录新实测。[Wiki 005](./005-beat-generation-review.md) 增加 Beat 独立预算、零 SDK 重试和共享安全错误分类。[Wiki 033](./033-local-docker-ci.md)持有本机容器启动与卷操作，模型HOW仍由本文维护。[Wiki007](./007-author-agent-config.md)持有作品可编辑配置、文件与操作快照，旧Work.config仅兼容来源；#60 增加 Kimi OpenAI-compatible provider，测试默认模型为 `kimi:kimi-k2.8-highspeed`；本文work ID均为历史进程快照，不代表当前仍存活；[Wiki 071](./071-runner-lifecycle.md) 负责 worker 生命周期，不改变本文 timeout 契约。
 - **代码入口**：[ModelRuntime](../../apps/server/src/steps/llm.ts)、[LLM call](../../apps/server/src/steps/llm-call.ts)、[author config contract](../../packages/contracts/src/author-config.ts)、[generation schema](../../packages/contracts/src/step.ts)、[local env loader](../../apps/server/src/config/local-env.ts)、[独立 worker](../../apps/server/src/step-lab-main.ts)、[CLI timeout](../../apps/cli/src/client.ts)。
 
 ## 设计目的

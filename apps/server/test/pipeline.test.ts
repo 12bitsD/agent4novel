@@ -378,4 +378,69 @@ describe('Pipeline(#3c 链式 advance)', () => {
       /not registered/,
     )
   })
+
+  it('keeps failure for the current step but expires it for a different step or an explicit configuration save', async () => {
+    const store = new InMemoryStore()
+    const failing: ArtifactStep = {
+      ...fakeStep('creative', creativeContent()),
+      run: async () => { throw new KnownError('llm-unavailable', 'invalid configuration', { retryable: false }) },
+    }
+    const pipeline = new Pipeline({ store, steps: new Map([
+      ['caption', fakeStep('caption', captionContent())], ['creative', failing], ['outline', fakeStep('outline', outlineContent)],
+    ]), definition, resolveConfig: () => ({}) })
+    const work = store.createWork({ seed: 'failure scope' })
+    expect(await pipeline.advance(work.id)).toMatchObject({ kind: 'failed', stepId: 'creative', retryable: false })
+    expect(pipeline.failureOf(work.id, 'creative')).toMatchObject({ stepId: 'creative', retryable: false })
+    expect(pipeline.failureOf(work.id, 'outline')).toBeNull()
+    expect(pipeline.failureOf(work.id, 'creative')).toBeNull()
+    expect(await pipeline.advance(work.id)).toMatchObject({ kind: 'failed', stepId: 'creative' })
+    pipeline.clearFailure(work.id)
+    expect(pipeline.failureOf(work.id, 'creative')).toBeNull()
+  })
+
+  it('preserves optional failure keys even when their values are undefined or empty', async () => {
+    for (const attemptId of [undefined, '']) {
+      const store = new InMemoryStore()
+      const failing: ArtifactStep = {
+        ...fakeStep('caption', captionContent()),
+        run: async () => { throw new KnownError('llm-timeout', 'timeout', { retryable: true, ...(attemptId === undefined ? {} : { attemptId }) }) },
+      }
+      const pipeline = new Pipeline({ store, steps: new Map([['caption', failing]]), definition: definition.slice(0, 1), resolveConfig: () => ({}) })
+      const work = store.createWork({ seed: 'optional failure keys' })
+      const outcome = await pipeline.advance(work.id)
+      if (outcome.kind !== 'failed') throw new Error('expected failed outcome')
+      expect(Object.keys(outcome)).toEqual(expect.arrayContaining(['attemptId', 'beatCommand', 'proseCommand']))
+      expect(outcome.attemptId).toBe(attemptId)
+      expect(outcome.beatCommand).toBeUndefined()
+      expect(outcome.proseCommand).toBeUndefined()
+    }
+  })
+
+  it('bounds retained failures by evicting the oldest work entry', async () => {
+    const store = new InMemoryStore()
+    const failing: ArtifactStep = {
+      ...fakeStep('caption', captionContent()),
+      run: async () => { throw new KnownError('llm-unavailable', 'failure', { retryable: false }) },
+    }
+    const pipeline = new Pipeline({ store, steps: new Map([['caption', failing]]), definition: definition.slice(0, 1), resolveConfig: () => ({}) })
+    const works = Array.from({ length: 1001 }, (_, index) => store.createWork({ seed: `work-${index}` }))
+    for (const work of works) expect((await pipeline.advance(work.id)).kind).toBe('failed')
+    expect(pipeline.failureOf(works[0]!.id, 'caption')).toBeNull()
+    expect(pipeline.failureOf(works.at(-1)!.id, 'caption')).toMatchObject({ stepId: 'caption', retryable: false })
+  })
+
+  it('reuses one work snapshot per advance iteration and one after each write', async () => {
+    class CountingStore extends InMemoryStore {
+      reads = 0
+      override getWork(id: string) { this.reads += 1; return super.getWork(id) }
+    }
+    const store = new CountingStore()
+    const work = store.createWork({ seed: 'snapshot count' })
+    const pipeline = new Pipeline({ store, steps: new Map([
+      ['caption', fakeStep('caption', captionContent())], ['creative', fakeStep('creative', creativeContent())],
+    ]), definition: definition.slice(0, 2), resolveConfig: () => ({}) })
+    store.reads = 0
+    expect(await pipeline.advance(work.id)).toMatchObject({ kind: 'advanced', stepId: 'creative' })
+    expect(store.reads).toBe(4)
+  })
 })

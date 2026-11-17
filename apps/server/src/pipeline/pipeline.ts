@@ -66,6 +66,7 @@ export type PipelineDeps = {
   consumeGuards?: Partial<Record<ArtifactKind, (content: JsonValue) => void>>
 }
 
+
 export class Pipeline {
   readonly repeatChapters: boolean
   private store: WorkStore
@@ -171,62 +172,53 @@ export class Pipeline {
   getState(workId: string): PipelineState {
     const work = this.store.getWork(workId)
     if (!work) throw new KnownError('work-not-found', `work not found: ${workId}`)
+    return this.getStateFromWork(work)
+  }
 
+  private missingOutputState(work: WorkDetail, entry: PipelineDefinitionEntry, latest: Map<string, Artifact>): PipelineState | null {
+    if (this.repeatChapters && entry.chapter && entry.chapter > 1) {
+      for (const kind of ['beat', 'prose'] as const) {
+        const previous = latest.get(`${kind}:${entry.chapter - 1}`)
+        if (!previous || previous.humanStatus !== 'approved' || !this.guardOk(kind, previous)) {
+          return { workId: work.id, stage: 'blocked', nextStepId: entry.stepId, pendingGate: { kind, chapter: entry.chapter - 1 } }
+        }
+      }
+    }
+    for (const dep of entry.consumes ?? []) {
+      const chapter = this.dependencyChapter(entry, dep)
+      const upstream = latest.get(`${dep}:${chapter ?? ''}`)
+      if (!upstream || upstream.humanStatus !== 'approved' || !this.guardOk(dep, upstream)) {
+        return { workId: work.id, stage: 'blocked', nextStepId: entry.stepId, pendingGate: { kind: dep, chapter } }
+      }
+    }
+    if (entry.gateBefore) {
+      const gate = latest.get(`${entry.gateBefore.kind}:${entry.gateBefore.chapter ?? ''}`)
+      if (!gate || gate.humanStatus !== 'approved') {
+        return { workId: work.id, stage: 'blocked', nextStepId: entry.stepId, pendingGate: entry.gateBefore }
+      }
+    }
+    return null
+  }
+
+  getStateFromWork(work: WorkDetail): PipelineState {
     const latest = new Map<string, Artifact>()
-    for (const a of work.artifacts) latest.set(`${a.kind}:${a.chapter ?? ''}`, a)
+    for (const artifact of work.artifacts) latest.set(`${artifact.kind}:${artifact.chapter ?? ''}`, artifact)
 
     for (const entry of this.definitionFor(currentChapterOf(work))) {
       const out = latest.get(`${entry.outputKind}:${entry.chapter ?? ''}`)
       if (!out) {
-        if (this.repeatChapters && entry.chapter && entry.chapter > 1) {
-          for (const kind of ['beat', 'prose'] as const) {
-            const previous = latest.get(`${kind}:${entry.chapter - 1}`)
-            if (!previous || previous.humanStatus !== 'approved' || !this.guardOk(kind, previous)) {
-              return { workId, stage: 'blocked', nextStepId: entry.stepId, pendingGate: { kind, chapter: entry.chapter - 1 } }
-            }
-          }
-        }
-        // 上游最新版必须 approved 且过消费守卫,否则本步不可跑(下游不推进)
-        if (entry.consumes) {
-          for (const dep of entry.consumes) {
-            const chapter = this.dependencyChapter(entry, dep)
-            const upstream = latest.get(`${dep}:${chapter ?? ''}`)
-            if (!upstream || upstream.humanStatus !== 'approved' || !this.guardOk(dep, upstream)) {
-              return {
-                workId,
-                stage: 'blocked',
-                nextStepId: entry.stepId,
-                pendingGate: { kind: dep, chapter },
-              }
-            }
-          }
-        }
-        if (entry.gateBefore) {
-          const gate = latest.get(`${entry.gateBefore.kind}:${entry.gateBefore.chapter ?? ''}`)
-          if (!gate || gate.humanStatus !== 'approved') {
-            return {
-              workId,
-              stage: 'blocked',
-              nextStepId: entry.stepId,
-              pendingGate: entry.gateBefore,
-            }
-          }
-        }
-        return { workId, stage: 'ready', nextStepId: entry.stepId }
+        const blocked = this.missingOutputState(work, entry, latest)
+        if (blocked) return blocked
+        return { workId: work.id, stage: 'ready', nextStepId: entry.stepId }
       }
       if (out.humanStatus === 'pending') {
-        return {
-          workId,
-          stage: 'awaiting-approval',
-          nextStepId: null,
-          pendingGate: { kind: out.kind, chapter: out.chapter },
-        }
+        return { workId: work.id, stage: 'awaiting-approval', nextStepId: null, pendingGate: { kind: out.kind, chapter: out.chapter } }
       }
       if (!this.guardOk(entry.outputKind, out)) {
-        return { workId, stage: 'blocked', nextStepId: entry.stepId, pendingGate: { kind: out.kind, chapter: out.chapter } }
+        return { workId: work.id, stage: 'blocked', nextStepId: entry.stepId, pendingGate: { kind: out.kind, chapter: out.chapter } }
       }
     }
-    return { workId, stage: 'complete', nextStepId: null }
+    return { workId: work.id, stage: 'complete', nextStepId: null }
   }
 
   // advance = 推进到下一个关卡(链式:auto-approved 步骤连续跑,循环上限 = definition 长度)
@@ -240,10 +232,11 @@ export class Pipeline {
     try {
       let lastStepId: string | null = null
       let snapshot: Record<string, AgentConfig> | undefined
-      const configs = () => snapshot ??= this.operationConfigs(workId)
       // 上限 +1:最后一次 getState 不落库也要能返回终态
       for (let i = 0; i <= this.definition.length; i++) {
-        const state = this.getState(workId)
+        const work = this.store.getWork(workId)
+        if (!work) throw new KnownError('work-not-found', `work not found: ${workId}`)
+        const state = this.getStateFromWork(work)
         if (state.stage === 'complete') return { kind: 'complete', state }
         if (state.stage !== 'ready' || state.nextStepId === null) {
           // blocked / awaiting-approval 都是「等人」:kind 统一为 awaiting-approval,细分看 state.stage
@@ -251,8 +244,12 @@ export class Pipeline {
             ? { kind: 'advanced', stepId: lastStepId, state }
             : { kind: 'awaiting-approval', state }
         }
-        const entry = this.definitionFor(currentChapterOf(this.store.getWork(workId)!)).find((d) => d.stepId === state.nextStepId)!
-        const outcome = await this.executeEntry(workId, entry, configs)
+        const entry = this.definitionFor(currentChapterOf(work)).find((d) => d.stepId === state.nextStepId)!
+        const configs = () => {
+          if (!snapshot) snapshot = this.operationConfigsForWork(work)
+          return snapshot
+        }
+        const outcome = await this.executeEntry(workId, entry, configs, undefined, work)
         if (outcome.kind === 'failed' || entry.gateAfter) return outcome
         lastStepId = entry.stepId
       }
@@ -263,50 +260,61 @@ export class Pipeline {
     }
   }
 
+  private operationConfigsForWork(work: WorkDetail): Record<string, AgentConfig> {
+    if (this.snapshotConfig) return structuredClone(this.snapshotConfig(work))
+    const configs: Record<string, AgentConfig> = {}
+    for (const entry of this.definition) configs[entry.stepId] = this.resolveConfig(work, entry.stepId)
+    return structuredClone(configs)
+  }
+
   private operationConfigs(workId: string): Record<string, AgentConfig> {
     const work = this.store.getWork(workId)
     if (!work) throw new KnownError('work-not-found', 'work not found')
-    return structuredClone(this.snapshotConfig?.(work) ?? Object.fromEntries(this.definition.map(entry => [entry.stepId, this.resolveConfig(work, entry.stepId)])))
+    return this.operationConfigsForWork(work)
   }
 
-  private async executeEntry(workId: string, entry: PipelineDefinitionEntry, configs = () => this.operationConfigs(workId), requiredInput?: ArtifactInput): Promise<AdvanceOutcome> {
+  private async executeEntry(workId: string, entry: PipelineDefinitionEntry, configs = () => this.operationConfigs(workId), requiredInput?: ArtifactInput, observedWork?: WorkDetail): Promise<AdvanceOutcome> {
     let beatCommand: BeatCommandObservation | undefined
     let proseCommand: ProseExecutionObservation | undefined
     try {
       const config = structuredClone(configs()[entry.stepId])
       if (!config) throw new KnownError('config-invalid', 'step configuration is unavailable')
       if (entry.outputKind === 'beat') {
-        const result = await observeBeat(workId, 'generate-beat', null, execution => this.runEntry(workId, entry, config, execution, requiredInput), entry.chapter)
+        const result = await observeBeat(workId, 'generate-beat', null, execution => this.runEntry(workId, entry, config, execution, requiredInput, observedWork), entry.chapter)
         beatCommand = result.command
       } else if (entry.outputKind === 'prose') {
-        const result = await observeProse(workId, 'generate-prose', null, execution => this.runEntry(workId, entry, config, execution, requiredInput), entry.chapter)
+        const result = await observeProse(workId, 'generate-prose', null, execution => this.runEntry(workId, entry, config, execution, requiredInput, observedWork), entry.chapter)
         proseCommand = result.command
-      } else await this.runEntry(workId, entry, config, undefined, requiredInput)
+      } else await this.runEntry(workId, entry, config, undefined, requiredInput, observedWork)
     } catch (err) {
-      const cause = err instanceof BeatCommandError || err instanceof ProseCommandError ? err.cause : err
+      let cause = err
+      if (err instanceof BeatCommandError || err instanceof ProseCommandError) cause = err.cause
       const known = cause instanceof KnownError ? cause : null
-      const code = err instanceof BeatCommandError ? beatFailureCode(cause, err.command.failureStage ?? 'response')
-        : err instanceof ProseCommandError ? proseFailureCode(cause, err.command.failureStage ?? 'response') : known?.code ?? 'llm-unavailable'
+      let code = 'llm-unavailable'
+      if (err instanceof BeatCommandError) code = beatFailureCode(cause, err.command.failureStage ?? 'response')
+      else if (err instanceof ProseCommandError) code = proseFailureCode(cause, err.command.failureStage ?? 'response')
+      else if (known) code = known.code
       // 丢弃旧输入上的生成结果后可手动重试；尚未通过的上游仍由 getState 阻挡。
-      const retryable = known?.code === 'upstream-changed' || (known?.retryable ?? true)
-      this.lastFailure.set(workId, {
+      let retryable = true
+      if (known) retryable = known.code === 'upstream-changed' || known.retryable
+      this.recordFailure(workId, {
         stepId: entry.stepId,
         code,
         retryable,
       })
-      return {
-        kind: 'failed',
-        stepId: entry.stepId,
-        code,
-        retryable,
+      const failure: AdvanceOutcome = {
+        kind: 'failed', stepId: entry.stepId, code, retryable,
         attemptId: known?.attemptId,
         state: this.getState(workId),
-        beatCommand: err instanceof BeatCommandError ? err.command : undefined,
-        proseCommand: err instanceof ProseCommandError ? err.command : undefined,
-        ...(known?.inputBudget ? { inputBudget: known.inputBudget } : {}),
+        beatCommand: undefined,
+        proseCommand: undefined,
       }
+      if (known?.inputBudget) failure.inputBudget = known.inputBudget
+      if (err instanceof BeatCommandError) failure.beatCommand = err.command
+      if (err instanceof ProseCommandError) failure.proseCommand = err.command
+      return failure
     }
-    this.lastFailure.delete(workId)
+    this.clearFailure(workId)
     try {
       return { kind: 'advanced', stepId: entry.stepId, state: this.getState(workId), beatCommand, proseCommand }
     } catch (cause) {
@@ -595,8 +603,25 @@ export class Pipeline {
   }
 
   // 读模型用:最近一次失败(无 → null)。审批等人工动作也会清掉它。
-  failureOf(workId: string): { stepId: string; code: string; retryable: boolean } | null {
-    return this.lastFailure.get(workId) ?? null
+  failureOf(workId: string, nextStepId: string | null): { stepId: string; code: string; retryable: boolean } | null {
+    const failure = this.lastFailure.get(workId)
+    if (!failure) return null
+    if (nextStepId !== undefined && failure.stepId !== nextStepId) {
+      this.clearFailure(workId)
+      return null
+    }
+    return failure
+  }
+
+  clearFailure(workId: string): void { this.lastFailure.delete(workId) }
+
+  private recordFailure(workId: string, failure: { stepId: string; code: string; retryable: boolean }): void {
+    this.lastFailure.delete(workId)
+    if (this.lastFailure.size >= 1000) {
+      const oldest = this.lastFailure.keys().next().value
+      if (oldest !== undefined) this.lastFailure.delete(oldest)
+    }
+    this.lastFailure.set(workId, failure)
   }
 
   private guardOk(kind: ArtifactKind, artifact: Artifact): boolean {
@@ -610,9 +635,9 @@ export class Pipeline {
     }
   }
 
-  private async runEntry(workId: string, entry: PipelineDefinitionEntry, config: AgentConfig, execution?: BeatExecution, requiredInput?: ArtifactInput): Promise<Artifact> {
+  private async runEntry(workId: string, entry: PipelineDefinitionEntry, config: AgentConfig, execution?: BeatExecution, requiredInput?: ArtifactInput, observedWork?: WorkDetail): Promise<Artifact> {
     const step = this.steps.get(entry.stepId)!
-    const work = this.store.getWork(workId)!
+    const work = observedWork ?? this.store.getWork(workId)!
     const { upstream, inputs, preconditions: consumedPreconditions } = this.inputsFor(work, entry)
     // A start request binds its predecessor before the configuration snapshot.
     // Recheck the actual sample and retain that original condition at commit.
@@ -679,7 +704,7 @@ export class Pipeline {
     // A matching approved replay is a no-op; it never grants approval to a newer head.
     this.store.setStatus(workId, 'outline', 'approved', { preconditions: [{ kind: 'outline',
       head: { artifactId: head.id, version: head.version, humanStatus: head.humanStatus } }] })
-    if (head.humanStatus === 'pending') this.lastFailure.delete(workId)
+    if (head.humanStatus === 'pending') this.clearFailure(workId)
     return outlineApprovalResponseSchema.parse({ ...head, humanStatus: 'approved' })
   }
 
@@ -693,6 +718,6 @@ export class Pipeline {
     if (!head) throw new KnownError('artifact-not-found', 'artifact not found')
     this.store.setStatus(workId, kind, 'approved', { chapter, preconditions: [{ kind, chapter,
       head: { artifactId: head.id, version: head.version, humanStatus: head.humanStatus } }] })
-    this.lastFailure.delete(workId)
+    this.clearFailure(workId)
   }
 }

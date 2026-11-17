@@ -1,6 +1,7 @@
 // 独立 server 进程入口。stdin 接收实验请求，stdout 只返回单个 JSON 结果。
 import { stepExperimentRequestSchema, stepExperimentResponseSchema } from '@agent4novel/contracts'
 import { loadLocalEnv } from './config/local-env.js'
+import { stepWorkerErrorCode } from './step-lab-error.js'
 
 async function main() {
   const parts: Buffer[] = []
@@ -38,7 +39,7 @@ async function main() {
   process.stdout.write(JSON.stringify(response.data) + '\n')
   if (result.kind === 'failed') process.exitCode = 1
 }
-main().catch(() => {
-  console.error(JSON.stringify({ code: 'llm-config-invalid' }))
+main().catch((error: unknown) => {
+  console.error(JSON.stringify({ code: stepWorkerErrorCode(error) }))
   process.exitCode = 1
 })

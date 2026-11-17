@@ -604,4 +604,19 @@ describe('outline flow(#4 全链路)', () => {
     }
     expect(view.workflowState).toBe('awaiting-outline-review')
   })
+
+  it('builds a work detail response from one store snapshot', async () => {
+    class CountingStore extends InMemoryStore {
+      reads = 0
+      override getWork(id: string) { this.reads += 1; return super.getWork(id) }
+    }
+    const store = new CountingStore()
+    const work = store.createWork({ seed: 'detail snapshot' })
+    const { app } = makeApp({ store })
+    store.reads = 0
+    const response = await app.request(`/api/works/${work.id}`)
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ id: work.id, workflowState: 'ready-to-generate', nextStepId: 'caption' })
+    expect(store.reads).toBe(1)
+  })
 })

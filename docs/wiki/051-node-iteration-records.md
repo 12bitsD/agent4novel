@@ -8,9 +8,9 @@ topics: ["node-iteration", "agent-cli", "system-prompt", "context-control", "pri
 code_paths: ["apps/cli/src/local-step.ts", "apps/cli/src/command-line.ts", "apps/server/src/step-lab-main.ts", "apps/server/src/steps/isolated-runner.ts", "apps/server/src/steps/llm-call.ts", "packages/contracts/src/step-experiment.ts"]
 symbols: ["run-step", "runLocalStep", "runIsolatedStep", "callLlm", "--record-dir"]
 inherits: ["014", "011", "016"]
-changed_by: []
+changed_by: ["071"]
 read_when: ["develop-node-iteration", "record-isolated-step", "review-node-input-output", "compare-system-prompts"]
-last_context_reviewed: "2026-10-10"
+last_context_reviewed: "2026-11-13"
 ---
 
 # 051 — 节点实际输入输出记录与Agent迭代
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-10-10"
 - **原始目的**：让用户通过Agent方便地review/modify SP/context/Harness、看输入输出、A/B + comment，减少重复操作和无用基础设施。
 - **实际落地**：[#51](https://github.com/12bitsD/agent4novel/issues/51)的最小记录入口已落在 `run-step --record-dir <新目录>`；目录预检、四文件落盘、六节点共同 `callLlm` 捕获和失败/unknown 语义均由CLI/worker测试覆盖。PR54 已合并，issue 已关闭；交付证据入口见“交接结论”。
 - **当前价值**：本票WHAT/AC以GitHub为准，本页给已实现的最小HOW、代码落点和使用边界；普通工程细节自主收敛，不重开已确认的Agent入口与三动作范围。
-- **后续变化**：本票只提供一次运行的私有文件资源；读取、A/B、comment和复跑由Agent/Harness复用现有文件与 `run-step` 完成，不扩成Pipeline、UI、数据库或评测平台。
+- **后续变化**：本票只提供一次运行的私有文件资源；读取、A/B、comment和复跑由Agent/Harness复用现有文件与 `run-step` 完成，不扩成Pipeline、UI、数据库或评测平台；[Wiki 071](./071-runner-lifecycle.md) 负责 runner 回收。
 - **代码入口**：local-step/step-lab-main负责CLI-worker交接；isolated-runner负责最终节点结果；callLlm是六节点共同SDK调用边界；step-experiment定义请求、响应和四文件schema；`apps/cli/src/step-record.ts`负责私有目录预检/CLI deadline收尾。
 
 ## 设计目的

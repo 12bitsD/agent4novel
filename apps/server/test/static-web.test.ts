@@ -16,6 +16,7 @@ function fixture() {
   mkdirSync(join(webRoot, 'assets'), { recursive: true })
   writeFileSync(join(webRoot, 'index.html'), '<!doctype html><title>Public web fixture</title>')
   writeFileSync(join(webRoot, 'assets', 'app.js'), 'console.log("public fixture")')
+  writeFileSync(join(webRoot, 'assets', 'app-abcdef12.js'), 'console.log("hashed fixture")')
   writeFileSync(join(webRoot, '.env.local'), 'PRIVATE_STATIC_MARKER')
   writeFileSync(join(folder, 'private.txt'), 'PRIVATE_STATIC_MARKER')
   symlinkSync(join(folder, 'private.txt'), join(webRoot, 'assets', 'outside.txt'))
@@ -39,7 +40,15 @@ it('serves the absolute Web root and assets on the same application as the API, 
   const page = await app.request('/?work=opaque-id&chapter=2')
   expect(page.status).toBe(200)
   expect(page.headers.get('content-type')).toContain('text/html')
+  expect(page.headers.get('cache-control')).toBe('no-cache')
   expect(await page.text()).toContain('Public web fixture')
+  const hashed = await app.request('/assets/app-abcdef12.js')
+  expect(hashed.status).toBe(200)
+  expect(hashed.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+  expect(await hashed.text()).toContain('hashed fixture')
+  const hashedHead = await app.request('/assets/app-abcdef12.js', { method: 'HEAD' })
+  expect(hashedHead.status).toBe(200)
+  expect(hashedHead.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
   const asset = await app.request('/assets/app.js')
   expect(asset.status).toBe(200)
   expect(await asset.text()).toContain('public fixture')
@@ -59,6 +68,7 @@ it('keeps API misses, absent assets, private names and paths outside the Web roo
   }
   const apiMiss = await app.request('/api/unknown')
   expect(apiMiss.headers.get('content-type')).toContain('application/json')
+  expect(apiMiss.headers.get('cache-control')).toBeNull()
 })
 
 it('rejects encoded path separators when the encoded name points outside the Web root', async () => {
@@ -128,4 +138,54 @@ it('rejects outside symlinks whose public names contain percent-encoded characte
 it('rejects enabling Web serving with a missing build instead of silently serving an empty site', () => {
   const { folder, deps } = fixture()
   expect(() => createApp({ ...deps, ...{ webRoot: join(folder, 'absent-build') } })).toThrow('frontend build is unavailable')
+})
+
+it('does not cache an invalid range response as a successful hashed asset', async () => {
+  const { webRoot, deps } = fixture()
+  const response = await createApp({ ...deps, webRoot }).request('/assets/app-abcdef12.js', { headers: { range: 'bytes=999-' } })
+  expect(response.status).toBe(416)
+  expect(response.headers.get('cache-control')).toBeNull()
+})
+
+it('serves suffix and exact ranges and rejects empty or zero suffixes', async () => {
+  const { webRoot, deps } = fixture()
+  writeFileSync(join(webRoot, 'assets', 'app-abcdef12.txt'), '01234567890123456789')
+  const app = createApp({ ...deps, webRoot })
+  const suffix = await app.request('/assets/app-abcdef12.txt', { headers: { range: 'bytes=-5' } })
+  expect(suffix.status).toBe(206)
+  expect(suffix.headers.get('content-range')).toBe('bytes 15-19/20')
+  expect(suffix.headers.get('content-length')).toBe('5')
+  expect(await suffix.text()).toBe('56789')
+  const first = await app.request('/assets/app-abcdef12.txt', { headers: { range: 'bytes=0-0' } })
+  expect(first.status).toBe(206)
+  expect(first.headers.get('content-range')).toBe('bytes 0-0/20')
+  expect(await first.text()).toBe('0')
+  for (const range of ['bytes=-0', 'bytes=-']) {
+    const response = await app.request('/assets/app-abcdef12.txt', { headers: { range } })
+    expect(response.status).toBe(416)
+    expect(response.headers.get('cache-control')).toBeNull()
+  }
+})
+
+it('does not make a stable alias immutable when its target has a hashed name', async () => {
+  const { webRoot, deps } = fixture()
+  writeFileSync(join(webRoot, 'assets', 'target-abcdef12.txt'), 'version one')
+  symlinkSync(join(webRoot, 'assets', 'target-abcdef12.txt'), join(webRoot, 'assets', 'stable.txt'))
+  const app = createApp({ ...deps, webRoot })
+  const alias = await app.request('/assets/stable.txt')
+  expect(alias.status).toBe(200)
+  expect(alias.headers.get('cache-control')).toBeNull()
+  const direct = await app.request('/assets/target-abcdef12.txt')
+  expect(direct.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+})
+
+it('marks HTML no-cache even when index.html is a symlink inside the build', async () => {
+  const { webRoot, deps } = fixture()
+  rmSync(join(webRoot, 'index.html'))
+  writeFileSync(join(webRoot, 'home.html'), '<!doctype html><title>Linked home</title>')
+  symlinkSync(join(webRoot, 'home.html'), join(webRoot, 'index.html'))
+  const response = await createApp({ ...deps, webRoot }).request('/')
+  expect(response.status).toBe(200)
+  expect(response.headers.get('cache-control')).toBe('no-cache')
+  expect(await response.text()).toContain('Linked home')
 })

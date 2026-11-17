@@ -97,7 +97,7 @@ Web/CLI 在消费端解析公开响应并核对资源身份。错误体畸形、
 
 ## SQLite 持久化：#9
 
-生产使用 [`SqliteStore`](../apps/server/src/store/sqlite-store.ts) 实现 `WorkStore`；`InMemoryStore` 继续用于行为测试。SQLite v4 由 [`sqlite-schema.ts`](../apps/server/src/store/sqlite-schema.ts) 定义；继承 v1 的两张 `STRICT` 表持有作品与每个产物版本，不按 kind 拆表。v2 新增作者配置与版本文件元数据两表，v3 再新增不可变坏例表，v4 新增独立的设定扩展操作表。
+生产使用 [`SqliteStore`](../apps/server/src/store/sqlite-store.ts) 实现 `WorkStore`；`InMemoryStore` 继续用于行为测试。SQLite v5 由 [`sqlite-schema.ts`](../apps/server/src/store/sqlite-schema.ts) 定义；继承 v1 的两张 `STRICT` 表持有作品与每个产物版本，不按 kind 拆表。v2 新增作者配置与版本文件元数据两表，v3 再新增不可变坏例表，v4 新增独立的设定扩展操作表，v5 增加作品维度读取索引。
 
 | 表 | 列与存储形态 |
 | --- | --- |
@@ -106,9 +106,9 @@ Web/CLI 在消费端解析公开响应并核对资源身份。错误体畸形、
 | `setting_extension_proposals` | `(work_id, request_id)` 主键；`record` 为严格 JSON 操作记录，保存原始请求、基准引用、服务端生成的单个扩展、状态和候选引用；不是 canonical Setting 存储 |
 
 - SQL 校验六种 kind、两种 human status、JSON 语法以及版本为正安全整数。作品级 kind 的 chapter 必须为 SQL `NULL`；Beat/Prose 的 chapter 必须为正安全整数。返回 JavaScript 时 `NULL` chapter 恢复为字段缺省。
-- 两个部分唯一索引分别约束 `(work_id, kind, version) WHERE chapter IS NULL` 和 `(work_id, kind, chapter, version) WHERE chapter IS NOT NULL`，防止普通含 NULL 唯一约束遗漏作品级重复版本。
+- 两个部分唯一索引分别约束 `(work_id, kind, version) WHERE chapter IS NULL` 和 `(work_id, kind, chapter, version) WHERE chapter IS NOT NULL`，防止普通含 NULL 唯一约束遗漏作品级重复版本。v5 另加普通 `artifacts(work_id, kind, chapter, version)` 与 `agent_files(work_id)` 索引加速作品读取，不替代唯一索引。
 - `content`、`config`、`inputs` 的领域有效性仍由共享 schema 验证；SQL 的 `json_valid` 不取代内容校验。inputs 记录原始生成依据，不复制上游内容，也没有新增关系表或历史版本 UI。
-- 读取在一致快照中取每个 kind/chapter 的最大 version；作品列表与章节统计基于这些 head。旧版本留在表中，当前公开接口不读取全部版本，也不承诺扫描未使用的历史数据。
+- 读取在一致快照中取每个 kind/chapter 的最大 version；作品列表与章节统计基于这些 head。书架在同一 deferred 事务中批量读取 works 与全部当前 heads，仍校验每个 head，但不逐作品执行 SQL。旧版本留在表中，当前公开接口不读取全部版本，也不承诺扫描未使用的历史数据。
 
 ### 事务与版本条件
 
@@ -118,7 +118,7 @@ Web/CLI 在消费端解析公开响应并核对资源身份。错误体畸形、
 
 ### Schema 版本与恢复边界
 
-数据库版本使用 `PRAGMA user_version = 4`。初始化在取得写锁后重新读取版本和结构，只对真正无用户对象的 v0 空库建表；已有 v1/v2/v3 必须精确匹配已知表与索引定义，再事务迁移到 v4；v4 同样严格核对结构。未来版本、未知旧结构或不匹配结构使启动失败，不删库、不降级、不悄悄退回内存。当前未提供历史库修复、导入或旧内存实例迁移工具。
+数据库版本使用 `PRAGMA user_version = 5`。初始化在取得写锁后重新读取版本和结构，只对真正无用户对象的 v0 空库建表；已有 v1/v2/v3/v4 必须精确匹配已知表与索引定义，再事务迁移到 v5；v5 同样严格核对结构。未来版本、未知旧结构或不匹配结构使启动失败，不删库、不降级、不悄悄退回内存。当前未提供历史库修复、导入或旧内存实例迁移工具。
 
 连接启用外键、WAL、`synchronous = FULL` 和 5 秒 busy timeout。默认数据目录与备份/恢复操作见 [Wiki 009](./wiki/009-sqlite-persistence.md)。同一数据目录中的已提交作品、产物版本、通过状态和 inputs 可在服务重启后读取；未保存页面草稿、进程内遥测、正在运行的模型调用不在该持久化范围。
 

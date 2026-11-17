@@ -6,7 +6,7 @@ import {
   agentFileSchema, agentFileUploadSchema, authorConfigDocumentSchema, authorConfigLimits, authorConfigSaveSchema,
   authorConfigViewSchema, authorStepIds, emptyAuthorConfig,
   managedAgentFileText,
-  type AgentConfig, type AgentFile, type AgentFileUpload, type AuthorConfigDocument, type AuthorConfigSave, type WorkDetail,
+  type AgentConfig, type AgentFile, type AgentFileUpload, type AuthorConfigDocument, type AuthorConfigReceipt, type AuthorConfigSave, type WorkDetail,
 } from '@agent4novel/contracts'
 import { KnownError } from '../errors.js'
 import { modelRuntime, type ModelRuntime } from '../steps/llm.js'
@@ -17,6 +17,15 @@ import type { AuthorConfigRepository } from './author-config-repository.js'
 const hash = (text: string) => createHash('sha256').update(text).digest('hex')
 const invalid = () => new KnownError('config-invalid', 'invalid author configuration or file')
 const unavailable = () => new KnownError('agent-file-unavailable', 'selected agent file is unavailable or changed')
+const preferenceSteps: Record<string, readonly string[]> = {
+  style: ['prose'],
+  genre: ['creative', 'outline', 'setting', 'beat', 'prose'],
+  payoff: ['creative', 'outline', 'beat', 'prose'],
+}
+
+function savedVersion(saved: AuthorConfigReceipt | undefined) {
+  return { document: saved ? saved.document : emptyAuthorConfig(), revision: saved ? saved.revision : 0 }
+}
 
 function parseSkill(text: string): { name: string; description: string; body: string } {
   if (Buffer.byteLength(text) > authorConfigLimits.fileBytes || new TextDecoder('utf-8', { fatal: true }).decode(Buffer.from(text)) !== text) throw invalid()
@@ -41,7 +50,8 @@ function parseSkill(text: string): { name: string; description: string; body: st
 
 export class AuthorConfigService {
   private readonly root: string
-  constructor(private readonly store: WorkStore, private readonly repository: AuthorConfigRepository, dataDir: string, private readonly runtime: ModelRuntime = modelRuntime) {
+  constructor(private readonly store: WorkStore, private readonly repository: AuthorConfigRepository, dataDir: string, private readonly runtime: ModelRuntime = modelRuntime,
+    private readonly onSaved: (workId: string) => void = () => {}) {
     this.root = resolve(dataDir, 'prompts')
   }
   private path(file: AgentFile): string { return join(this.root, hash(file.workId), file.id, file.name, 'SKILL.md') }
@@ -139,11 +149,23 @@ export class AuthorConfigService {
   private resolve(work: WorkDetail, document: AuthorConfigDocument, revision: number) {
     const files = this.repository.listAgentFiles(work.id)
     const legacy = revision === 0 ? work.config : {}
+    const parsedFiles = new Map<string, ReturnType<typeof parseSkill>>()
+    const readParsed = (file: AgentFile) => {
+      let parsed = parsedFiles.get(file.id)
+      if (!parsed) {
+        parsed = parseSkill(this.readText(file))
+        parsedFiles.set(file.id, parsed)
+      }
+      return parsed
+    }
     const configs: Record<string, AgentConfig> = {}
-    const effective = authorStepIds.map(id => {
-      const selected = { ...document.defaults, ...document.steps[id] }
-      const model = selected.model ?? legacy.model ?? this.runtime.defaultModelId
-      const config: AgentConfig = { ...legacy, ...selected, model }
+    const effective = []
+    for (const id of authorStepIds) {
+      const selected = Object.assign({}, document.defaults, document.steps[id])
+      let model = selected.model
+      if (!model) model = legacy.model
+      if (!model) model = this.runtime.defaultModelId
+      const config: AgentConfig = Object.assign({}, legacy, selected, { model })
       delete (config as Record<string, unknown>).systemPromptRef
       config.skills = []
       config.tools = []
@@ -153,30 +175,37 @@ export class AuthorConfigService {
         return file
       }
       const prompt = selected.systemPromptRef ? find(selected.systemPromptRef, 'prompt') : null
-      const skills = (selected.skills ?? []).map(fileId => find(fileId, 'skill'))
-      const appliedPreferences = Object.fromEntries(Object.entries(document.preferences).filter(([key, value]) => value && (
-        key === 'style' ? id === 'prose' : key === 'genre' ? id !== 'caption' : ['creative', 'outline', 'beat', 'prose'].includes(id)
-      )))
-      const guidance = [
-        ...(Object.keys(appliedPreferences).length ? [`Author preferences: ${JSON.stringify(appliedPreferences)}`] : []),
-        ...(prompt ? [parseSkill(this.readText(prompt)).body] : selected.systemPromptRef === null ? [] : legacy.systemPrompt ? [legacy.systemPrompt] : []),
-        ...skills.map(file => `Skill ${file.name}:\n${parseSkill(this.readText(file)).body}`),
-      ].join('\n\n')
-      if (guidance.length > authorConfigLimits.systemChars) throw invalid()
-      config.systemPrompt = guidance
+      const skills = (selected.skills || []).map(fileId => find(fileId, 'skill'))
+      const appliedPreferences: Record<string, string> = {}
+      for (const [key, value] of Object.entries(document.preferences)) {
+        if (value && preferenceSteps[key as keyof typeof preferenceSteps].includes(id)) appliedPreferences[key] = value
+      }
+      const guidance: string[] = []
+      if (Object.keys(appliedPreferences).length) guidance.push(`Author preferences: ${JSON.stringify(appliedPreferences)}`)
+      if (prompt) guidance.push(readParsed(prompt).body)
+      else if (selected.systemPromptRef !== null && legacy.systemPrompt) guidance.push(legacy.systemPrompt)
+      for (const file of skills) guidance.push(`Skill ${file.name}:\n${readParsed(file).body}`)
+      const system = guidance.join('\n\n')
+      if (system.length > authorConfigLimits.systemChars) throw invalid()
+      config.systemPrompt = system
       config.configRevision = revision
       systemFor(id, config)
-      config.configFiles = [...(prompt ? [prompt] : []), ...skills].map(file => ({ id: file.id, sha256: file.sha256 }))
+      config.configFiles = []
+      if (prompt) config.configFiles.push({ id: prompt.id, sha256: prompt.sha256 })
+      for (const file of skills) config.configFiles.push({ id: file.id, sha256: file.sha256 })
       let generation
       try {
         generation = this.runtime.generationSettings(config).parameters
         if (this.runtime.mode === 'live') this.runtime.languageModel(model)
       } catch { throw invalid() }
       configs[id] = config
-      return { id, model, provider: model.startsWith('longcat:') ? 'longcat' as const : model.startsWith('kimi:') ? 'kimi' as const : 'deepseek' as const,
+      let provider: 'deepseek' | 'longcat' | 'kimi' = 'deepseek'
+      if (model.startsWith('longcat:')) provider = 'longcat'
+      else if (model.startsWith('kimi:')) provider = 'kimi'
+      effective.push({ id, model, provider,
         configured: this.runtime.mode === 'live', executionMode: this.runtime.mode, generation, appliedPreferences,
-        systemPrompt: prompt, skills, tools: [], directionCount: config.directionCount ?? 2 }
-    })
+        systemPrompt: prompt, skills, tools: [], directionCount: config.directionCount ?? 2 })
+    }
     return { configs, view: authorConfigViewSchema.parse({ workId: work.id, revision, document, files, effective }) }
   }
   private work(workId: string): WorkDetail {
@@ -186,7 +215,8 @@ export class AuthorConfigService {
   }
   get(workId: string) {
     const saved = this.repository.getAuthorConfig(workId)
-    return this.resolve(this.work(workId), saved?.document ?? emptyAuthorConfig(), saved?.revision ?? 0).view
+    const version = savedVersion(saved)
+    return this.resolve(this.work(workId), version.document, version.revision).view
   }
   save(workId: string, input: AuthorConfigSave) {
     const parsed = authorConfigSaveSchema.safeParse(input)
@@ -197,13 +227,17 @@ export class AuthorConfigService {
       if (prior.revision !== request.expectedRevision + 1 || JSON.stringify(prior.document) !== JSON.stringify(request.document)) {
         throw new KnownError('version-conflict', 'request identity already used')
       }
+      this.onSaved(workId)
       return prior
     }
     this.resolve(this.work(workId), authorConfigDocumentSchema.parse(request.document), request.expectedRevision + 1)
-    return this.repository.saveAuthorConfig(workId, request)
+    const receipt = this.repository.saveAuthorConfig(workId, request)
+    this.onSaved(workId)
+    return receipt
   }
   snapshot(work: WorkDetail): Record<string, AgentConfig> {
     const saved = this.repository.getAuthorConfig(work.id)
-    return this.resolve(work, saved?.document ?? emptyAuthorConfig(), saved?.revision ?? 0).configs
+    const version = savedVersion(saved)
+    return this.resolve(work, version.document, version.revision).configs
   }
 }

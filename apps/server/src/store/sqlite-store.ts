@@ -41,7 +41,21 @@ function artifactFromRow(row: ArtifactRow): Artifact {
   }, 'stored')
 }
 
+function workSummary(work: WorkDetail): WorkSummary {
+  let chapterCount = 0
+  for (const artifact of work.artifacts) {
+    if (artifact.kind === 'prose' && artifact.humanStatus === 'approved') chapterCount += 1
+  }
+  let seedPreview = work.seed
+  if (work.seed.length > 40) seedPreview = `${work.seed.slice(0, 40)}…`
+  return { id: work.id, title: work.title, seedPreview, chapterCount }
+}
+
 type BadExampleRow = { id: string; work_id: string; chapter: number; record: string; request: string; cursor?: number }
+const currentArtifactHead = `NOT EXISTS (
+  SELECT 1 FROM artifacts newer WHERE newer.work_id = a.work_id AND newer.kind = a.kind
+    AND newer.chapter IS a.chapter AND newer.version > a.version
+)`
 function badExampleFromRow(row: BadExampleRow): BadExample {
   const record = validateStoreValue(badExampleSchema, parseJson(row.record), 'stored')
   const request = validateStoreValue(badExampleRequestSchema, parseJson(row.request), 'stored')
@@ -134,10 +148,8 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
     const work = this.readWork(id)
     if (!work) return undefined
     const rows = this.db.prepare(`SELECT a.* FROM artifacts a
-      WHERE a.work_id = ? AND NOT EXISTS (
-        SELECT 1 FROM artifacts newer WHERE newer.work_id = a.work_id AND newer.kind = a.kind
-          AND newer.chapter IS a.chapter AND newer.version > a.version
-      ) ORDER BY (SELECT MIN(first.rowid) FROM artifacts first WHERE first.work_id = a.work_id AND first.kind = a.kind AND first.chapter IS a.chapter)`).all(id) as ArtifactRow[]
+      WHERE a.work_id = ? AND ${currentArtifactHead}
+      ORDER BY (SELECT MIN(first.rowid) FROM artifacts first WHERE first.work_id = a.work_id AND first.kind = a.kind AND first.chapter IS a.chapter)`).all(id) as ArtifactRow[]
     return validateStoreValue(workDetailSchema, { ...work, artifacts: rows.map(artifactFromRow) }, 'stored')
   }
 
@@ -155,12 +167,26 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
 
   listWorks(): WorkSummary[] {
     return this.read(() => {
-      const rows = this.db.prepare('SELECT id FROM works ORDER BY rowid').all() as { id: string }[]
-      return validateStoreValue(workListResponseSchema, rows.map(({ id }) => {
-        const work = this.readDetail(id)!
-        return { id: work.id, title: work.title, seedPreview: work.seed.length > 40 ? `${work.seed.slice(0, 40)}…` : work.seed,
-          chapterCount: work.artifacts.filter(a => a.kind === 'prose' && a.humanStatus === 'approved').length }
-      }), 'stored')
+      const workRows = this.db.prepare('SELECT * FROM works ORDER BY rowid').all() as WorkRow[]
+      const artifactRows = this.db.prepare(`SELECT a.* FROM artifacts a
+        WHERE a.work_id IN (SELECT id FROM works) AND ${currentArtifactHead}`).all() as ArtifactRow[]
+      const heads = new Map<string, Artifact[]>()
+      for (const row of artifactRows) {
+        const artifact = artifactFromRow(row)
+        let bucket = heads.get(artifact.workId)
+        if (!bucket) {
+          bucket = []
+          heads.set(artifact.workId, bucket)
+        }
+        bucket.push(artifact)
+      }
+      const summaries: WorkSummary[] = []
+      for (const row of workRows) {
+        const artifacts = heads.get(row.id) || []
+        const detail = validateStoreValue(workDetailSchema, Object.assign({}, workFromRow(row), { artifacts }), 'stored')
+        summaries.push(workSummary(detail))
+      }
+      return validateStoreValue(workListResponseSchema, summaries, 'stored')
     })
   }
 
@@ -252,12 +278,22 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
       .run(snapshot.workId, snapshot.requestId, JSON.stringify(snapshot))
   }
 
+  private validateExtensionCandidate(record: SettingExtensionProposalRecord | undefined): void {
+    if (!record || record.status !== 'approved') return
+    const candidate = record.candidate === null ? undefined
+      : this.artifactVersion(record.workId, 'setting', undefined, record.candidate.artifactId, record.candidate.version)
+    const base = this.artifactVersion(record.workId, 'setting', undefined, record.expectedBase.artifactId, record.expectedBase.version)
+    if (!isValidApprovedExtensionCandidate(record, candidate, base)) throw new StoreContractError('invalid-stored-data')
+  }
+
   proposeSettingExtension(workId: string, request: SettingExtensionProposeRequest): SettingExtensionReceipt {
     return this.write(() => {
       this.requireWork(workId)
       const work = this.readDetail(workId)!
-      const record = proposeExtension(work, request, this.extensionRecord(workId, request.requestId))
-      this.putExtensionRecord(record)
+      const prior = this.extensionRecord(workId, request.requestId)
+      const record = proposeExtension(work, request, prior)
+      if (record !== prior) this.putExtensionRecord(record)
+      else this.validateExtensionCandidate(prior)
       return extensionReceipt(record, 'propose')
     })
   }
@@ -268,7 +304,12 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
       // All current heads are read under the same IMMEDIATE writer transaction
       // as both writes; a route/service pre-read cannot satisfy this guard.
       const work = this.readDetail(workId)!
-      const plan = actOnExtension(work, request, this.extensionRecord(workId, request.requestId), operation)
+      const prior = this.extensionRecord(workId, request.requestId)
+      const plan = actOnExtension(work, request, prior, operation)
+      if (plan.replay) {
+        if (operation === 'approve') this.validateExtensionCandidate(prior)
+        return extensionReceipt(plan.record, operation)
+      }
       if (plan.artifact) this.insertArtifact(plan.artifact)
       this.putExtensionRecord(plan.record)
       return extensionReceipt(plan.record, operation)
@@ -287,10 +328,7 @@ export class SqliteStore implements WorkStore, AuthorConfigRepository, BadExampl
     return this.read(() => {
       this.requireWork(workId)
       const record = this.extensionRecord(workId, requestId)
-      const candidate = record?.status === 'approved' && record.candidate !== null
-        ? this.artifactVersion(workId, 'setting', undefined, record.candidate.artifactId, record.candidate.version)
-        : undefined
-      if (record && !isValidApprovedExtensionCandidate(record, candidate)) throw new StoreContractError('invalid-stored-data')
+      this.validateExtensionCandidate(record)
       return extensionResource(this.readDetail(workId)!, requestId, record)
     })
   }

@@ -5,25 +5,41 @@ import {
   settingExtensionProposalRecordSchema, settingExtensionResourceSchema,
   type Artifact, type ArtifactRef, type SettingExtensionProposalRecord,
   type SettingExtensionProposeRequest, type SettingExtensionActionRequest, type SettingExtensionReceipt,
-  type SettingExtensionResource, type WorkDetail,
+  type SettingExtensionResource, type WorkDetail, type SettingContent,
 } from '@agent4novel/contracts'
 import { KnownError } from './errors.js'
 
 export const refOf = (artifact: Artifact): ArtifactRef => ({ artifactId: artifact.id, version: artifact.version })
 const sameRef = (a: ArtifactRef, b: ArtifactRef): boolean => a.artifactId === b.artifactId && a.version === b.version
 const settingHead = (work: WorkDetail) => work.artifacts.find(a => a.kind === 'setting')
-const pendingChapter = (work: WorkDetail) => work.artifacts.some(a => (a.kind === 'beat' || a.kind === 'prose') && a.humanStatus === 'pending')
+function pendingChapter(work: WorkDetail): boolean {
+  for (const artifact of work.artifacts) {
+    if ((artifact.kind === 'beat' || artifact.kind === 'prose') && artifact.humanStatus === 'pending') return true
+  }
+  return false
+}
+
+function mergedSetting(baseline: SettingContent, extension: SettingExtensionProposalRecord['extension']): SettingContent {
+  return Object.assign({}, baseline, { extensions: baseline.extensions.concat([extension]) })
+}
+
+function isApprovedSetting(artifact: Artifact, workId: string, ref: ArtifactRef): boolean {
+  return artifact.workId === workId && artifact.kind === 'setting' && artifact.chapter === undefined
+    && artifact.humanStatus === 'approved' && sameRef(ref, { artifactId: artifact.id, version: artifact.version })
+}
 
 // Readback validator shared by both stores. It deliberately accepts a
 // historical candidate; the current Setting head is not its source of truth.
-export function isValidApprovedExtensionCandidate(record: SettingExtensionProposalRecord, candidate: Artifact | undefined): boolean {
+export function isValidApprovedExtensionCandidate(record: SettingExtensionProposalRecord, candidate: Artifact | undefined, base: Artifact | undefined): boolean {
   if (record.status !== 'approved') return true
-  if (!record.candidate || !candidate) return false
-  if (candidate.workId !== record.workId || candidate.kind !== 'setting' || candidate.chapter !== undefined || candidate.humanStatus !== 'approved') return false
-  if (!sameRef(record.candidate, { artifactId: candidate.id, version: candidate.version })) return false
-  const content = settingContentSchema.safeParse(candidate.content)
-  if (!content.success || !content.data.extensions.some(extension => isDeepStrictEqual(extension, record.extension))) return false
-  return candidate.inputs?.some(input => input.kind === 'setting' && sameRef(input, record.expectedBase)) === true
+  if (!record.candidate || !candidate || !base) return false
+  if (!isApprovedSetting(candidate, record.workId, record.candidate)) return false
+  if (!isApprovedSetting(base, record.workId, record.expectedBase)) return false
+  const baseline = settingContentSchema.safeParse(base.content)
+  if (!baseline.success) return false
+  const expected = mergedSetting(baseline.data, record.extension)
+  return isDeepStrictEqual(candidate.content, expected)
+    && isDeepStrictEqual(candidate.inputs, [{ kind: 'setting', ...record.expectedBase }])
 }
 
 export function extensionReceipt(record: SettingExtensionProposalRecord, operation: SettingExtensionReceipt['operation']): SettingExtensionReceipt {
@@ -33,9 +49,15 @@ export function extensionReceipt(record: SettingExtensionProposalRecord, operati
     candidate: operation === 'approve' ? record.candidate : null, errorCode: null }
 }
 
+const terminalStatuses = { approve: 'approved', cancel: 'cancelled' } as const
+
 export function extensionResource(work: WorkDetail, requestId: string, record?: SettingExtensionProposalRecord): SettingExtensionResource {
-  const approved = new Set(work.artifacts.filter(a => a.kind === 'prose' && a.humanStatus === 'approved').map(a => a.chapter))
-  const pending = new Set(work.artifacts.filter(a => (a.kind === 'beat' || a.kind === 'prose') && a.humanStatus === 'pending').map(a => a.chapter))
+  const approved = new Set<number | undefined>()
+  const pending = new Set<number | undefined>()
+  for (const artifact of work.artifacts) {
+    if (artifact.kind === 'prose' && artifact.humanStatus === 'approved') approved.add(artifact.chapter)
+    if ((artifact.kind === 'beat' || artifact.kind === 'prose') && artifact.humanStatus === 'pending') pending.add(artifact.chapter)
+  }
   const impact = { observedAt: new Date().toISOString(), approvedChapterCount: approved.size, pendingChapterCount: pending.size,
     continuityWarning: approved.size > 0, historicalArtifactsUnchanged: true, futureGeneration: 'uses-after-approval',
     automaticRewrite: false, existingFactMutation: false } as const
@@ -44,7 +66,9 @@ export function extensionResource(work: WorkDetail, requestId: string, record?: 
     extension: null, candidate: null, createdAt: null, updatedAt: null })
   const head = settingHead(work)
   const stale = record.status === 'pending' && (!head || head.humanStatus !== 'approved' || !sameRef(refOf(head), record.expectedBase))
-  return settingExtensionResourceSchema.parse({ ...common, status: stale ? 'stale' : record.status,
+  let status: SettingExtensionResource['status'] = record.status
+  if (stale) status = 'stale'
+  return settingExtensionResourceSchema.parse({ ...common, status,
     proposal: { workId: work.id, requestId }, base: record.expectedBase, extension: record.extension,
     candidate: record.candidate, createdAt: record.createdAt, updatedAt: record.updatedAt })
 }
@@ -66,9 +90,12 @@ export function proposeExtension(work: WorkDetail, input: SettingExtensionPropos
   }
   if (pendingChapter(work)) throw new KnownError('setting-extension-chapter-pending', 'a chapter is pending review')
   const baseline = settingContentSchema.parse(head.content)
-  const used = new Set([...baseline.world, ...baseline.characters, ...baseline.factions, ...baseline.relationships,
-    ...baseline.extensions.flatMap(s => s.items)].map(i => i.itemId))
-  baseline.extensions.forEach(s => used.add(s.sectionId))
+  const used = new Set<string>()
+  for (const item of [...baseline.world, ...baseline.characters, ...baseline.factions, ...baseline.relationships]) used.add(item.itemId)
+  for (const section of baseline.extensions) {
+    used.add(section.sectionId)
+    for (const item of section.items) used.add(item.itemId)
+  }
   const id = (prefix: string) => {
     let value: string
     do { value = `${prefix}-${randomUUID()}` } while (used.has(value))
@@ -77,7 +104,7 @@ export function proposeExtension(work: WorkDetail, input: SettingExtensionPropos
   }
   const extension = { sectionId: id('section'), title: request.extension.title,
     items: request.extension.items.map(item => ({ ...item, itemId: id('item') })) }
-  if (!settingContentSchema.safeParse({ ...baseline, extensions: [...baseline.extensions, extension] }).success) {
+  if (!settingContentSchema.safeParse(mergedSetting(baseline, extension)).success) {
     throw new KnownError('setting-extension-limit', 'merged setting exceeds logical limits')
   }
   const now = new Date().toISOString()
@@ -86,14 +113,14 @@ export function proposeExtension(work: WorkDetail, input: SettingExtensionPropos
 }
 
 export function actOnExtension(work: WorkDetail, input: SettingExtensionActionRequest, record: SettingExtensionProposalRecord | undefined,
-  operation: 'approve' | 'cancel'): { record: SettingExtensionProposalRecord; artifact?: Artifact } {
+  operation: 'approve' | 'cancel'): { record: SettingExtensionProposalRecord; artifact?: Artifact; replay?: boolean } {
   const parsed = settingExtensionActionRequestSchema.safeParse(input)
   if (!parsed.success) throw new KnownError('invalid-input', 'invalid setting extension action')
   if (!record) throw new KnownError('setting-extension-not-found', 'setting extension not found')
   if (!sameRef(record.expectedBase, parsed.data.expectedBase)) throw new KnownError('setting-extension-stale', 'proposal base does not match')
-  const terminal = operation === 'approve' ? 'approved' : 'cancelled'
+  const terminal = terminalStatuses[operation]
   // Terminal replay precedes head/pending checks, but never the stored-base check.
-  if (record.status === terminal) return { record }
+  if (record.status === terminal) return { record, replay: true }
   if (record.status !== 'pending') throw new KnownError('setting-extension-state-conflict', 'proposal is already terminal')
   const updatedAt = new Date().toISOString()
   if (operation === 'cancel') return { record: { ...record, status: 'cancelled', updatedAt } }
@@ -105,7 +132,7 @@ export function actOnExtension(work: WorkDetail, input: SettingExtensionActionRe
   const baseline = settingContentSchema.parse(head.content)
   // Construct, rather than accept, the append-only diff. Complete schema validation
   // rechecks global identity uniqueness and all merged limits before any write.
-  const merged = settingContentSchema.safeParse({ ...baseline, extensions: [...baseline.extensions, record.extension] })
+  const merged = settingContentSchema.safeParse(mergedSetting(baseline, record.extension))
   if (!merged.success) throw new KnownError('setting-extension-invalid', 'invalid append-only setting extension')
   const artifact = artifactSchema.parse({ id: `artifact-${randomUUID()}`, workId: work.id, kind: 'setting', version: head.version + 1,
     content: merged.data, humanStatus: 'approved', createdAt: updatedAt, inputs: [{ kind: 'setting', ...record.expectedBase }] })

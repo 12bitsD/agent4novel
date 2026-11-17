@@ -8,9 +8,9 @@ topics: ["chapter-navigation", "conditional-write", "static-files", "review-fixe
 code_paths: ["apps/web/src/pages/Workspace.tsx", "apps/server/src/pipeline/pipeline.ts", "apps/server/src/runtime/static-web.ts"]
 symbols: ["WorkSession", "startChapter", "runEntry", "staticWeb"]
 inherits: ["001", "006", "007", "033", "041"]
-changed_by: ["035"]
+changed_by: ["035", "072"]
 read_when: ["debug-config-navigation", "review-start-baseline", "review-static-web-boundary"]
-last_context_reviewed: "2026-10-03"
+last_context_reviewed: "2026-11-13"
 ---
 
 # 043 — MVP 复审边界修复
@@ -21,7 +21,7 @@ last_context_reviewed: "2026-10-03"
 - **原始目的**：[票面 #43](https://github.com/12bitsD/agent4novel/issues/43) 修复 [Wiki001 复审](./001-mvp-acceptance.md#2026-10-03-清点与复审) 的三项 P2，不扩大 MVP 产品范围。
 - **实际落地**：配置导航复用最新 dirty/locked 保护；起章原条件保持至实际输入与提交；静态资源只解码一次并从已校验规范路径读取。每项取得有效红绿，完整门禁及正式审核见下方证据。
 - **当前价值**：保持显式保存、原请求版本条件及静态发布目录，保留原复现和历史审核。
-- **后续变化**：用户随后授权合并并关闭；[PR44](https://github.com/12bitsD/agent4novel/pull/44) 已合入 main，#43 已关闭。界面视觉由 [Wiki035](./035-frontend-design.md) 接手；三项保护边界仍有效。
+- **后续变化**：用户随后授权合并并关闭；[PR44](https://github.com/12bitsD/agent4novel/pull/44) 已合入 main，#43 已关闭。界面视觉由 [Wiki035](./035-frontend-design.md) 接手；三项保护边界仍有效；[Wiki 072](./072-runtime-static-lifecycle.md) 负责后续文件描述符与缓存硬化。
 - **代码入口**：Workspace、Pipeline 与 staticWeb；测试从组件挂载、Pipeline/HTTP/SqliteStore 和 Hono HTTP 三个公共接口验证。
 
 ## 设计目的

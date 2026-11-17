@@ -62,4 +62,19 @@ describe('Beat model boundary', () => {
     await expect(runStep(createBeatStep(), { ...source, upstream: { ...source.upstream, setting } }, {})).rejects.toMatchObject({ code: 'input-budget-exceeded' })
     expect(mocks.generateObject).not.toHaveBeenCalled()
   })
+  it('serializes each regeneration section once when rejecting an over-budget prompt', async () => {
+    const source = await input()
+    const regeneration = { content: { ...draft, writingPlan: [{ title: '无 ID 安排', content: '当前编辑内容' }] }, instructions: '保持节奏' }
+    const promptDraft = { ...regeneration.content, writingPlan: regeneration.content.writingPlan.map(({ title, content }) => ({ title, content })) }
+    const draftChars = JSON.stringify(promptDraft).length
+    const stringify = vi.spyOn(JSON, 'stringify')
+    let failure: unknown
+    try {
+      await runStep(createBeatStep({ systemPrompt: 'x'.repeat(400_000) }), { ...source, regeneration }, {})
+    } catch (error) { failure = error }
+    expect(failure).toMatchObject({ code: 'input-budget-exceeded', inputBudget: { draftChars } })
+    expect(stringify).toHaveBeenCalledTimes(3)
+    expect(stringify.mock.calls.map(([value]) => value)).toEqual([source.upstream.outline, source.upstream.setting, promptDraft])
+    expect(mocks.generateObject).not.toHaveBeenCalled()
+  })
 })
